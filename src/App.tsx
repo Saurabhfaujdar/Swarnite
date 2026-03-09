@@ -12,6 +12,7 @@ import CashEntry from './pages/CashBank/CashEntry';
 import BranchIssue from './pages/Branch/BranchIssue';
 import BranchReceipt from './pages/Branch/BranchReceipt';
 import BranchReceiptList from './pages/Branch/BranchReceiptList';
+import BranchManagement from './pages/Branch/BranchManagement';
 import LayawayEntry from './pages/Layaway/LayawayEntry';
 import LayawayList from './pages/Layaway/LayawayList';
 import CustomerPaymentEntry from './pages/Payments/CustomerPaymentEntry';
@@ -56,6 +57,7 @@ function App() {
         <Route path="branch/issue" element={<BranchIssue />} />
         <Route path="branch/receipt" element={<BranchReceipt />} />
         <Route path="branch/receipt-list" element={<BranchReceiptList />} />
+        <Route path="branch/manage" element={<BranchManagement />} />
         {/* Layaway */}
         <Route path="layaway" element={<LayawayEntry />} />
         <Route path="layaway/list" element={<LayawayList />} />

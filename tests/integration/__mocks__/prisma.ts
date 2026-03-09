@@ -37,6 +37,8 @@ const modelNames = [
   'label', 'item', 'labelPrefix',
   'voucherSequence',
   'customerPayment',
+  'branchStaff',
+  'auditLog',
 ];
 
 for (const name of modelNames) {

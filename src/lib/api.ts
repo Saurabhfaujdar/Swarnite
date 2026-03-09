@@ -97,6 +97,23 @@ export const branchAPI = {
   receiveTransfer: (data: any) => api.post('/branch/receive', data),
 };
 
+// Branch Management
+export const branchManagementAPI = {
+  list: (params?: any) => api.get('/branches', { params }),
+  get: (id: number) => api.get(`/branches/${id}`),
+  children: (id: number) => api.get(`/branches/${id}/children`),
+  stats: (id: number) => api.get(`/branches/${id}/stats`),
+  create: (data: any) => api.post('/branches', data),
+  update: (id: number, data: any) => api.put(`/branches/${id}`, data),
+  disable: (id: number) => api.put(`/branches/${id}/disable`),
+  enable: (id: number) => api.put(`/branches/${id}/enable`),
+  softDelete: (id: number) => api.delete(`/branches/${id}`),
+  permanentDelete: (id: number) => api.delete(`/branches/${id}/permanent`),
+  transfer: (data: any) => api.post('/branches/transfer', data),
+  transferHistory: (params?: any) => api.get('/branches/transfer/history', { params }),
+  auditLog: (params?: any) => api.get('/branches/audit-log', { params }),
+};
+
 // Layaway
 export const layawayAPI = {
   list: (params?: any) => api.get('/layaway', { params }),

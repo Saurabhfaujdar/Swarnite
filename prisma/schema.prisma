@@ -68,11 +68,16 @@ model Company {
 }
 
 model Branch {
-  id          Int      @id @default(autoincrement())
+  id          Int         @id @default(autoincrement())
   name        String
-  code        String   @unique
+  code        String      @unique
   companyId   Int
-  company     Company  @relation(fields: [companyId], references: [id])
+  company     Company     @relation(fields: [companyId], references: [id])
+  branchType  BranchType  @default(BRANCH)
+  isMaster    Boolean     @default(false)
+  parentId    Int?        // null for master, master's id for branches
+  parent      Branch?     @relation("BranchHierarchy", fields: [parentId], references: [id])
+  children    Branch[]    @relation("BranchHierarchy")
   address     String?
   city        String?
   state       String?
@@ -80,9 +85,12 @@ model Branch {
   phone       String?
   email       String?
   gstin       String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive    Boolean     @default(true)
+  isDeleted   Boolean     @default(false)
+  deletedAt   DateTime?
+  deletedBy   Int?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   users              User[]
   counters           Counter[]
@@ -94,8 +102,18 @@ model Branch {
   branchReceipts     BranchTransfer[]  @relation("ReceivingBranch")
   labels             Label[]
   layawayEntries     LayawayEntry[]
+  accounts           Account[]
+  staff              BranchStaff[]
+  auditLogs          AuditLog[]
 
+  @@index([companyId])
+  @@index([parentId])
   @@map("branches")
+}
+
+enum BranchType {
+  MASTER
+  BRANCH
 }
 
 model Counter {
@@ -284,6 +302,8 @@ model Account {
   remark        String?
   closingBalance Decimal      @default(0)
   balanceType   BalanceType   @default(NONE)
+  branchId      Int?          // Branch-level data isolation
+  branch        Branch?       @relation(fields: [branchId], references: [id])
   isActive      Boolean       @default(true)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -295,6 +315,7 @@ model Account {
   journalEntries   JournalEntryLine[]
   customerPayments CustomerPayment[]
 
+  @@index([branchId])
   @@map("accounts")
 }
 
@@ -907,15 +928,38 @@ model GstConfig {
 model AuditLog {
   id          Int      @id @default(autoincrement())
   userId      Int
-  action      String   // "CREATE", "UPDATE", "DELETE"
-  entityType  String   // "SalesVoucher", "PurchaseVoucher", etc.
+  branchId    Int?
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  action      String   // "CREATE", "UPDATE", "DELETE", "TRANSFER", "DISABLE", "OVERRIDE"
+  entityType  String   // "SalesVoucher", "Branch", "BranchTransfer", etc.
   entityId    Int
   oldData     Json?
   newData     Json?
   ipAddress   String?
+  userAgent   String?
   createdAt   DateTime @default(now())
 
   @@index([entityType, entityId])
+  @@index([branchId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ============================================================
+// BRANCH STAFF (Future: per-branch role-based access)
+// ============================================================
+
+model BranchStaff {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  branchId    Int
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  role        String   @default("STAFF")  // MANAGER, CASHIER, STAFF
+  isActive    Boolean  @default(true)
+  assignedAt  DateTime @default(now())
+  removedAt   DateTime?
+
+  @@unique([userId, branchId])
+  @@index([branchId])
+  @@map("branch_staff")
 }
