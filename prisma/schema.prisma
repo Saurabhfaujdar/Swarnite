@@ -1,0 +1,921 @@
+// Jewelry ERP - Complete Prisma Database Schema
+// Covers: Sales, Purchase, Inventory, Accounts, Branch, GST, CRM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// AUTHENTICATION & USER MANAGEMENT
+// ============================================================
+
+model User {
+  id          Int       @id @default(autoincrement())
+  username    String    @unique
+  password    String
+  fullName    String
+  role        UserRole  @default(USER)
+  isActive    Boolean   @default(true)
+  branchId    Int?
+  branch      Branch?   @relation(fields: [branchId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  salesVouchers     SalesVoucher[]
+  purchaseVouchers  PurchaseVoucher[]
+  cashEntries       CashEntry[]
+  bankEntries       BankEntry[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  CASHIER
+  USER
+}
+
+// ============================================================
+// COMPANY & BRANCH MANAGEMENT
+// ============================================================
+
+model Company {
+  id          Int      @id @default(autoincrement())
+  name        String
+  address     String?
+  city        String?
+  state       String?
+  pincode     String?
+  phone       String?
+  email       String?
+  gstin       String?
+  pan         String?
+  logo        Bytes?
+  financialYearStart DateTime
+  financialYearEnd   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  branches    Branch[]
+
+  @@map("companies")
+}
+
+model Branch {
+  id          Int      @id @default(autoincrement())
+  name        String
+  code        String   @unique
+  companyId   Int
+  company     Company  @relation(fields: [companyId], references: [id])
+  address     String?
+  city        String?
+  state       String?
+  pincode     String?
+  phone       String?
+  email       String?
+  gstin       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users              User[]
+  counters           Counter[]
+  salesVouchers      SalesVoucher[]
+  purchaseVouchers   PurchaseVoucher[]
+  cashEntries        CashEntry[]
+  bankEntries        BankEntry[]
+  branchIssues       BranchTransfer[]  @relation("IssuingBranch")
+  branchReceipts     BranchTransfer[]  @relation("ReceivingBranch")
+  labels             Label[]
+  layawayEntries     LayawayEntry[]
+
+  @@map("branches")
+}
+
+model Counter {
+  id          Int      @id @default(autoincrement())
+  name        String
+  code        String   @unique
+  branchId    Int
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  isActive    Boolean  @default(true)
+
+  labels      Label[]
+
+  @@map("counters")
+}
+
+// ============================================================
+// MASTER DATA - ITEMS & METALS
+// ============================================================
+
+model MetalType {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique  // GOLD, SILVER, PLATINUM, DIAMOND
+  code        String   @unique
+  isActive    Boolean  @default(true)
+
+  itemGroups  ItemGroup[]
+  metalRates  MetalRate[]
+  items       Item[]
+
+  @@map("metal_types")
+}
+
+model ItemGroup {
+  id          Int        @id @default(autoincrement())
+  name        String     // e.g., "RING", "CHAIN", "BANGLE", "EARRING"
+  code        String     @unique
+  metalTypeId Int
+  metalType   MetalType  @relation(fields: [metalTypeId], references: [id])
+  hsnCode     String?    // HSN Code for GST (711319 for gold jewelry)
+  cgstRate    Decimal    @default(1.5)
+  sgstRate    Decimal    @default(1.5)
+  igstRate    Decimal    @default(3.0)
+  isActive    Boolean    @default(true)
+
+  items       Item[]
+  prefixes    LabelPrefix[]
+
+  @@map("item_groups")
+}
+
+model Purity {
+  id          Int      @id @default(autoincrement())
+  name        String   // "22 KT", "18 KT", "14 KTD", "24 KT"
+  code        String   @unique  // "22KT", "18KT", "14KTD", "24KT"
+  percentage  Decimal  // 91.67 for 22KT, 75.0 for 18KT
+  isActive    Boolean  @default(true)
+
+  items       Item[]
+
+  @@map("purities")
+}
+
+model Item {
+  id            Int        @id @default(autoincrement())
+  name          String     // "AACHARYA RING 22KT", "CHAIN-22KT"
+  code          String     @unique
+  itemGroupId   Int
+  itemGroup     ItemGroup  @relation(fields: [itemGroupId], references: [id])
+  metalTypeId   Int
+  metalType     MetalType  @relation(fields: [metalTypeId], references: [id])
+  purityId      Int
+  purity        Purity     @relation(fields: [purityId], references: [id])
+  description   String?
+  mrp           Decimal?
+  salePrice     Decimal?
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  labels        Label[]
+  salesItems    SalesItem[]
+  purchaseItems PurchaseItem[]
+  layawayItems  LayawayItem[]
+
+  @@map("items")
+}
+
+model LabelPrefix {
+  id          Int       @id @default(autoincrement())
+  prefix      String    @unique  // "AA22", "CH22", "GR22"
+  itemGroupId Int
+  itemGroup   ItemGroup @relation(fields: [itemGroupId], references: [id])
+  lastNumber  Int       @default(0)
+  isActive    Boolean   @default(true)
+
+  labels      Label[]
+
+  @@map("label_prefixes")
+}
+
+model Label {
+  id            Int          @id @default(autoincrement())
+  labelNo       String       @unique  // "PA22/509", "ER-1/10"
+  prefixId      Int
+  prefix        LabelPrefix  @relation(fields: [prefixId], references: [id])
+  itemId        Int
+  item          Item         @relation(fields: [itemId], references: [id])
+  grossWeight   Decimal      @default(0)
+  netWeight     Decimal      @default(0)
+  pcsCount      Int          @default(1)
+  mrp           Decimal?
+  salePrice     Decimal?
+  branchId      Int
+  branch        Branch       @relation(fields: [branchId], references: [id])
+  counterId     Int?
+  counter       Counter?     @relation(fields: [counterId], references: [id])
+  status        LabelStatus  @default(IN_STOCK)
+  huid          String?      // Hallmark Unique ID
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  salesItems    SalesItem[]
+  purchaseItems PurchaseItem[]
+  branchTransferItems BranchTransferItem[]
+  layawayItems  LayawayItem[]
+
+  @@map("labels")
+}
+
+enum LabelStatus {
+  IN_STOCK
+  SOLD
+  TRANSFERRED
+  ON_APPROVAL
+  RETURNED
+  LAYAWAY
+}
+
+// ============================================================
+// METAL RATES
+// ============================================================
+
+model MetalRate {
+  id          Int       @id @default(autoincrement())
+  metalTypeId Int
+  metalType   MetalType @relation(fields: [metalTypeId], references: [id])
+  purityCode  String    // "22KT", "24KT"
+  rate        Decimal   // Rate per gram
+  date        DateTime  @default(now())
+  isActive    Boolean   @default(true)
+
+  @@unique([metalTypeId, purityCode, date])
+  @@map("metal_rates")
+}
+
+// ============================================================
+// CUSTOMER / ACCOUNT MANAGEMENT
+// ============================================================
+
+model Account {
+  id            Int           @id @default(autoincrement())
+  name          String
+  type          AccountType
+  groupHead     String?       @default("Sundry Debtors")
+  customerCategory String?    @default("Normal")
+  mobile        String?
+  phone         String?
+  email         String?
+  blockNo       String?
+  building      String?
+  street        String?
+  area          String?
+  address       String?
+  city          String?
+  state         String?
+  pincode       String?
+  gstin         String?
+  gstVerified   Boolean       @default(false)
+  gstTradeName  String?
+  gstStatus     String?
+  compositionScheme Boolean   @default(false)
+  pan           String?
+  aadhar        String?
+  idProof       String?
+  reference     String?
+  remark        String?
+  closingBalance Decimal      @default(0)
+  balanceType   BalanceType   @default(NONE)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  salesVouchers    SalesVoucher[]
+  purchaseVouchers PurchaseVoucher[]
+  cashEntries      CashEntryLine[]
+  layawayEntries   LayawayEntry[]
+  journalEntries   JournalEntryLine[]
+  customerPayments CustomerPayment[]
+
+  @@map("accounts")
+}
+
+enum AccountType {
+  CUSTOMER
+  SUPPLIER
+  BRANCH
+  BANK
+  CASH
+  EXPENSE
+  INCOME
+  SALESMAN
+}
+
+enum BalanceType {
+  CR
+  DR
+  NONE
+}
+
+// ============================================================
+// SALESMAN
+// ============================================================
+
+model Salesman {
+  id          Int      @id @default(autoincrement())
+  name        String
+  code        String   @unique
+  mobile      String?
+  isActive    Boolean  @default(true)
+
+  salesVouchers SalesVoucher[]
+
+  @@map("salesmen")
+}
+
+// ============================================================
+// SALES MODULE
+// ============================================================
+
+model SalesVoucher {
+  id              Int            @id @default(autoincrement())
+  voucherNo       String         @unique  // "JGI/1115"
+  voucherPrefix   String         @default("JGI")
+  voucherNumber   Int
+  voucherDate     DateTime       @default(now())
+  accountId       Int
+  account         Account        @relation(fields: [accountId], references: [id])
+  salesmanId      Int?
+  salesman        Salesman?      @relation(fields: [salesmanId], references: [id])
+  branchId        Int
+  branch          Branch         @relation(fields: [branchId], references: [id])
+  userId          Int
+  user            User           @relation(fields: [userId], references: [id])
+
+  // Weight totals
+  totalGrossWeight Decimal       @default(0)
+  totalNetWeight   Decimal       @default(0)
+  totalPcs         Int           @default(0)
+
+  // Amount breakdowns
+  metalAmount      Decimal       @default(0)
+  labourAmount     Decimal       @default(0)
+  otherCharge      Decimal       @default(0)
+  discountStAmount Decimal       @default(0) // Diamond/Stone amount
+  totalAmount      Decimal       @default(0)
+  taxableAmount    Decimal       @default(0)
+
+  // GST
+  cgstAmount       Decimal       @default(0)
+  sgstAmount       Decimal       @default(0)
+  igstAmount       Decimal       @default(0)
+  totalGstAmount   Decimal       @default(0)
+
+  // Discount
+  discountPercent  Decimal       @default(0)
+  discountAmount   Decimal       @default(0)
+  roundingDiscount Decimal       @default(0)
+
+  // Final
+  voucherAmount    Decimal       @default(0)  // Total bill amount
+
+  // Payment
+  cashAmount       Decimal       @default(0)
+  bankAmount       Decimal       @default(0)
+  cardAmount       Decimal       @default(0)
+  oldGoldAmount    Decimal       @default(0)  // OG Purchase adjustment
+  advanceAmount    Decimal       @default(0)  // Advance payment used from customer balance
+
+  paymentAmount    Decimal       @default(0)  // Total paid
+  dueAmount        Decimal       @default(0)  // Amount due
+  previousOs       Decimal       @default(0)  // Previous outstanding
+  finalDue         Decimal       @default(0)  // Final due amount
+
+  // Discount scheme
+  discountScheme   String?
+
+  narration        String?
+  reference        String?
+  isReturned       Boolean        @default(false)
+  status           VoucherStatus  @default(ACTIVE)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  items            SalesItem[]
+
+  @@index([voucherDate])
+  @@index([accountId])
+  @@map("sales_vouchers")
+}
+
+model SalesItem {
+  id              Int           @id @default(autoincrement())
+  salesVoucherId  Int
+  salesVoucher    SalesVoucher  @relation(fields: [salesVoucherId], references: [id], onDelete: Cascade)
+  labelId         Int?
+  label           Label?        @relation(fields: [labelId], references: [id])
+  itemId          Int
+  item            Item          @relation(fields: [itemId], references: [id])
+
+  labelNo         String?
+  itemName        String
+  grossWeight     Decimal       @default(0)
+  netWeight       Decimal       @default(0)
+  fineWeight      Decimal       @default(0)
+  pcs             Int           @default(1)
+
+  metalRate       Decimal       @default(0)
+  metalAmount     Decimal       @default(0)
+  diamondWeight   Decimal       @default(0)
+
+  labourRate      Decimal       @default(0)
+  labourAmount    Decimal       @default(0)
+
+  otherCharge     Decimal       @default(0)
+  discountStAmt   Decimal       @default(0) // Di/St Amount
+
+  totalAmount     Decimal       @default(0)
+  taxableAmount   Decimal       @default(0)
+
+  // Style / Less Weight details
+  styleName       String?
+  lessWeight      Decimal       @default(0)
+
+  createdAt       DateTime      @default(now())
+
+  @@map("sales_items")
+}
+
+// ============================================================
+// PURCHASE MODULE (URD / Old Gold)
+// ============================================================
+
+model PurchaseVoucher {
+  id              Int            @id @default(autoincrement())
+  voucherNo       String         @unique
+  voucherPrefix   String         @default("PUR")
+  voucherNumber   Int
+  voucherDate     DateTime       @default(now())
+  purchaseType    PurchaseType   @default(URD)
+
+  accountId       Int
+  account         Account        @relation(fields: [accountId], references: [id])
+  branchId        Int
+  branch          Branch         @relation(fields: [branchId], references: [id])
+  userId          Int
+  user            User           @relation(fields: [userId], references: [id])
+
+  description     String?        // "OLD GOLD NEW"
+  variety         String?
+  group           String?        // "OGN"
+
+  // Weight totals
+  totalGrossWeight Decimal       @default(0)
+  totalNetWeight   Decimal       @default(0)
+  totalFineWeight  Decimal       @default(0)
+  totalPcs         Int           @default(0)
+  otherWeight      Decimal       @default(0)
+  purity           Decimal       @default(0)  // e.g., 80.00
+
+  // Amounts
+  metalRate        Decimal       @default(0)
+  metalAmount      Decimal       @default(0)
+  otherCharge      Decimal       @default(0)
+  valAddAmount     Decimal       @default(0)
+  totalAmount      Decimal       @default(0)
+  finalAmount      Decimal       @default(0)
+
+  // Salesman
+  salesmanName     String?
+
+  narration        String?
+  reference        String?
+  status           VoucherStatus  @default(ACTIVE)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  items            PurchaseItem[]
+
+  @@index([voucherDate])
+  @@map("purchase_vouchers")
+}
+
+enum PurchaseType {
+  URD       // Unregistered dealer (Old Gold)
+  REGULAR   // Regular purchase
+  IMPORT    // Import
+}
+
+model PurchaseItem {
+  id                Int              @id @default(autoincrement())
+  purchaseVoucherId Int
+  purchaseVoucher   PurchaseVoucher  @relation(fields: [purchaseVoucherId], references: [id], onDelete: Cascade)
+  labelId           Int?
+  label             Label?           @relation(fields: [labelId], references: [id])
+  itemId            Int?
+  item              Item?            @relation(fields: [itemId], references: [id])
+
+  styleName         String?
+  weight            Decimal          @default(0)
+  pcs               Int              @default(0)
+  amtCalcOn         String?          // "Weight"
+  rate              Decimal          @default(0)
+  amount            Decimal          @default(0)
+
+  createdAt         DateTime         @default(now())
+
+  @@map("purchase_items")
+}
+
+// ============================================================
+// CASH & BANK ENTRIES
+// ============================================================
+
+model CashEntry {
+  id            Int           @id @default(autoincrement())
+  voucherNo     String        @unique  // "CI/111"
+  voucherPrefix String
+  voucherNumber Int
+  voucherDate   DateTime      @default(now())
+  voucherType   CashVoucherType  // Receipt or Payment
+  bookName      String        @default("Cash")
+  branchId      Int
+  branch        Branch        @relation(fields: [branchId], references: [id])
+  userId        Int
+  user          User          @relation(fields: [userId], references: [id])
+
+  totalCredit   Decimal       @default(0)
+  totalDebit    Decimal       @default(0)
+  balance       Decimal       @default(0)
+
+  reverseCharge Boolean       @default(false)
+  placeOfSupply String?
+  narration     String?
+  reference     String?
+  status        VoucherStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  lines         CashEntryLine[]
+
+  @@index([voucherDate])
+  @@map("cash_entries")
+}
+
+enum CashVoucherType {
+  RECEIPT
+  PAYMENT
+}
+
+model CashEntryLine {
+  id            Int       @id @default(autoincrement())
+  cashEntryId   Int
+  cashEntry     CashEntry @relation(fields: [cashEntryId], references: [id], onDelete: Cascade)
+  crDr          String    // "CR" or "DR"
+  accountId     Int
+  account       Account   @relation(fields: [accountId], references: [id])
+  date          DateTime
+  amount        Decimal   @default(0)
+  tdsAmount     Decimal   @default(0)
+  tcsAmount     Decimal   @default(0)
+  netAmount     Decimal   @default(0)
+  gstApplicable Boolean   @default(false)
+  narration     String?
+
+  @@map("cash_entry_lines")
+}
+
+model BankEntry {
+  id            Int           @id @default(autoincrement())
+  voucherNo     String        @unique
+  voucherPrefix String
+  voucherNumber Int
+  voucherDate   DateTime      @default(now())
+  voucherType   String        // "Receipt", "Payment", "Transfer"
+  bookName      String
+  branchId      Int
+  branch        Branch        @relation(fields: [branchId], references: [id])
+  userId        Int
+  user          User          @relation(fields: [userId], references: [id])
+
+  totalAmount   Decimal       @default(0)
+  narration     String?
+  reference     String?
+  chequeNo      String?
+  chequeDate    DateTime?
+  status        VoucherStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([voucherDate])
+  @@map("bank_entries")
+}
+
+// ============================================================
+// JOURNAL / DEBIT NOTE / CREDIT NOTE
+// ============================================================
+
+model JournalEntry {
+  id            Int           @id @default(autoincrement())
+  voucherNo     String        @unique
+  voucherPrefix String
+  voucherNumber Int
+  voucherDate   DateTime      @default(now())
+  entryType     JournalType
+  narration     String?
+  reference     String?
+  totalAmount   Decimal       @default(0)
+  status        VoucherStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  lines         JournalEntryLine[]
+
+  @@map("journal_entries")
+}
+
+enum JournalType {
+  JOURNAL
+  DEBIT_NOTE
+  CREDIT_NOTE
+}
+
+model JournalEntryLine {
+  id             Int          @id @default(autoincrement())
+  journalEntryId Int
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId      Int
+  account        Account      @relation(fields: [accountId], references: [id])
+  crDr           String       // "CR" or "DR"
+  amount         Decimal      @default(0)
+  narration      String?
+
+  @@map("journal_entry_lines")
+}
+
+// ============================================================
+// BRANCH TRANSFERS
+// ============================================================
+
+model BranchTransfer {
+  id                Int      @id @default(autoincrement())
+  voucherNo         String   @unique  // "GBI/91", "GBR/245"
+  voucherPrefix     String
+  voucherNumber     Int
+  voucherDate       DateTime @default(now())
+  transferType      TransferType  // ISSUE or RECEIPT
+
+  issuingBranchId   Int
+  issuingBranch     Branch   @relation("IssuingBranch", fields: [issuingBranchId], references: [id])
+  receivingBranchId Int
+  receivingBranch   Branch   @relation("ReceivingBranch", fields: [receivingBranchId], references: [id])
+
+  totalGrossWeight  Decimal  @default(0)
+  totalNetWeight    Decimal  @default(0)
+  totalPcs          Int      @default(0)
+  totalAmount       Decimal  @default(0)
+  billNo            String?
+
+  narration         String?
+  reference         String?
+  status            VoucherStatus @default(ACTIVE)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  items             BranchTransferItem[]
+
+  @@index([voucherDate])
+  @@map("branch_transfers")
+}
+
+enum TransferType {
+  ISSUE
+  RECEIPT
+}
+
+model BranchTransferItem {
+  id                Int            @id @default(autoincrement())
+  branchTransferId  Int
+  branchTransfer    BranchTransfer @relation(fields: [branchTransferId], references: [id], onDelete: Cascade)
+  labelId           Int?
+  label             Label?         @relation(fields: [labelId], references: [id])
+  itemName          String
+  grossWeight       Decimal        @default(0)
+  netWeight         Decimal        @default(0)
+  pcs               Int            @default(1)
+  purityName        String?
+  otherCharge       Decimal        @default(0)
+  labourRate        Decimal        @default(0)
+  labourAmount      Decimal        @default(0)
+  metalAmount       Decimal        @default(0)
+  totalAmount       Decimal        @default(0)
+
+  @@map("branch_transfer_items")
+}
+
+// ============================================================
+// LAYAWAY (Label-Based Reservation) ENTRIES
+// ============================================================
+
+model LayawayEntry {
+  id              Int           @id @default(autoincrement())
+  voucherNo       String        @unique  // "LY/317"
+  voucherPrefix   String        @default("LY")
+  voucherNumber   Int
+  voucherDate     DateTime      @default(now())
+  dueDate         DateTime?
+  accountId       Int
+  account         Account       @relation(fields: [accountId], references: [id])
+  branchId        Int
+  branch          Branch        @relation(fields: [branchId], references: [id])
+  salesmanName    String?
+
+  // Item totals
+  totalGrossWeight Decimal      @default(0)
+  totalNetWeight   Decimal      @default(0)
+  totalFineWeight  Decimal      @default(0)
+  totalPcs         Int          @default(0)
+  metalAmount      Decimal      @default(0)
+  labourAmount     Decimal      @default(0)
+  otherCharge      Decimal      @default(0)
+  discountAmount   Decimal      @default(0)
+
+  // GST
+  taxableAmount    Decimal      @default(0)
+  cgstAmount       Decimal      @default(0)
+  sgstAmount       Decimal      @default(0)
+  totalAmount      Decimal      @default(0)
+  roundingDiscount Decimal      @default(0)
+  voucherAmount    Decimal      @default(0)
+
+  // Payment
+  cashAmount       Decimal      @default(0)
+  bankAmount       Decimal      @default(0)
+  cardAmount       Decimal      @default(0)
+  oldGoldAmount    Decimal      @default(0)
+  paymentAmount    Decimal      @default(0)
+  dueAmount        Decimal      @default(0)
+  previousOs       Decimal      @default(0)
+  finalDue         Decimal      @default(0)
+
+  narration        String?
+  reference        String?
+  bookName         String?
+  status           LayawayStatus @default(ACTIVE)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  items            LayawayItem[]
+  payments         LayawayPayment[]
+
+  @@map("layaway_entries")
+}
+
+model LayawayItem {
+  id              Int          @id @default(autoincrement())
+  layawayEntryId  Int
+  layawayEntry    LayawayEntry @relation(fields: [layawayEntryId], references: [id], onDelete: Cascade)
+  labelId         Int?
+  label           Label?       @relation(fields: [labelId], references: [id])
+  itemId          Int
+  item            Item         @relation(fields: [itemId], references: [id])
+  labelNo         String
+  itemName        String
+  grossWeight     Decimal      @default(0)
+  netWeight       Decimal      @default(0)
+  fineWeight      Decimal      @default(0)
+  pcs             Int          @default(1)
+  metalRate       Decimal      @default(0)
+  metalAmount     Decimal      @default(0)
+  diamondWeight   Decimal      @default(0)
+  labourRate      Decimal      @default(0)
+  labourAmount    Decimal      @default(0)
+  otherCharge     Decimal      @default(0)
+  discountAmt     Decimal      @default(0)
+  taxableAmount   Decimal      @default(0)
+  totalAmount     Decimal      @default(0)
+
+  @@map("layaway_items")
+}
+
+enum LayawayStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model LayawayPayment {
+  id            Int          @id @default(autoincrement())
+  layawayId     Int
+  layaway       LayawayEntry @relation(fields: [layawayId], references: [id], onDelete: Cascade)
+  paymentDate   DateTime     @default(now())
+  amount        Decimal
+  paymentMode   String       // "Cash", "Bank", "Card"
+  reference     String?
+  narration     String?
+
+  @@map("layaway_payments")
+}
+
+// ============================================================
+// CUSTOMER PAYMENTS (Advance / Due Payments & Balance History)
+// ============================================================
+
+model CustomerPayment {
+  id            Int           @id @default(autoincrement())
+  receiptNo     String        @unique  // "CPR/1"
+  receiptPrefix String        @default("CPR")
+  receiptNumber Int
+  paymentDate   DateTime      @default(now())
+  accountId     Int
+  account       Account       @relation(fields: [accountId], references: [id])
+  paymentType   PaymentType   // ADVANCE (before purchase) or DUE_PAYMENT (against outstanding)
+
+  // Multi-source payment
+  cashAmount    Decimal       @default(0)
+  bankAmount    Decimal       @default(0)
+  cardAmount    Decimal       @default(0)
+  totalAmount   Decimal       @default(0)  // Sum of all payment sources
+
+  // Balance tracking
+  balanceBefore Decimal       @default(0)  // Customer closing balance before this payment
+  balanceAfter  Decimal       @default(0)  // Customer closing balance after this payment
+
+  // References
+  salesVoucherId Int?         // If paying against a specific sale
+  bankName      String?       // Bank name for bank payment
+  chequeNo      String?       // Cheque / UTR reference
+  narration     String?
+  reference     String?
+  status        VoucherStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([accountId])
+  @@index([paymentDate])
+  @@map("customer_payments")
+}
+
+enum PaymentType {
+  ADVANCE
+  DUE_PAYMENT
+}
+
+// ============================================================
+// COMMON ENUMS
+// ============================================================
+
+enum VoucherStatus {
+  ACTIVE
+  CANCELLED
+  VOID
+}
+
+// ============================================================
+// VOUCHER NUMBER SEQUENCES
+// ============================================================
+
+model VoucherSequence {
+  id          Int      @id @default(autoincrement())
+  prefix      String
+  entityType  String   // "SALES", "PURCHASE", "CASH", "BANK", "BRANCH_ISSUE", etc.
+  lastNumber  Int      @default(0)
+  financialYear String // "2025-2026"
+
+  @@unique([prefix, entityType, financialYear])
+  @@map("voucher_sequences")
+}
+
+// ============================================================
+// GST CONFIGURATION
+// ============================================================
+
+model GstConfig {
+  id          Int      @id @default(autoincrement())
+  hsnCode     String
+  description String?
+  cgstRate    Decimal  @default(1.5)
+  sgstRate    Decimal  @default(1.5)
+  igstRate    Decimal  @default(3.0)
+  isActive    Boolean  @default(true)
+
+  @@map("gst_configs")
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  action      String   // "CREATE", "UPDATE", "DELETE"
+  entityType  String   // "SalesVoucher", "PurchaseVoucher", etc.
+  entityId    Int
+  oldData     Json?
+  newData     Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
