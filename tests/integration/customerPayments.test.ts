@@ -6,6 +6,22 @@ jest.mock('../../server/prisma', () => ({
   prisma: mockPrisma,
 }));
 
+// ── Mock branchAccess middleware (bypass auth) ────────────
+jest.mock('../../server/middleware/branchAccess', () => ({
+  authenticate: (req: any, _res: any, next: any) => {
+    req.userId = 1; req.userRole = 'ADMIN'; req.companyId = 1;
+    req.branchId = 1; req.branchScope = []; req.isMasterBranch = true;
+    next();
+  },
+  requireBranch: (_req: any, _res: any, next: any) => next(),
+  requireMaster: (_req: any, _res: any, next: any) => next(),
+  requireAdmin: (_req: any, _res: any, next: any) => next(),
+  branchWhere: () => ({}),
+  tenantScope: () => ({ companyId: 1 }),
+  canAccessBranch: () => true,
+  canOverrideBranch: async () => true,
+}));
+
 import app from '../../server/app';
 
 // ── Dummy data ─────────────────────────────────────────────
@@ -43,6 +59,7 @@ const PAYMENT_1 = {
   cashAmount: 10000,
   bankAmount: 0,
   cardAmount: 0,
+  upiAmount: 0,
   totalAmount: 10000,
   balanceBefore: 15000,
   balanceAfter: 5000,
@@ -67,6 +84,7 @@ const PAYMENT_2 = {
   cashAmount: 5000,
   bankAmount: 3000,
   cardAmount: 0,
+  upiAmount: 0,
   totalAmount: 8000,
   balanceBefore: -5000,
   balanceAfter: -13000,
@@ -219,7 +237,7 @@ describe('GET /api/customer-payments', () => {
 // ================================================================
 describe('GET /api/customer-payments/:id', () => {
   it('returns payment by id', async () => {
-    mockPrisma.customerPayment.findUnique.mockResolvedValue(FULL_PAYMENT_1);
+    mockPrisma.customerPayment.findFirst.mockResolvedValue(FULL_PAYMENT_1);
 
     const res = await request(app).get('/api/customer-payments/1');
     expect(res.status).toBe(200);
@@ -228,7 +246,7 @@ describe('GET /api/customer-payments/:id', () => {
   });
 
   it('returns 404 when not found', async () => {
-    mockPrisma.customerPayment.findUnique.mockResolvedValue(null);
+    mockPrisma.customerPayment.findFirst.mockResolvedValue(null);
 
     const res = await request(app).get('/api/customer-payments/999');
     expect(res.status).toBe(404);
@@ -287,6 +305,89 @@ describe('POST /api/customer-payments', () => {
     const createCall = mockPrisma.customerPayment.create.mock.calls[0][0].data;
     expect(createCall.totalAmount).toBe(8000);
     expect(createCall.paymentType).toBe('ADVANCE');
+  });
+
+  it('creates a payment with UPI amount included in total', async () => {
+    const upiPayment = {
+      ...PAYMENT_1,
+      id: 4,
+      receiptNo: 'CPR/4',
+      cashAmount: 2000,
+      bankAmount: 0,
+      cardAmount: 0,
+      upiAmount: 8000,
+      totalAmount: 10000,
+    };
+    mockPrisma.voucherSequence.upsert.mockResolvedValue({ ...SEQUENCE, lastNumber: 4 });
+    mockPrisma.account.findUnique.mockResolvedValue(CUSTOMER);
+    mockPrisma.customerPayment.create.mockResolvedValue(upiPayment);
+    mockPrisma.account.update.mockResolvedValue({ ...CUSTOMER, closingBalance: 5000 });
+    mockPrisma.customerPayment.findUnique.mockResolvedValue({ ...upiPayment, account: CUSTOMER });
+
+    const res = await request(app).post('/api/customer-payments').send({
+      paymentDate: '2026-03-10',
+      paymentType: 'DUE_PAYMENT',
+      accountId: 10,
+      cashAmount: 2000,
+      bankAmount: 0,
+      cardAmount: 0,
+      upiAmount: 8000,
+    });
+
+    expect(res.status).toBe(201);
+
+    const createCall = mockPrisma.customerPayment.create.mock.calls[0][0].data;
+    expect(createCall.totalAmount).toBe(10000);
+    expect(createCall.upiAmount).toBe(8000);
+    expect(createCall.cashAmount).toBe(2000);
+  });
+
+  it('creates a payment with only UPI amount', async () => {
+    const upiOnlyPayment = {
+      ...PAYMENT_1,
+      id: 5,
+      receiptNo: 'CPR/5',
+      cashAmount: 0,
+      bankAmount: 0,
+      cardAmount: 0,
+      upiAmount: 15000,
+      totalAmount: 15000,
+    };
+    mockPrisma.voucherSequence.upsert.mockResolvedValue({ ...SEQUENCE, lastNumber: 5 });
+    mockPrisma.account.findUnique.mockResolvedValue(CUSTOMER);
+    mockPrisma.customerPayment.create.mockResolvedValue(upiOnlyPayment);
+    mockPrisma.account.update.mockResolvedValue({ ...CUSTOMER, closingBalance: 0 });
+    mockPrisma.customerPayment.findUnique.mockResolvedValue({ ...upiOnlyPayment, account: CUSTOMER });
+
+    const res = await request(app).post('/api/customer-payments').send({
+      paymentDate: '2026-03-10',
+      paymentType: 'DUE_PAYMENT',
+      accountId: 10,
+      cashAmount: 0,
+      bankAmount: 0,
+      cardAmount: 0,
+      upiAmount: 15000,
+    });
+
+    expect(res.status).toBe(201);
+
+    const createCall = mockPrisma.customerPayment.create.mock.calls[0][0].data;
+    expect(createCall.totalAmount).toBe(15000);
+    expect(createCall.upiAmount).toBe(15000);
+  });
+
+  it('rejects zero total when all payment sources are zero including UPI', async () => {
+    const res = await request(app).post('/api/customer-payments').send({
+      paymentType: 'ADVANCE',
+      accountId: 10,
+      cashAmount: 0,
+      bankAmount: 0,
+      cardAmount: 0,
+      upiAmount: 0,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Payment amount must be greater than zero');
   });
 
   it('rejects missing accountId', async () => {
@@ -383,6 +484,90 @@ describe('POST /api/customer-payments', () => {
     expect(updateCall.closingBalance).toBe(-10000);
     expect(updateCall.balanceType).toBe('CR');
   });
+
+  it('creates a payment with old gold included in total', async () => {
+    const oldGoldPayment = {
+      ...PAYMENT_1,
+      id: 6,
+      receiptNo: 'CPR/6',
+      cashAmount: 5000,
+      bankAmount: 0,
+      cardAmount: 0,
+      upiAmount: 0,
+      oldGoldGross: 12,
+      oldGoldNet: 10,
+      oldGoldRate: 6500,
+      oldGoldAmount: 65000,
+      totalAmount: 70000,
+      balanceBefore: 15000,
+      balanceAfter: -55000,
+    };
+    mockPrisma.voucherSequence.upsert.mockResolvedValue({ ...SEQUENCE, lastNumber: 6 });
+    mockPrisma.account.findUnique.mockResolvedValue(CUSTOMER);
+    mockPrisma.customerPayment.create.mockResolvedValue(oldGoldPayment);
+    mockPrisma.account.update.mockResolvedValue({ ...CUSTOMER, closingBalance: -55000, balanceType: 'CR' });
+    mockPrisma.customerPayment.findUnique.mockResolvedValue({ ...oldGoldPayment, account: { ...CUSTOMER, closingBalance: -55000, balanceType: 'CR' } });
+
+    const res = await request(app).post('/api/customer-payments').send({
+      paymentDate: '2026-03-10',
+      paymentType: 'DUE_PAYMENT',
+      accountId: 10,
+      cashAmount: 5000,
+      oldGoldGross: 12,
+      oldGoldNet: 10,
+      oldGoldRate: 6500,
+    });
+
+    expect(res.status).toBe(201);
+
+    const createCall = mockPrisma.customerPayment.create.mock.calls[0][0].data;
+    expect(createCall.totalAmount).toBe(70000);
+    expect(createCall.oldGoldGross).toBe(12);
+    expect(createCall.oldGoldNet).toBe(10);
+    expect(createCall.oldGoldRate).toBe(6500);
+    expect(createCall.oldGoldAmount).toBe(65000);
+    expect(createCall.cashAmount).toBe(5000);
+  });
+
+  it('creates a payment with only old gold (no cash/bank/card/upi)', async () => {
+    const oldGoldOnlyPayment = {
+      ...PAYMENT_1,
+      id: 7,
+      receiptNo: 'CPR/7',
+      cashAmount: 0,
+      bankAmount: 0,
+      cardAmount: 0,
+      upiAmount: 0,
+      oldGoldGross: 20,
+      oldGoldNet: 18.5,
+      oldGoldRate: 7000,
+      oldGoldAmount: 129500,
+      totalAmount: 129500,
+      balanceBefore: 15000,
+      balanceAfter: -114500,
+    };
+    mockPrisma.voucherSequence.upsert.mockResolvedValue({ ...SEQUENCE, lastNumber: 7 });
+    mockPrisma.account.findUnique.mockResolvedValue(CUSTOMER);
+    mockPrisma.customerPayment.create.mockResolvedValue(oldGoldOnlyPayment);
+    mockPrisma.account.update.mockResolvedValue({});
+    mockPrisma.customerPayment.findUnique.mockResolvedValue({ ...oldGoldOnlyPayment, account: CUSTOMER });
+
+    const res = await request(app).post('/api/customer-payments').send({
+      paymentDate: '2026-03-10',
+      paymentType: 'ADVANCE',
+      accountId: 10,
+      cashAmount: 0,
+      oldGoldGross: 20,
+      oldGoldNet: 18.5,
+      oldGoldRate: 7000,
+    });
+
+    expect(res.status).toBe(201);
+
+    const createCall = mockPrisma.customerPayment.create.mock.calls[0][0].data;
+    expect(createCall.totalAmount).toBe(129500);
+    expect(createCall.oldGoldAmount).toBe(129500);
+  });
 });
 
 // ================================================================
@@ -390,10 +575,11 @@ describe('POST /api/customer-payments', () => {
 // ================================================================
 describe('DELETE /api/customer-payments/:id', () => {
   it('cancels a payment and reverses balance', async () => {
-    mockPrisma.customerPayment.findUnique.mockResolvedValue(PAYMENT_1);
+    mockPrisma.customerPayment.findFirst.mockResolvedValue(PAYMENT_1);
     mockPrisma.account.update.mockResolvedValue({});
     mockPrisma.account.findUnique.mockResolvedValue({ closingBalance: 15000 });
     mockPrisma.customerPayment.update.mockResolvedValue({ ...PAYMENT_1, status: 'CANCELLED' });
+    mockPrisma.$transaction.mockImplementation(async (fn: Function) => fn(mockPrisma));
 
     const res = await request(app).delete('/api/customer-payments/1');
     expect(res.status).toBe(200);
@@ -405,7 +591,7 @@ describe('DELETE /api/customer-payments/:id', () => {
   });
 
   it('returns 404 for non-existent payment', async () => {
-    mockPrisma.customerPayment.findUnique.mockResolvedValue(null);
+    mockPrisma.customerPayment.findFirst.mockResolvedValue(null);
     mockPrisma.$transaction.mockImplementation(async (fn: Function) => fn(mockPrisma));
 
     const res = await request(app).delete('/api/customer-payments/999');
@@ -414,7 +600,7 @@ describe('DELETE /api/customer-payments/:id', () => {
   });
 
   it('returns 400 for already cancelled payment', async () => {
-    mockPrisma.customerPayment.findUnique.mockResolvedValue(CANCELLED_PAYMENT);
+    mockPrisma.customerPayment.findFirst.mockResolvedValue(CANCELLED_PAYMENT);
     mockPrisma.$transaction.mockImplementation(async (fn: Function) => fn(mockPrisma));
 
     const res = await request(app).delete('/api/customer-payments/3');
@@ -423,10 +609,11 @@ describe('DELETE /api/customer-payments/:id', () => {
   });
 
   it('sets balanceType to DR after cancellation reversal', async () => {
-    mockPrisma.customerPayment.findUnique.mockResolvedValue(PAYMENT_1);
+    mockPrisma.customerPayment.findFirst.mockResolvedValue(PAYMENT_1);
     mockPrisma.account.update.mockResolvedValue({});
     mockPrisma.account.findUnique.mockResolvedValue({ closingBalance: 15000 });
     mockPrisma.customerPayment.update.mockResolvedValue({ ...PAYMENT_1, status: 'CANCELLED' });
+    mockPrisma.$transaction.mockImplementation(async (fn: Function) => fn(mockPrisma));
 
     await request(app).delete('/api/customer-payments/1');
 
@@ -441,7 +628,7 @@ describe('DELETE /api/customer-payments/:id', () => {
 // ================================================================
 describe('GET /api/customer-payments/balance/:accountId', () => {
   it('returns balance history for a customer', async () => {
-    mockPrisma.account.findUnique.mockResolvedValue(CUSTOMER);
+    mockPrisma.account.findFirst.mockResolvedValue(CUSTOMER);
     mockPrisma.customerPayment.findMany.mockResolvedValue([{
       id: 1,
       receiptNo: 'CPR/1',
@@ -476,7 +663,7 @@ describe('GET /api/customer-payments/balance/:accountId', () => {
   });
 
   it('includes sales as debit entries in history', async () => {
-    mockPrisma.account.findUnique.mockResolvedValue(CUSTOMER);
+    mockPrisma.account.findFirst.mockResolvedValue(CUSTOMER);
     mockPrisma.customerPayment.findMany.mockResolvedValue([]);
     mockPrisma.salesVoucher.findMany.mockResolvedValue([{
       id: 1,
@@ -499,7 +686,7 @@ describe('GET /api/customer-payments/balance/:accountId', () => {
   });
 
   it('includes advance used entries when advanceAmount > 0', async () => {
-    mockPrisma.account.findUnique.mockResolvedValue(CUSTOMER);
+    mockPrisma.account.findFirst.mockResolvedValue(CUSTOMER);
     mockPrisma.customerPayment.findMany.mockResolvedValue([]);
     mockPrisma.salesVoucher.findMany.mockResolvedValue([{
       id: 1,
@@ -521,7 +708,7 @@ describe('GET /api/customer-payments/balance/:accountId', () => {
   });
 
   it('returns 404 when account not found', async () => {
-    mockPrisma.account.findUnique.mockResolvedValue(null);
+    mockPrisma.account.findFirst.mockResolvedValue(null);
 
     const res = await request(app).get('/api/customer-payments/balance/999');
     expect(res.status).toBe(404);
@@ -529,7 +716,7 @@ describe('GET /api/customer-payments/balance/:accountId', () => {
   });
 
   it('supports date range filtering', async () => {
-    mockPrisma.account.findUnique.mockResolvedValue(CUSTOMER);
+    mockPrisma.account.findFirst.mockResolvedValue(CUSTOMER);
     mockPrisma.customerPayment.findMany.mockResolvedValue([]);
     mockPrisma.salesVoucher.findMany.mockResolvedValue([]);
     mockPrisma.cashEntryLine.findMany.mockResolvedValue([]);
@@ -540,7 +727,7 @@ describe('GET /api/customer-payments/balance/:accountId', () => {
   });
 
   it('calculates running balance correctly', async () => {
-    mockPrisma.account.findUnique.mockResolvedValue(CUSTOMER);
+    mockPrisma.account.findFirst.mockResolvedValue(CUSTOMER);
     mockPrisma.customerPayment.findMany.mockResolvedValue([{
       id: 1,
       receiptNo: 'CPR/1',
@@ -576,5 +763,32 @@ describe('GET /api/customer-payments/balance/:accountId', () => {
     expect(history[0].balance).toBe(15000); // 0 + 15000
     expect(history[1].type).toBe('DUE_PAYMENT');
     expect(history[1].balance).toBe(5000); // 15000 - 10000
+  });
+
+  it('includes UPI payment in balance history entries', async () => {
+    mockPrisma.account.findFirst.mockResolvedValue(CUSTOMER);
+    mockPrisma.customerPayment.findMany.mockResolvedValue([{
+      id: 4,
+      receiptNo: 'CPR/4',
+      paymentDate: new Date('2026-03-15'),
+      paymentType: 'DUE_PAYMENT',
+      totalAmount: 10000,
+      cashAmount: 2000,
+      bankAmount: 0,
+      cardAmount: 0,
+      upiAmount: 8000,
+      balanceBefore: 15000,
+      balanceAfter: 5000,
+      narration: 'UPI payment',
+      reference: null,
+    }]);
+    mockPrisma.salesVoucher.findMany.mockResolvedValue([]);
+    mockPrisma.cashEntryLine.findMany.mockResolvedValue([]);
+
+    const res = await request(app).get('/api/customer-payments/balance/10');
+    expect(res.status).toBe(200);
+    expect(res.body.history).toHaveLength(1);
+    expect(res.body.history[0].type).toBe('DUE_PAYMENT');
+    expect(res.body.history[0].credit).toBe(10000);
   });
 });

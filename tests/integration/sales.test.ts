@@ -6,6 +6,22 @@ jest.mock('../../server/prisma', () => ({
   prisma: mockPrisma,
 }));
 
+// ── Mock branchAccess middleware (bypass auth) ────────────
+jest.mock('../../server/middleware/branchAccess', () => ({
+  authenticate: (req: any, _res: any, next: any) => {
+    req.userId = 1; req.userRole = 'ADMIN'; req.companyId = 1;
+    req.branchId = 1; req.branchScope = []; req.isMasterBranch = true;
+    next();
+  },
+  requireBranch: (_req: any, _res: any, next: any) => next(),
+  requireMaster: (_req: any, _res: any, next: any) => next(),
+  requireAdmin: (_req: any, _res: any, next: any) => next(),
+  branchWhere: () => ({}),
+  tenantScope: () => ({ companyId: 1 }),
+  canAccessBranch: () => true,
+  canOverrideBranch: async () => true,
+}));
+
 import app from '../../server/app';
 
 // ── Dummy data ─────────────────────────────────────────────
@@ -71,7 +87,9 @@ const VOUCHER_1 = {
   cashAmount: 50000,
   bankAmount: 20000,
   cardAmount: 0,
+  upiAmount: 0,
   oldGoldAmount: 0,
+  advanceAmount: 0,
   paymentAmount: 70000,
   dueAmount: 7722,
   previousOs: 0,
@@ -81,6 +99,7 @@ const VOUCHER_1 = {
   reference: 'REF001',
   isReturned: false,
   createdAt: new Date('2026-03-05'),
+  updatedAt: new Date('2026-03-05'),
 };
 
 const VOUCHER_2 = {
@@ -97,6 +116,7 @@ const VOUCHER_2 = {
   voucherAmount: 36885,
   cashAmount: 36885,
   bankAmount: 0,
+  upiAmount: 0,
   dueAmount: 0,
   narration: null,
   reference: null,
@@ -108,6 +128,22 @@ const CANCELLED_VOUCHER = {
   id: 3,
   voucherNo: 'JGI/3',
   status: 'CANCELLED',
+};
+
+// Voucher with updatedAt > 20 days ago (stale)
+const STALE_VOUCHER = {
+  ...VOUCHER_1,
+  id: 4,
+  voucherNo: 'JGI/4',
+  updatedAt: new Date('2026-02-01'), // > 20 days old
+};
+
+const CLOSED_VOUCHER = {
+  ...VOUCHER_1,
+  id: 5,
+  voucherNo: 'JGI/5',
+  status: 'CLOSED',
+  updatedAt: new Date('2026-02-01'),
 };
 
 const FULL_VOUCHER = {
@@ -368,6 +404,14 @@ describe('GET /api/sales', () => {
     expect(where.oldGoldAmount).toEqual({ gt: 0 });
   });
 
+  it('filters by paymentMode=UPI', async () => {
+    mockList();
+    await request(app).get('/api/sales?paymentMode=UPI');
+
+    const where = mockPrisma.salesVoucher.findMany.mock.calls[0][0].where;
+    expect(where.upiAmount).toEqual({ gt: 0 });
+  });
+
   it('filters by paymentMode=DUE', async () => {
     mockList();
     await request(app).get('/api/sales?paymentMode=DUE');
@@ -520,7 +564,7 @@ describe('GET /api/sales', () => {
 // ════════════════════════════════════════════════════════════
 describe('GET /api/sales/:id', () => {
   it('returns a single sales voucher with all relations', async () => {
-    mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce(FULL_VOUCHER);
+    mockPrisma.salesVoucher.findFirst.mockResolvedValueOnce(FULL_VOUCHER);
 
     const res = await request(app).get('/api/sales/1');
     expect(res.status).toBe(200);
@@ -530,7 +574,7 @@ describe('GET /api/sales/:id', () => {
   });
 
   it('returns 404 for non-existent voucher', async () => {
-    mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce(null);
+    mockPrisma.salesVoucher.findFirst.mockResolvedValueOnce(null);
 
     const res = await request(app).get('/api/sales/999');
     expect(res.status).toBe(404);
@@ -538,7 +582,7 @@ describe('GET /api/sales/:id', () => {
   });
 
   it('handles server error', async () => {
-    mockPrisma.salesVoucher.findUnique.mockRejectedValueOnce(new Error('DB'));
+    mockPrisma.salesVoucher.findFirst.mockRejectedValueOnce(new Error('DB'));
 
     const res = await request(app).get('/api/sales/1');
     expect(res.status).toBe(500);
@@ -598,6 +642,7 @@ describe('POST /api/sales', () => {
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.salesVoucher.create.mockResolvedValueOnce(VOUCHER_1);
     mockPrisma.salesItem.create.mockResolvedValueOnce(ITEM_1);
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ branchId: 1, status: 'IN_STOCK', labelNo: 'GB/13' });
     mockPrisma.label.update.mockResolvedValueOnce({});
     mockPrisma.account.update.mockResolvedValueOnce({});
     mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce(FULL_VOUCHER);
@@ -605,6 +650,18 @@ describe('POST /api/sales', () => {
     const res = await request(app).post('/api/sales').send(makeSalesPayload());
     expect(res.status).toBe(201);
     expect(res.body.voucherNo).toBe('JGI/1');
+  });
+
+  it('rejects sale when label is already SOLD', async () => {
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 2 });
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce({ ...VOUCHER_1, id: 2, voucherNo: 'JGI/2' });
+    mockPrisma.salesItem.create.mockResolvedValueOnce(ITEM_1);
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ branchId: 1, status: 'SOLD', labelNo: 'GB/13' });
+
+    const res = await request(app).post('/api/sales').send(makeSalesPayload());
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('Failed to create sales voucher');
   });
 
   it('handles server error during creation', async () => {
@@ -622,7 +679,7 @@ describe('POST /api/sales', () => {
 describe('DELETE /api/sales/:id', () => {
   it('cancels voucher, restores labels and customer balance', async () => {
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
-    mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce({
+    mockPrisma.salesVoucher.findFirst.mockResolvedValueOnce({
       ...VOUCHER_1,
       items: [ITEM_1],
     });
@@ -651,5 +708,156 @@ describe('DELETE /api/sales/:id', () => {
     const res = await request(app).delete('/api/sales/1');
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('Failed to cancel voucher');
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// Payment overpayment validation
+// ════════════════════════════════════════════════════════════
+describe('Payment overpayment validation', () => {
+  const makeSalesPayload = (overrides: any = {}) => ({
+    voucherDate: '2026-03-05',
+    voucherPrefix: 'JGI',
+    financialYear: '2025-2026',
+    accountId: CUSTOMER.id,
+    salesmanId: SALESMAN.id,
+    branchId: 1,
+    userId: 1,
+    totalGrossWeight: 10.5,
+    totalNetWeight: 9.8,
+    totalPcs: 1,
+    metalAmount: 68110,
+    labourAmount: 7350,
+    voucherAmount: 77722,
+    cashAmount: 50000,
+    bankAmount: 20000,
+    dueAmount: 7722,
+    items: [{ labelId: 100, itemId: 1, labelNo: 'GN/51', itemName: 'Gold Necklace', grossWeight: 10.5, netWeight: 9.8, pcs: 1, metalRate: 6950, metalAmount: 68110, labourAmount: 7350, totalAmount: 77722, taxableAmount: 75460 }],
+    ...overrides,
+  });
+
+  it('POST rejects when total payment exceeds voucher amount', async () => {
+    const res = await request(app).post('/api/sales').send(makeSalesPayload({
+      cashAmount: 80000,
+      bankAmount: 20000,
+      // total = 100000 > voucherAmount 77722
+    }));
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Total payment cannot exceed voucher amount');
+  });
+
+  it('POST allows payment equal to voucher amount', async () => {
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 10 });
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce(VOUCHER_1);
+    mockPrisma.salesItem.create.mockResolvedValueOnce(ITEM_1);
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ branchId: 1, status: 'IN_STOCK', labelNo: 'GN/51' });
+    mockPrisma.label.update.mockResolvedValueOnce({});
+    mockPrisma.account.update.mockResolvedValueOnce({});
+    mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce(FULL_VOUCHER);
+
+    const res = await request(app).post('/api/sales').send(makeSalesPayload({
+      cashAmount: 77722,
+      bankAmount: 0,
+      dueAmount: 0,
+    }));
+    expect(res.status).toBe(201);
+  });
+
+  it('PUT rejects when total payment exceeds voucher amount', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.salesVoucher.findFirst.mockResolvedValueOnce({ ...VOUCHER_1, items: [ITEM_1] });
+
+    const res = await request(app).put('/api/sales/1').send({
+      cashAmount: 100000,
+      bankAmount: 50000,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('Total payment cannot exceed voucher amount');
+  });
+
+  it('POST allows partial payment (due > 0)', async () => {
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 11 });
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce(VOUCHER_1);
+    mockPrisma.salesItem.create.mockResolvedValueOnce(ITEM_1);
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ branchId: 1, status: 'IN_STOCK', labelNo: 'GN/51' });
+    mockPrisma.label.update.mockResolvedValueOnce({});
+    mockPrisma.account.update.mockResolvedValueOnce({});
+    mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce(FULL_VOUCHER);
+
+    const res = await request(app).post('/api/sales').send(makeSalesPayload({
+      cashAmount: 30000,
+      bankAmount: 0,
+      dueAmount: 47722,
+    }));
+    expect(res.status).toBe(201);
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// Auto-close stale vouchers & CLOSED status edit blocking
+// ════════════════════════════════════════════════════════════
+describe('CLOSED voucher handling', () => {
+  it('GET detail auto-closes a stale ACTIVE voucher (>20 days)', async () => {
+    mockPrisma.salesVoucher.updateMany.mockResolvedValueOnce({ count: 0 });
+    mockPrisma.salesVoucher.findFirst.mockResolvedValueOnce({
+      ...STALE_VOUCHER,
+      account: CUSTOMER,
+      salesman: SALESMAN,
+      items: [ITEM_1],
+      branch: { id: 1, name: 'Main' },
+      user: { id: 1, fullName: 'Admin' },
+    });
+    mockPrisma.salesVoucher.update.mockResolvedValueOnce({ ...STALE_VOUCHER, status: 'CLOSED' });
+
+    const res = await request(app).get('/api/sales/4');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('CLOSED');
+  });
+
+  it('PUT rejects editing a CLOSED voucher', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.salesVoucher.findFirst.mockResolvedValueOnce({ ...CLOSED_VOUCHER, items: [ITEM_1] });
+
+    const res = await request(app).put('/api/sales/5').send({ cashAmount: 60000 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('closed');
+  });
+
+  it('GET detail does NOT close a recent ACTIVE voucher', async () => {
+    const recentVoucher = {
+      ...VOUCHER_1,
+      updatedAt: new Date(), // just now
+      account: CUSTOMER,
+      salesman: SALESMAN,
+      items: [ITEM_1],
+      branch: { id: 1, name: 'Main' },
+      user: { id: 1, fullName: 'Admin' },
+    };
+    mockPrisma.salesVoucher.updateMany.mockResolvedValueOnce({ count: 0 });
+    mockPrisma.salesVoucher.findFirst.mockResolvedValueOnce(recentVoucher);
+
+    const res = await request(app).get(`/api/sales/${VOUCHER_1.id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('ACTIVE');
+  });
+
+  it('GET list calls auto-close for stale vouchers', async () => {
+    mockPrisma.salesVoucher.updateMany.mockResolvedValueOnce({ count: 2 });
+    mockPrisma.salesVoucher.findMany.mockResolvedValueOnce([]);
+    mockPrisma.salesVoucher.count.mockResolvedValueOnce(0);
+
+    const res = await request(app).get('/api/sales');
+    expect(res.status).toBe(200);
+    expect(mockPrisma.salesVoucher.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: 'ACTIVE',
+          updatedAt: expect.objectContaining({ lt: expect.any(Date) }),
+        }),
+        data: { status: 'CLOSED' },
+      })
+    );
   });
 });

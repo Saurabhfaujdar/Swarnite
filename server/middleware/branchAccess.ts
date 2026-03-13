@@ -14,15 +14,17 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../prisma';
+import { config } from '../config';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'jewelerp-secret-key-change-in-production';
+const JWT_SECRET = config.jwtSecret;
 
-// Extend Express Request to carry branch context
+// Extend Express Request to carry tenant + branch context
 declare global {
   namespace Express {
     interface Request {
       userId?: number;
       userRole?: string;
+      companyId?: number;       // Tenant identifier
       branchId?: number;
       branchScope?: number[];   // List of branch IDs the user can access
       isMasterBranch?: boolean; // Whether the user's branch is the master
@@ -37,10 +39,18 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!token) return res.status(401).json({ error: 'Authentication required' });
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; role: string; branchId: number };
+    const decoded = jwt.verify(token, JWT_SECRET) as {
+      userId: number; role: string; companyId: number; branchId: number;
+    };
     req.userId = decoded.userId;
     req.userRole = decoded.role;
+    req.companyId = decoded.companyId;
     req.branchId = decoded.branchId;
+
+    // Validate companyId exists
+    if (!decoded.companyId) {
+      return res.status(403).json({ error: 'No company context in token' });
+    }
 
     // Load the user's branch to check master status
     if (decoded.branchId) {
@@ -128,6 +138,19 @@ export function branchWhere(req: Request): Record<string, any> {
     return { branchId: req.branchScope[0] };
   }
   return { branchId: { in: req.branchScope } };
+}
+
+/**
+ * Returns a companyId + branchId filter for Prisma queries.
+ * Combines tenant isolation with branch scoping.
+ *
+ * Usage: const where = { ...tenantScope(req), ...otherFilters };
+ */
+export function tenantScope(req: Request): Record<string, any> {
+  return {
+    companyId: req.companyId,
+    ...branchWhere(req),
+  };
 }
 
 // ─── 6. Validate target branch is within user's scope ─────────

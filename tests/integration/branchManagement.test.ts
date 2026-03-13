@@ -6,6 +6,22 @@ jest.mock('../../server/prisma', () => ({
   prisma: mockPrisma,
 }));
 
+// ── Mock branchAccess middleware (bypass auth) ────────────
+jest.mock('../../server/middleware/branchAccess', () => ({
+  authenticate: (req: any, _res: any, next: any) => {
+    req.userId = 1; req.userRole = 'ADMIN'; req.companyId = 1;
+    req.branchId = 1; req.branchScope = []; req.isMasterBranch = true;
+    next();
+  },
+  requireBranch: (_req: any, _res: any, next: any) => next(),
+  requireMaster: (_req: any, _res: any, next: any) => next(),
+  requireAdmin: (_req: any, _res: any, next: any) => next(),
+  branchWhere: () => ({}),
+  tenantScope: () => ({ companyId: 1 }),
+  canAccessBranch: () => true,
+  canOverrideBranch: async () => true,
+}));
+
 import app from '../../server/app';
 
 // ── Dummy data ─────────────────────────────────────────────

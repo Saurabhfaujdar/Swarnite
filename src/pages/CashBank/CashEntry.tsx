@@ -211,7 +211,7 @@ export default function CashEntry() {
         </div>
         <div className="flex gap-2">
           <button onClick={handleSave} className="btn-success" disabled={saveMutation.isPending}>💾 Save</button>
-          <button className="btn-primary">🖨️ Print</button>
+          <button className="btn-primary" onClick={() => window.print()}>🖨️ Print</button>
           <button onClick={resetForm} className="btn-outline">Clear</button>
         </div>
       </div>

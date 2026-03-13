@@ -1,7 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
+import { authenticate } from '../middleware/branchAccess';
 
 const router = Router();
+
+router.use(authenticate);
 
 // ============================================================
 // METAL TYPES
@@ -75,7 +78,7 @@ router.post('/purities', async (req: Request, res: Response) => {
 router.get('/metal-rates', async (req: Request, res: Response) => {
   try {
     const { date } = req.query;
-    const where: any = { isActive: true };
+    const where: any = { isActive: true, companyId: req.companyId };
 
     if (date) {
       const d = new Date(date as string);
@@ -113,7 +116,7 @@ router.get('/metal-rates/latest', async (_req: Request, res: Response) => {
 
 router.post('/metal-rates', async (req: Request, res: Response) => {
   try {
-    const rate = await prisma.metalRate.create({ data: req.body });
+    const rate = await prisma.metalRate.create({ data: { ...req.body, companyId: req.companyId } });
     res.status(201).json(rate);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create metal rate' });
@@ -123,9 +126,9 @@ router.post('/metal-rates', async (req: Request, res: Response) => {
 // ============================================================
 // SALESMEN
 // ============================================================
-router.get('/salesmen', async (_req: Request, res: Response) => {
+router.get('/salesmen', async (req: Request, res: Response) => {
   try {
-    const salesmen = await prisma.salesman.findMany({ where: { isActive: true } });
+    const salesmen = await prisma.salesman.findMany({ where: { isActive: true, companyId: req.companyId } });
     res.json(salesmen);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch salesmen' });
@@ -134,7 +137,7 @@ router.get('/salesmen', async (_req: Request, res: Response) => {
 
 router.post('/salesmen', async (req: Request, res: Response) => {
   try {
-    const salesman = await prisma.salesman.create({ data: req.body });
+    const salesman = await prisma.salesman.create({ data: { ...req.body, companyId: req.companyId } });
     res.status(201).json(salesman);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create salesman' });
@@ -190,9 +193,9 @@ router.post('/gst-config', async (req: Request, res: Response) => {
 // ============================================================
 // COMPANY
 // ============================================================
-router.get('/company', async (_req: Request, res: Response) => {
+router.get('/company', async (req: Request, res: Response) => {
   try {
-    const company = await prisma.company.findFirst();
+    const company = await prisma.company.findUnique({ where: { id: req.companyId } });
     res.json(company);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch company' });
@@ -201,13 +204,7 @@ router.get('/company', async (_req: Request, res: Response) => {
 
 router.post('/company', async (req: Request, res: Response) => {
   try {
-    const existing = await prisma.company.findFirst();
-    let company;
-    if (existing) {
-      company = await prisma.company.update({ where: { id: existing.id }, data: req.body });
-    } else {
-      company = await prisma.company.create({ data: req.body });
-    }
+    const company = await prisma.company.update({ where: { id: req.companyId! }, data: req.body });
     res.json(company);
   } catch (error) {
     res.status(500).json({ error: 'Failed to save company' });

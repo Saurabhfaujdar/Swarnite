@@ -1,179 +1,133 @@
-import { app, BrowserWindow, Menu, ipcMain } from 'electron';
+/**
+ * JewelERP — Thin Electron Wrapper
+ * ─────────────────────────────────
+ * This is NOT the application. The application is the hosted web app.
+ * Electron is an optional desktop launcher that provides:
+ *   • A branded desktop shortcut / taskbar icon
+ *   • A frameless-feel native window (no browser chrome)
+ *   • Auto-updates via electron-updater (future)
+ *
+ * All business logic, routing, auth, and data live in the hosted web app.
+ * Electron loads the remote URL — nothing else.
+ *
+ * Configuration:
+ *   JEWELERP_URL  — The hosted app URL (default: http://localhost:5173 in dev)
+ *   Set in electron/config.json or environment variable.
+ */
+
+import { app, BrowserWindow, shell } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
+
+// ─── Configuration ─────────────────────────────────────────
+
+interface WrapperConfig {
+  /** URL of the hosted JewelERP web app */
+  appUrl: string;
+  /** Window title */
+  title: string;
+  /** Whether to open DevTools on launch (dev only) */
+  devTools: boolean;
+}
+
+function loadConfig(): WrapperConfig {
+  const defaults: WrapperConfig = {
+    appUrl: 'http://localhost:5173',
+    title: 'JewelERP - Jewelry Retail Management',
+    devTools: false,
+  };
+
+  // 1) Try electron/config.json
+  const configPath = path.join(__dirname, 'config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      const file = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      return { ...defaults, ...file };
+    } catch {
+      // fall through to defaults
+    }
+  }
+
+  // 2) Environment variable overrides
+  if (process.env.JEWELERP_URL) {
+    defaults.appUrl = process.env.JEWELERP_URL;
+  }
+
+  // 3) Dev detection
+  if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
+    defaults.devTools = true;
+  }
+
+  return defaults;
+}
+
+// ─── Window ────────────────────────────────────────────────
 
 let mainWindow: BrowserWindow | null = null;
 
-function createWindow() {
+function createWindow(config: WrapperConfig) {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 1200,
-    minHeight: 700,
-    title: 'JewelERP - Jewelry Retail Management',
+    minWidth: 1024,
+    minHeight: 600,
+    title: config.title,
     icon: path.join(__dirname, '../public/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      // The wrapper loads a remote page — sandbox for security
+      sandbox: true,
     },
     show: false,
+    // Clean look — hide the menu bar (web app has its own nav)
+    autoHideMenuBar: true,
   });
 
-  // Build the application menu
-  const menu = Menu.buildFromTemplate([
-    {
-      label: '1 File',
-      submenu: [
-        { label: 'Company Info', click: () => navigateTo('/settings/company') },
-        { type: 'separator' },
-        { label: 'Backup Database', click: () => navigateTo('/settings/backup') },
-        { label: 'Restore Database', click: () => navigateTo('/settings/restore') },
-        { type: 'separator' },
-        { label: 'Exit', role: 'quit' },
-      ],
-    },
-    {
-      label: '2 Transaction',
-      submenu: [
-        {
-          label: 'A Sales Entry',
-          submenu: [
-            { label: 'A Retail Sales Entry', click: () => navigateTo('/sales/retail') },
-            { label: 'B Retail Sales Return', click: () => navigateTo('/sales/return') },
-            { label: 'C Sales Against Approval', click: () => navigateTo('/sales/approval') },
-            { label: 'D Labour Bill', click: () => navigateTo('/sales/labour-bill') },
-          ],
-        },
-        {
-          label: 'B Purchase Entry',
-          submenu: [
-            { label: 'A URD Purchase Entry', click: () => navigateTo('/purchase/urd') },
-            { label: 'B Regular Purchase Entry', click: () => navigateTo('/purchase/regular') },
-          ],
-        },
-        {
-          label: 'C Service Entry',
-          submenu: [
-            { label: 'A GST Inward Supply Entry', click: () => navigateTo('/service/inward') },
-            { label: 'B GST Outward Supply Entry', click: () => navigateTo('/service/outward') },
-          ],
-        },
-        { label: 'D Cash Bank Card Receipt Entry', click: () => navigateTo('/cash-bank/receipt') },
-        { label: 'E Cash Entry', click: () => navigateTo('/cash-bank/cash') },
-        { label: 'F Bank Entry', click: () => navigateTo('/cash-bank/bank') },
-        { label: 'G Journal / Debit Note / Credit Note', click: () => navigateTo('/cash-bank/journal') },
-        {
-          label: 'H Label (SKU) Preparation Entry',
-          submenu: [
-            { label: 'A Label Entry', click: () => navigateTo('/inventory/labels/new') },
-            { label: 'B Label List', click: () => navigateTo('/inventory/labels') },
-          ],
-        },
-        { label: 'I Challan Entry', click: () => navigateTo('/challan') },
-        { label: 'J Outsource Manufacturing', click: () => navigateTo('/manufacturing') },
-        { label: 'K Customer Issue / Receipt Entry', click: () => navigateTo('/customer-issue') },
-        { label: 'L Refinery Issue / Receipt Entry', click: () => navigateTo('/refinery') },
-        { label: 'M Approval Issue / Receipt Entry', click: () => navigateTo('/approval') },
-        { label: 'N Order Entry', click: () => navigateTo('/orders') },
-        { label: 'O Repairing Entry', click: () => navigateTo('/repairing') },
-        {
-          label: 'P Branch Entry',
-          submenu: [
-            { label: 'Branch Issue', click: () => navigateTo('/branch/issue') },
-            { label: 'Branch Receipt', click: () => navigateTo('/branch/receipt') },
-          ],
-        },
-        { label: 'Q Alteration Entry', click: () => navigateTo('/alteration') },
-        { label: 'R Daily Counter Stock Entry', click: () => navigateTo('/counter-stock') },
-      ],
-    },
-    {
-      label: '3 Reports',
-      submenu: [
-        { label: 'Daily Sales Report', click: () => navigateTo('/reports/daily-sales') },
-        { label: 'Daily Purchase Report', click: () => navigateTo('/reports/daily-purchase') },
-        { label: 'Stock Report', click: () => navigateTo('/reports/stock') },
-        { label: 'Counter Wise Report', click: () => navigateTo('/reports/counter-wise') },
-        { label: 'GST Report', click: () => navigateTo('/reports/gst') },
-        { label: 'Outstanding Report', click: () => navigateTo('/reports/outstanding') },
-        { label: 'Account Ledger', click: () => navigateTo('/reports/ledger') },
-        { label: 'Branch Transfer Report', click: () => navigateTo('/reports/branch-transfer') },
-      ],
-    },
-    {
-      label: '4 Process',
-      submenu: [
-        { label: 'Metal Rate Update', click: () => navigateTo('/process/metal-rate') },
-        { label: 'Label Transfer', click: () => navigateTo('/process/label-transfer') },
-      ],
-    },
-    {
-      label: '5 Housekeeping',
-      submenu: [
-        { label: 'Item Group Master', click: () => navigateTo('/masters/item-groups') },
-        { label: 'Item Master', click: () => navigateTo('/masters/items') },
-        { label: 'Purity Master', click: () => navigateTo('/masters/purities') },
-        { label: 'Metal Type Master', click: () => navigateTo('/masters/metal-types') },
-        { label: 'Counter Master', click: () => navigateTo('/masters/counters') },
-        { label: 'Label Prefix Master', click: () => navigateTo('/masters/prefixes') },
-        { label: 'Salesman Master', click: () => navigateTo('/masters/salesmen') },
-        { label: 'User Management', click: () => navigateTo('/masters/users') },
-      ],
-    },
-    {
-      label: '6 CRM',
-      submenu: [
-        { label: 'Customer List', click: () => navigateTo('/crm/customers') },
-        { label: 'Customer Ledger', click: () => navigateTo('/crm/ledger') },
-        { label: 'Birthday/Anniversary', click: () => navigateTo('/crm/reminders') },
-      ],
-    },
-    {
-      label: '7 More...',
-      submenu: [
-        { label: 'LayAway Entry', click: () => navigateTo('/layaway') },
-        { label: 'LayAway List', click: () => navigateTo('/layaway/list') },
-      ],
-    },
-    {
-      label: 'Window',
-      submenu: [
-        { role: 'minimize' },
-        { role: 'togglefullscreen' },
-        { type: 'separator' },
-        { role: 'toggleDevTools' },
-        { role: 'reload' },
-      ],
-    },
-  ]);
+  // No custom application menu — the web app has its own nav/sidebar
+  mainWindow.removeMenu();
 
-  Menu.setApplicationMenu(menu);
-
-  // In development, load from Vite dev server
-  if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
-    mainWindow.loadURL('http://localhost:5173');
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
-  }
+  // Load the hosted web app
+  mainWindow.loadURL(config.appUrl);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
     mainWindow?.maximize();
   });
 
+  // Open external links in the system browser, not inside Electron
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // Allow same-origin navigation (the web app itself)
+    try {
+      const appOrigin = new URL(config.appUrl).origin;
+      const linkOrigin = new URL(url).origin;
+      if (linkOrigin === appOrigin) {
+        return { action: 'allow' };
+      }
+    } catch {
+      // invalid URL — deny
+    }
+    // External links (WhatsApp, etc.) → system browser
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  if (config.devTools) {
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  }
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
 
-function navigateTo(route: string) {
-  mainWindow?.webContents.send('navigate', route);
-}
+// ─── App lifecycle ─────────────────────────────────────────
 
-// IPC handlers
-ipcMain.handle('get-app-version', () => app.getVersion());
-
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  const config = loadConfig();
+  createWindow(config);
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -183,6 +137,7 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    const config = loadConfig();
+    createWindow(config);
   }
 });

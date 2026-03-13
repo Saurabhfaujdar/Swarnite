@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { salesAPI } from '../lib/api';
 import { formatIndianNumber, formatWeight, calculateGST, numberToWords } from '../lib/utils';
 import TaxInvoice, { type InvoiceData, type InvoiceItem } from './TaxInvoice';
+import FileAttachments from './FileAttachments';
 import toast from 'react-hot-toast';
 
 interface VoucherPrintDialogProps {
@@ -47,6 +48,7 @@ export default function VoucherPrintDialog({ voucherId, onClose }: VoucherPrintD
   const [template, setTemplate] = useState(TEMPLATES[0]);
   const [whatsappText, setWhatsappText] = useState('invoice');
   const [showPreview, setShowPreview] = useState(false);
+  const [showAttachments, setShowAttachments] = useState(false);
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   // Fetch voucher data
@@ -78,7 +80,8 @@ export default function VoucherPrintDialog({ voucherId, onClose }: VoucherPrintD
     const discount = Number(voucher.discountAmount || 0);
     const productTotal = taxable + discount;
     const amountPaid = Number(voucher.cashAmount || 0) + Number(voucher.bankAmount || 0) +
-      Number(voucher.cardAmount || 0) + Number(voucher.oldGoldAmount || 0);
+      Number(voucher.cardAmount || 0) + Number(voucher.upiAmount || 0) +
+      Number(voucher.advanceAmount || 0) + Number(voucher.oldGoldAmount || 0);
 
     const items: InvoiceItem[] = (voucher.items || []).map((item: any, idx: number) => ({
       sNo: idx + 1,
@@ -124,6 +127,8 @@ export default function VoucherPrintDialog({ voucherId, onClose }: VoucherPrintD
       cashAmount: Number(voucher.cashAmount || 0),
       bankAmount: Number(voucher.bankAmount || 0),
       cardAmount: Number(voucher.cardAmount || 0),
+      upiAmount: Number(voucher.upiAmount || 0),
+      advanceAmount: Number(voucher.advanceAmount || 0),
       oldPurchaseAmount: Number(voucher.oldGoldAmount || 0),
       amountPaid,
       balance: Number(voucher.dueAmount || 0),
@@ -224,6 +229,8 @@ export default function VoucherPrintDialog({ voucherId, onClose }: VoucherPrintD
             ${invoiceData.cashAmount > 0 ? `<div style="padding-left: 12px; margin-bottom: 4px;">Cash: <span style="float: right; margin-right: 10px;">${formatIndianNumber(invoiceData.cashAmount)}</span></div>` : ''}
             ${invoiceData.bankAmount > 0 ? `<div style="padding-left: 12px; margin-bottom: 4px;">Bank: <span style="float: right; margin-right: 10px;">${formatIndianNumber(invoiceData.bankAmount)}</span></div>` : ''}
             ${invoiceData.cardAmount > 0 ? `<div style="padding-left: 12px; margin-bottom: 4px;">Card: <span style="float: right; margin-right: 10px;">${formatIndianNumber(invoiceData.cardAmount)}</span></div>` : ''}
+            ${invoiceData.upiAmount > 0 ? `<div style="padding-left: 12px; margin-bottom: 4px;">UPI: <span style="float: right; margin-right: 10px;">${formatIndianNumber(invoiceData.upiAmount)}</span></div>` : ''}
+            ${invoiceData.advanceAmount > 0 ? `<div style="padding-left: 12px; margin-bottom: 4px;">Advance: <span style="float: right; margin-right: 10px;">${formatIndianNumber(invoiceData.advanceAmount)}</span></div>` : ''}
             <div style="margin-top: 8px;"><strong>OLD PURCHASE :-</strong>${invoiceData.oldPurchaseAmount > 0 ? `<span style="float: right; margin-right: 10px;">${formatIndianNumber(invoiceData.oldPurchaseAmount)}</span>` : ''}</div>
           </div>
           <div style="width: 280px; padding: 8px;">
@@ -424,7 +431,12 @@ export default function VoucherPrintDialog({ voucherId, onClose }: VoucherPrintD
               </button>
             </div>
             <div className="flex gap-2">
-              <button className="btn-outline text-xs px-3 py-2" title="Upload Document">
+              <button
+                className="btn-outline text-xs px-3 py-2"
+                title="Upload Document"
+                onClick={() => setShowAttachments(!showAttachments)}
+                disabled={!voucher}
+              >
                 📤 Upload Doc
               </button>
               <button
@@ -459,6 +471,14 @@ export default function VoucherPrintDialog({ voucherId, onClose }: VoucherPrintD
               </button>
             </div>
           </div>
+
+          {/* Attachments panel (toggled by Upload Doc button) */}
+          {showAttachments && voucher && (
+            <div className="px-5 pb-4 border-t">
+              <div className="text-xs font-semibold mb-2 mt-3">📎 Attached Documents</div>
+              <FileAttachments entityType="SalesVoucher" entityId={voucherId} category="document" />
+            </div>
+          )}
         </div>
       </div>
 

@@ -44,6 +44,8 @@ export interface InvoiceData {
   cashAmount: number;
   bankAmount: number;
   cardAmount: number;
+  upiAmount: number;
+  advanceAmount: number;
   oldPurchaseAmount: number;
   amountPaid: number;
   balance: number;
@@ -175,6 +177,16 @@ const TaxInvoice = forwardRef<HTMLDivElement, { data: InvoiceData }>(({ data }, 
           {data.cardAmount > 0 && (
             <div style={{ paddingLeft: '12px', marginBottom: '4px' }}>
               Card: <span style={{ float: 'right', marginRight: '10px' }}>{formatIndianNumber(data.cardAmount)}</span>
+            </div>
+          )}
+          {data.upiAmount > 0 && (
+            <div style={{ paddingLeft: '12px', marginBottom: '4px' }}>
+              UPI: <span style={{ float: 'right', marginRight: '10px' }}>{formatIndianNumber(data.upiAmount)}</span>
+            </div>
+          )}
+          {data.advanceAmount > 0 && (
+            <div style={{ paddingLeft: '12px', marginBottom: '4px' }}>
+              Advance: <span style={{ float: 'right', marginRight: '10px' }}>{formatIndianNumber(data.advanceAmount)}</span>
             </div>
           )}
           <div style={{ marginTop: '8px' }}>

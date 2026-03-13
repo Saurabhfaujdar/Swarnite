@@ -1,26 +1,81 @@
-import axios from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { useAuthStore } from './auth';
+import { getConfig } from './config';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: getConfig().apiUrl,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true, // send refresh cookie on all requests
 });
 
-// Add auth token
+// ─── Request interceptor: attach access token from memory ────
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('jewelerp_token');
+  const token = useAuthStore.getState().token;
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Handle 401
+// ─── Response interceptor: auto-refresh on 401 ──────────────
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (err: Error) => void;
+}> = [];
+
+function processQueue(error: Error | null, token: string | null) {
+  failedQueue.forEach((p) => {
+    if (error) p.reject(error);
+    else if (token) p.resolve(token);
+  });
+  failedQueue = [];
+}
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('jewelerp_token');
-      window.location.href = '/login';
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    // Only attempt refresh for 401s on non-auth endpoints
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/auth/login') &&
+      !originalRequest.url?.includes('/auth/refresh')
+    ) {
+      if (isRefreshing) {
+        // Another refresh is in flight — queue this request
+        return new Promise<string>((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        }).then((token) => {
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+          return api(originalRequest);
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const newToken = await useAuthStore.getState().refreshAccessToken();
+        if (newToken) {
+          processQueue(null, newToken);
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return api(originalRequest);
+        } else {
+          processQueue(new Error('Refresh failed'), null);
+          useAuthStore.getState().logout();
+          window.location.href = '/login';
+        }
+      } catch (refreshError) {
+        processQueue(refreshError as Error, null);
+        useAuthStore.getState().logout();
+        window.location.href = '/login';
+      } finally {
+        isRefreshing = false;
+      }
     }
+
     return Promise.reject(error);
   }
 );
@@ -164,9 +219,34 @@ export const customerPaymentsAPI = {
   balanceHistory: (accountId: number, params?: any) => api.get(`/customer-payments/balance/${accountId}`, { params }),
 };
 
+// Files / Attachments
+export const filesAPI = {
+  upload: (entityType: string, entityId: number, files: File[], category = 'document') => {
+    const formData = new FormData();
+    formData.append('entityType', entityType);
+    formData.append('entityId', String(entityId));
+    formData.append('category', category);
+    files.forEach((f) => formData.append('files', f));
+    return api.post('/files/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  list: (entityType: string, entityId: number) =>
+    api.get(`/files/entity/${entityType}/${entityId}`),
+  getMeta: (id: number) => api.get(`/files/${id}`),
+  getDownloadUrl: (id: number) => api.get(`/files/${id}/url`),
+  remove: (id: number) => api.delete(`/files/${id}`),
+};
+
 // Auth
 export const authAPI = {
   login: (data: any) => api.post('/auth/login', data),
+  refresh: () => api.post('/auth/refresh'),
+  logout: () => api.post('/auth/logout'),
+  logoutAll: () => api.post('/auth/logout-all'),
   register: (data: any) => api.post('/auth/register', data),
   me: () => api.get('/auth/me'),
+  changePassword: (data: any) => api.put('/auth/change-password', data),
+  sessions: () => api.get('/auth/sessions'),
+  revokeSession: (id: number) => api.delete(`/auth/sessions/${id}`),
 };

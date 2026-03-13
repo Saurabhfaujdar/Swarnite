@@ -47,6 +47,7 @@ export default function RetailSalesEntry() {
   const [cashAmount, setCashAmount] = useState(0);
   const [bankAmount, setBankAmount] = useState(0);
   const [cardAmount, setCardAmount] = useState(0);
+  const [upiAmount, setUpiAmount] = useState(0);
   const [oldGoldAmount, setOldGoldAmount] = useState(0);
   const [advanceAmount, setAdvanceAmount] = useState(0);
   const [discountScheme, setDiscountScheme] = useState('DISCOUNT');
@@ -68,7 +69,7 @@ export default function RetailSalesEntry() {
   const gst = calculateGST(taxableAmount);
   const totalAmountBeforeDisc = taxableAmount + gst.total;
   const voucherAmount = Math.round(totalAmountBeforeDisc - discountAmount - roundingDiscount);
-  const paymentAmount = cashAmount + bankAmount + cardAmount + oldGoldAmount + advanceAmount;
+  const paymentAmount = cashAmount + bankAmount + cardAmount + upiAmount + oldGoldAmount + advanceAmount;
   const dueAmount = voucherAmount - paymentAmount;
   const previousOs = customerData ? Number(customerData.closingBalance || 0) : 0;
   const availableAdvance = previousOs < 0 ? Math.abs(previousOs) : 0;
@@ -170,6 +171,7 @@ export default function RetailSalesEntry() {
   const handleSave = () => {
     if (!customerId) return toast.error('Please select a customer');
     if (items.length === 0) return toast.error('Please add at least one item');
+    if (paymentAmount > voucherAmount) return toast.error('Total payment cannot exceed voucher amount');
 
     saveMutation.mutate({
       voucherDate,
@@ -197,6 +199,7 @@ export default function RetailSalesEntry() {
       cashAmount,
       bankAmount,
       cardAmount,
+      upiAmount,
       oldGoldAmount,
       advanceAmount,
       paymentAmount,
@@ -236,6 +239,7 @@ export default function RetailSalesEntry() {
     setCashAmount(0);
     setBankAmount(0);
     setCardAmount(0);
+    setUpiAmount(0);
     setOldGoldAmount(0);
     setAdvanceAmount(0);
     setDiscountAmount(0);
@@ -584,6 +588,15 @@ export default function RetailSalesEntry() {
               className="form-input w-20 text-right text-xs"
               value={cardAmount || ''}
               onChange={(e) => setCardAmount(Number(e.target.value))}
+            />
+          </div>
+          <div className="voucher-detail-row">
+            <span className="voucher-detail-label">UPI Amt</span>
+            <input
+              type="number"
+              className="form-input w-20 text-right text-xs"
+              value={upiAmount || ''}
+              onChange={(e) => setUpiAmount(Number(e.target.value))}
             />
           </div>
           <div className="voucher-detail-row">

@@ -46,6 +46,7 @@ export default function LayawayEntry() {
   const [cashAmount, setCashAmount] = useState(0);
   const [bankAmount, setBankAmount] = useState(0);
   const [cardAmount, setCardAmount] = useState(0);
+  const [upiAmount, setUpiAmount] = useState(0);
   const [oldGoldAmount, setOldGoldAmount] = useState(0);
   const [discountAmount, setDiscountAmount] = useState(0);
   const [roundingDiscount, setRoundingDiscount] = useState(0);
@@ -64,7 +65,7 @@ export default function LayawayEntry() {
   const gst = calculateGST(taxableAmount);
   const totalAmountBeforeDisc = taxableAmount + gst.total;
   const voucherAmount = Math.round(totalAmountBeforeDisc - discountAmount - roundingDiscount);
-  const paymentAmount = cashAmount + bankAmount + cardAmount + oldGoldAmount;
+  const paymentAmount = cashAmount + bankAmount + cardAmount + upiAmount + oldGoldAmount;
   const dueAmount = voucherAmount - paymentAmount;
   const previousOs = customerData ? Number(customerData.closingBalance || 0) : 0;
   const finalDue = dueAmount + previousOs;
@@ -187,6 +188,7 @@ export default function LayawayEntry() {
       cashAmount,
       bankAmount,
       cardAmount,
+      upiAmount,
       oldGoldAmount,
       paymentAmount,
       dueAmount,
@@ -230,6 +232,7 @@ export default function LayawayEntry() {
     setCashAmount(0);
     setBankAmount(0);
     setCardAmount(0);
+    setUpiAmount(0);
     setOldGoldAmount(0);
     setDiscountAmount(0);
     setRoundingDiscount(0);
@@ -543,6 +546,15 @@ export default function LayawayEntry() {
               className="form-input w-20 text-right text-xs"
               value={cardAmount || ''}
               onChange={(e) => setCardAmount(Number(e.target.value))}
+            />
+          </div>
+          <div className="voucher-detail-row">
+            <span className="voucher-detail-label">UPI Amt</span>
+            <input
+              type="number"
+              className="form-input w-20 text-right text-xs"
+              value={upiAmount || ''}
+              onChange={(e) => setUpiAmount(Number(e.target.value))}
             />
           </div>
           <div className="voucher-detail-row">

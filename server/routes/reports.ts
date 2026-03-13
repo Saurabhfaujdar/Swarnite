@@ -1,15 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
+import { authenticate, tenantScope, branchWhere } from '../middleware/branchAccess';
 
 const router = Router();
+
+router.use(authenticate);
 
 // ============================================================
 // DAILY SALES REPORT
 // ============================================================
 router.get('/daily-sales', async (req: Request, res: Response) => {
   try {
-    const { dateFrom, dateTo } = req.query;
-    const where: any = { status: 'ACTIVE' };
+    const { dateFrom, dateTo, groupBy } = req.query;
+    const where: any = { status: 'ACTIVE', ...tenantScope(req) };
 
     if (dateFrom && dateTo) {
       where.voucherDate = {
@@ -23,22 +26,79 @@ router.get('/daily-sales', async (req: Request, res: Response) => {
       include: {
         account: { select: { name: true, mobile: true, gstin: true } },
         salesman: { select: { name: true } },
+        branch: { select: { name: true } },
       },
       orderBy: { voucherDate: 'asc' },
     });
 
-    const summary = {
-      totalVouchers: sales.length,
-      totalAmount: sales.reduce((sum, s) => sum + Number(s.voucherAmount), 0),
-      totalCash: sales.reduce((sum, s) => sum + Number(s.cashAmount), 0),
-      totalBank: sales.reduce((sum, s) => sum + Number(s.bankAmount), 0),
-      totalCard: sales.reduce((sum, s) => sum + Number(s.cardAmount), 0),
-      totalGrossWeight: sales.reduce((sum, s) => sum + Number(s.totalGrossWeight), 0),
-      totalNetWeight: sales.reduce((sum, s) => sum + Number(s.totalNetWeight), 0),
-      totalPcs: sales.reduce((sum, s) => sum + s.totalPcs, 0),
+    // Determine grouping key
+    const getGroupKey = (v: any): string => {
+      if (groupBy === 'salesman') return v.salesman?.name || 'No Salesman';
+      if (groupBy === 'counter') return v.branch?.name || 'Unknown';
+      // Default: group by date
+      return new Date(v.voucherDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
     };
 
-    res.json({ sales, summary });
+    // Group and aggregate
+    const grouped: Record<string, any> = {};
+    for (const v of sales) {
+      const key = getGroupKey(v);
+      if (!grouped[key]) {
+        grouped[key] = {
+          date: key,
+          voucherCount: 0,
+          totalGrossWeight: 0,
+          totalNetWeight: 0,
+          metalAmount: 0,
+          labourAmount: 0,
+          cgstAmount: 0,
+          sgstAmount: 0,
+          totalAmount: 0,
+          cashAmount: 0,
+          bankAmount: 0,
+          cardAmount: 0,
+          upiAmount: 0,
+          oldGoldAmount: 0,
+          advanceAmount: 0,
+          dueAmount: 0,
+        };
+      }
+      const g = grouped[key];
+      g.voucherCount += 1;
+      g.totalGrossWeight += Number(v.totalGrossWeight);
+      g.totalNetWeight += Number(v.totalNetWeight);
+      g.metalAmount += Number(v.metalAmount);
+      g.labourAmount += Number(v.labourAmount);
+      g.cgstAmount += Number(v.cgstAmount);
+      g.sgstAmount += Number(v.sgstAmount);
+      g.totalAmount += Number(v.voucherAmount);
+      g.cashAmount += Number(v.cashAmount);
+      g.bankAmount += Number(v.bankAmount);
+      g.cardAmount += Number(v.cardAmount);
+      g.upiAmount += Number(v.upiAmount);
+      g.oldGoldAmount += Number(v.oldGoldAmount);
+      g.advanceAmount += Number(v.advanceAmount);
+      g.dueAmount += Number(v.dueAmount);
+    }
+
+    const rows = Object.values(grouped);
+
+    const summary = {
+      totalVouchers: sales.length,
+      totalGrossWeight: sales.reduce((sum, s) => sum + Number(s.totalGrossWeight), 0),
+      totalNetWeight: sales.reduce((sum, s) => sum + Number(s.totalNetWeight), 0),
+      totalAmount: sales.reduce((sum, s) => sum + Number(s.voucherAmount), 0),
+      cashAmount: sales.reduce((sum, s) => sum + Number(s.cashAmount), 0),
+      bankAmount: sales.reduce((sum, s) => sum + Number(s.bankAmount), 0),
+      cardAmount: sales.reduce((sum, s) => sum + Number(s.cardAmount), 0),
+      upiAmount: sales.reduce((sum, s) => sum + Number(s.upiAmount), 0),
+      oldGoldAmount: sales.reduce((sum, s) => sum + Number(s.oldGoldAmount), 0),
+      advanceAmount: sales.reduce((sum, s) => sum + Number(s.advanceAmount), 0),
+      dueAmount: sales.reduce((sum, s) => sum + Number(s.dueAmount), 0),
+      totalCollected: sales.reduce((sum, s) => sum + Number(s.paymentAmount), 0),
+    };
+
+    res.json({ rows, summary });
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate sales report' });
   }
@@ -50,7 +110,7 @@ router.get('/daily-sales', async (req: Request, res: Response) => {
 router.get('/daily-purchase', async (req: Request, res: Response) => {
   try {
     const { dateFrom, dateTo, type } = req.query;
-    const where: any = { status: 'ACTIVE' };
+    const where: any = { status: 'ACTIVE', ...tenantScope(req) };
 
     if (dateFrom && dateTo) {
       where.voucherDate = {
@@ -86,7 +146,7 @@ router.get('/daily-purchase', async (req: Request, res: Response) => {
 router.get('/stock', async (req: Request, res: Response) => {
   try {
     const { branchId, counterId, groupName, metalType } = req.query;
-    const where: any = { status: 'IN_STOCK' };
+    const where: any = { status: 'IN_STOCK', branch: { companyId: req.companyId }, ...branchWhere(req) };
 
     if (branchId) where.branchId = Number(branchId);
     if (counterId) where.counterId = Number(counterId);
@@ -148,6 +208,7 @@ router.get('/gst', async (req: Request, res: Response) => {
       const sales = await prisma.salesVoucher.findMany({
         where: {
           status: 'ACTIVE',
+          ...tenantScope(req),
           voucherDate: {
             gte: new Date(dateFrom as string),
             lte: new Date(dateTo as string),
@@ -182,7 +243,7 @@ router.get('/gst', async (req: Request, res: Response) => {
 router.get('/outstanding', async (req: Request, res: Response) => {
   try {
     const { type } = req.query;
-    const where: any = { isActive: true };
+    const where: any = { isActive: true, companyId: req.companyId };
 
     if (type === 'debtors') {
       where.balanceType = 'DR';
@@ -229,19 +290,19 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       latestRates,
     ] = await Promise.all([
       prisma.salesVoucher.aggregate({
-        where: { status: 'ACTIVE', voucherDate: { gte: today, lt: tomorrow } },
+        where: { status: 'ACTIVE', ...tenantScope(req), voucherDate: { gte: today, lt: tomorrow } },
         _sum: { voucherAmount: true },
         _count: true,
       }),
       prisma.purchaseVoucher.aggregate({
-        where: { status: 'ACTIVE', voucherDate: { gte: today, lt: tomorrow } },
+        where: { status: 'ACTIVE', ...tenantScope(req), voucherDate: { gte: today, lt: tomorrow } },
         _sum: { finalAmount: true },
         _count: true,
       }),
-      prisma.label.count({ where: { status: 'IN_STOCK' } }),
-      prisma.account.count({ where: { type: 'CUSTOMER', isActive: true } }),
+      prisma.label.count({ where: { status: 'IN_STOCK', branch: { companyId: req.companyId }, ...branchWhere(req) } }),
+      prisma.account.count({ where: { type: 'CUSTOMER', isActive: true, companyId: req.companyId } }),
       prisma.metalRate.findMany({
-        where: { isActive: true },
+        where: { isActive: true, companyId: req.companyId },
         orderBy: { date: 'desc' },
         distinct: ['metalTypeId', 'purityCode'],
         take: 10,

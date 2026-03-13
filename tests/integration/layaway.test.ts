@@ -6,6 +6,22 @@ jest.mock('../../server/prisma', () => ({
   prisma: mockPrisma,
 }));
 
+// ── Mock branchAccess middleware (bypass auth) ────────────
+jest.mock('../../server/middleware/branchAccess', () => ({
+  authenticate: (req: any, _res: any, next: any) => {
+    req.userId = 1; req.userRole = 'ADMIN'; req.companyId = 1;
+    req.branchId = 1; req.branchScope = []; req.isMasterBranch = true;
+    next();
+  },
+  requireBranch: (_req: any, _res: any, next: any) => next(),
+  requireMaster: (_req: any, _res: any, next: any) => next(),
+  requireAdmin: (_req: any, _res: any, next: any) => next(),
+  branchWhere: () => ({}),
+  tenantScope: () => ({ companyId: 1 }),
+  canAccessBranch: () => true,
+  canOverrideBranch: async () => true,
+}));
+
 import app from '../../server/app';
 
 // ── Dummy data ─────────────────────────────────────────────
@@ -309,7 +325,7 @@ describe('GET /api/layaway/:id', () => {
       items: [{ ...CREATED_ITEM, label: LABEL_1 }],
       payments: [],
     };
-    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce(entry);
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(entry);
 
     const res = await request(app).get('/api/layaway/1');
     expect(res.status).toBe(200);
@@ -320,7 +336,7 @@ describe('GET /api/layaway/:id', () => {
   });
 
   it('returns 404 for non-existent entry', async () => {
-    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce(null);
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(null);
 
     const res = await request(app).get('/api/layaway/999');
     expect(res.status).toBe(404);
@@ -328,7 +344,7 @@ describe('GET /api/layaway/:id', () => {
   });
 
   it('handles server error', async () => {
-    mockPrisma.layawayEntry.findUnique.mockRejectedValueOnce(new Error('DB'));
+    mockPrisma.layawayEntry.findFirst.mockRejectedValueOnce(new Error('DB'));
 
     const res = await request(app).get('/api/layaway/1');
     expect(res.status).toBe(500);
@@ -521,7 +537,8 @@ describe('POST /api/layaway', () => {
     expect(mockPrisma.voucherSequence.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          prefix_entityType_financialYear: {
+          companyId_prefix_entityType_financialYear: {
+            companyId: 1,
             prefix: 'LY',
             entityType: 'LAYAWAY',
             financialYear: '2025-2026',
@@ -552,7 +569,7 @@ describe('DELETE /api/layaway/:id', () => {
         { id: 2, layawayEntryId: 1, labelId: 101, itemId: 2, labelNo: 'GN/51' },
       ],
     };
-    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce(entry);
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(entry);
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.label.update.mockResolvedValue({});
     mockPrisma.account.update.mockResolvedValue({});
@@ -581,7 +598,7 @@ describe('DELETE /api/layaway/:id', () => {
 
   it('reverses customer balance on cancellation', async () => {
     const entry = { ...CREATED_ENTRY, dueAmount: 11796, items: [CREATED_ITEM] };
-    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce(entry);
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(entry);
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.label.update.mockResolvedValue({});
     mockPrisma.account.update.mockResolvedValue({});
@@ -600,7 +617,7 @@ describe('DELETE /api/layaway/:id', () => {
 
   it('does not reverse balance when dueAmount is 0', async () => {
     const entry = { ...CREATED_ENTRY, dueAmount: 0, items: [CREATED_ITEM] };
-    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce(entry);
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(entry);
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.label.update.mockResolvedValue({});
     mockPrisma.layawayEntry.update.mockResolvedValue({});
@@ -611,7 +628,7 @@ describe('DELETE /api/layaway/:id', () => {
   });
 
   it('returns 404 for non-existent layaway', async () => {
-    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce(null);
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(null);
 
     const res = await request(app).delete('/api/layaway/999');
     expect(res.status).toBe(404);
@@ -619,7 +636,7 @@ describe('DELETE /api/layaway/:id', () => {
   });
 
   it('returns 400 when layaway is already cancelled', async () => {
-    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce({
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce({
       ...CREATED_ENTRY,
       status: 'CANCELLED',
       items: [],
@@ -635,7 +652,7 @@ describe('DELETE /api/layaway/:id', () => {
       ...CREATED_ENTRY,
       items: [{ ...CREATED_ITEM, labelId: null }],
     };
-    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce(entry);
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(entry);
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.account.update.mockResolvedValue({});
     mockPrisma.layawayEntry.update.mockResolvedValue({});
@@ -646,7 +663,7 @@ describe('DELETE /api/layaway/:id', () => {
   });
 
   it('handles server error during cancellation', async () => {
-    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce({
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce({
       ...CREATED_ENTRY, items: [CREATED_ITEM],
     });
     mockPrisma.$transaction.mockImplementationOnce(async () => { throw new Error('TX error'); });
@@ -663,7 +680,7 @@ describe('DELETE /api/layaway/:id', () => {
 describe('PUT /api/layaway/:id', () => {
   it('updates layaway entry and re-creates items', async () => {
     const existingEntry = { ...CREATED_ENTRY, items: [{ ...CREATED_ITEM, labelId: 100 }] };
-    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce(existingEntry);
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(existingEntry);
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.label.update.mockResolvedValue({});
     mockPrisma.layawayItem.deleteMany.mockResolvedValue({ count: 1 });
@@ -686,7 +703,7 @@ describe('PUT /api/layaway/:id', () => {
   });
 
   it('returns 404 for non-existent entry', async () => {
-    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce(null);
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(null);
 
     const res = await request(app).put('/api/layaway/999').send(makeLayawayPayload());
     expect(res.status).toBe(404);
@@ -694,7 +711,7 @@ describe('PUT /api/layaway/:id', () => {
   });
 
   it('returns 400 when modifying cancelled layaway', async () => {
-    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce({
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce({
       ...CREATED_ENTRY, status: 'CANCELLED', items: [],
     });
 
@@ -704,7 +721,7 @@ describe('PUT /api/layaway/:id', () => {
   });
 
   it('handles server error', async () => {
-    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce({ ...CREATED_ENTRY, items: [] });
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce({ ...CREATED_ENTRY, items: [] });
     mockPrisma.$transaction.mockImplementationOnce(async () => { throw new Error('TX error'); });
 
     const res = await request(app).put('/api/layaway/1').send(makeLayawayPayload());

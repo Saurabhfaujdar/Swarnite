@@ -10,6 +10,7 @@ const STATUS_OPTIONS = [
   { value: 'ALL', label: 'All' },
   { value: 'ACTIVE', label: 'Active' },
   { value: 'CANCELLED', label: 'Cancelled' },
+  { value: 'CLOSED', label: 'Closed' },
   { value: 'VOID', label: 'Void' },
 ];
 
@@ -18,6 +19,7 @@ const PAYMENT_MODE_OPTIONS = [
   { value: 'CASH', label: 'Cash' },
   { value: 'BANK', label: 'Bank' },
   { value: 'CARD', label: 'Card' },
+  { value: 'UPI', label: 'UPI' },
   { value: 'OLD_GOLD', label: 'Old Gold' },
   { value: 'DUE', label: 'Due Only' },
 ];
@@ -42,7 +44,7 @@ export default function SalesEntryList() {
   const [dateTo, setDateTo] = useState(getToday());
   const [search, setSearch] = useState('');
   const [voucherNo, setVoucherNo] = useState('');
-  const [status, setStatus] = useState('ALL');
+  const [status, setStatus] = useState('ACTIVE');
   const [salesmanName, setSalesmanName] = useState('');
   const [narration, setNarration] = useState('');
   const [reference, setReference] = useState('');
@@ -148,7 +150,7 @@ export default function SalesEntryList() {
     if (dateTo && dateTo !== getToday()) count++;
     if (search) count++;
     if (voucherNo) count++;
-    if (status !== 'ALL') count++;
+    if (status !== 'ACTIVE') count++;
     if (salesmanName) count++;
     if (narration) count++;
     if (reference) count++;
@@ -176,7 +178,7 @@ export default function SalesEntryList() {
     setDateTo(getToday());
     setSearch('');
     setVoucherNo('');
-    setStatus('ALL');
+    setStatus('ACTIVE');
     setSalesmanName('');
     setNarration('');
     setReference('');
@@ -558,7 +560,7 @@ export default function SalesEntryList() {
               </tr>
             )}
             {vouchers.map((v: any, idx: number) => (
-              <tr key={v.id} className="cursor-pointer hover:bg-blue-50" onClick={() => navigate(`/sales/${v.id}`)}>
+              <tr key={v.id} className={`cursor-pointer hover:bg-blue-50 ${v.status === 'CANCELLED' ? 'opacity-50 bg-red-50 line-through' : v.status === 'CLOSED' ? 'opacity-70 bg-gray-50' : ''}`} onClick={() => navigate(`/sales/${v.id}`)}>
                 <td>{(page - 1) * limit + idx + 1}</td>
                 <td className="font-medium text-blue-600">{v.voucherNo}</td>
                 <td>{new Date(v.voucherDate).toLocaleDateString('en-IN')}</td>
@@ -579,6 +581,7 @@ export default function SalesEntryList() {
                   <span className={`px-2 py-0.5 rounded text-xs ${
                     v.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
                     v.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
+                    v.status === 'CLOSED' ? 'bg-gray-200 text-gray-700' :
                     'bg-yellow-100 text-yellow-800'
                   }`}>
                     {v.status}

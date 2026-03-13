@@ -52,6 +52,8 @@ const SAMPLE_INVOICE: InvoiceData = {
   cashAmount: 50000,
   bankAmount: 30000,
   cardAmount: 0,
+  upiAmount: 0,
+  advanceAmount: 0,
   oldPurchaseAmount: 10000,
   amountPaid: 90000,
   balance: 5388,

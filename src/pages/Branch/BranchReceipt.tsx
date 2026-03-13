@@ -142,7 +142,7 @@ export default function BranchReceipt() {
           <button onClick={handleReceive} className="btn-success" disabled={receiveMutation.isPending || !transferData}>
             ✅ Confirm Receipt
           </button>
-          <button className="btn-primary">🖨️ Print</button>
+          <button className="btn-primary" onClick={() => window.print()}>🖨️ Print</button>
         </div>
       </div>
     </div>

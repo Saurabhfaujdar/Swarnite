@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { authAPI } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../lib/auth';
 
 export default function Login() {
   const navigate = useNavigate();
+  const login = useAuthStore((s) => s.login);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,11 +16,10 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await authAPI.login({ username, password });
-      localStorage.setItem('jewelerp_token', res.data.token);
-      localStorage.setItem('jewelerp_user', JSON.stringify(res.data.user));
+      login(res.data.token, res.data.user);
       toast.success(`Welcome, ${res.data.user.fullName}`);
       navigate('/');
-    } catch (error) {
+    } catch {
       toast.error('Invalid username or password');
     } finally {
       setLoading(false);
@@ -62,9 +63,7 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="mt-4 text-center text-xs text-gray-400">
-          Default: admin / admin123
-        </div>
+
       </div>
     </div>
   );

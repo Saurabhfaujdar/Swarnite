@@ -21,6 +21,8 @@ model User {
   fullName    String
   role        UserRole  @default(USER)
   isActive    Boolean   @default(true)
+  companyId   Int
+  company     Company   @relation(fields: [companyId], references: [id])
   branchId    Int?
   branch      Branch?   @relation(fields: [branchId], references: [id])
   createdAt   DateTime  @default(now())
@@ -30,7 +32,10 @@ model User {
   purchaseVouchers  PurchaseVoucher[]
   cashEntries       CashEntry[]
   bankEntries       BankEntry[]
+  refreshTokens     RefreshToken[]
+  attachments       Attachment[]
 
+  @@index([companyId])
   @@map("users")
 }
 
@@ -63,6 +68,22 @@ model Company {
   updatedAt   DateTime @updatedAt
 
   branches    Branch[]
+  users       User[]
+  accounts    Account[]
+  salesmen    Salesman[]
+  metalRates  MetalRate[]
+  labelPrefixes LabelPrefix[]
+  voucherSequences VoucherSequence[]
+  salesVouchers    SalesVoucher[]
+  purchaseVouchers PurchaseVoucher[]
+  cashEntries      CashEntry[]
+  bankEntries      BankEntry[]
+  journalEntries   JournalEntry[]
+  branchTransfers  BranchTransfer[]
+  layawayEntries   LayawayEntry[]
+  customerPayments CustomerPayment[]
+  auditLogs        AuditLog[]
+  attachments      Attachment[]
 
   @@map("companies")
 }
@@ -206,11 +227,14 @@ model LabelPrefix {
   prefix      String    @unique  // "AA22", "CH22", "GR22"
   itemGroupId Int
   itemGroup   ItemGroup @relation(fields: [itemGroupId], references: [id])
+  companyId   Int
+  company     Company   @relation(fields: [companyId], references: [id])
   lastNumber  Int       @default(0)
   isActive    Boolean   @default(true)
 
   labels      Label[]
 
+  @@index([companyId])
   @@map("label_prefixes")
 }
 
@@ -263,9 +287,12 @@ model MetalRate {
   purityCode  String    // "22KT", "24KT"
   rate        Decimal   // Rate per gram
   date        DateTime  @default(now())
+  companyId   Int
+  company     Company   @relation(fields: [companyId], references: [id])
   isActive    Boolean   @default(true)
 
-  @@unique([metalTypeId, purityCode, date])
+  @@unique([companyId, metalTypeId, purityCode, date])
+  @@index([companyId])
   @@map("metal_rates")
 }
 
@@ -302,6 +329,8 @@ model Account {
   remark        String?
   closingBalance Decimal      @default(0)
   balanceType   BalanceType   @default(NONE)
+  companyId     Int
+  company       Company       @relation(fields: [companyId], references: [id])
   branchId      Int?          // Branch-level data isolation
   branch        Branch?       @relation(fields: [branchId], references: [id])
   isActive      Boolean       @default(true)
@@ -315,6 +344,7 @@ model Account {
   journalEntries   JournalEntryLine[]
   customerPayments CustomerPayment[]
 
+  @@index([companyId])
   @@index([branchId])
   @@map("accounts")
 }
@@ -345,10 +375,13 @@ model Salesman {
   name        String
   code        String   @unique
   mobile      String?
+  companyId   Int
+  company     Company  @relation(fields: [companyId], references: [id])
   isActive    Boolean  @default(true)
 
   salesVouchers SalesVoucher[]
 
+  @@index([companyId])
   @@map("salesmen")
 }
 
@@ -366,6 +399,8 @@ model SalesVoucher {
   account         Account        @relation(fields: [accountId], references: [id])
   salesmanId      Int?
   salesman        Salesman?      @relation(fields: [salesmanId], references: [id])
+  companyId       Int
+  company         Company        @relation(fields: [companyId], references: [id])
   branchId        Int
   branch          Branch         @relation(fields: [branchId], references: [id])
   userId          Int
@@ -402,6 +437,7 @@ model SalesVoucher {
   cashAmount       Decimal       @default(0)
   bankAmount       Decimal       @default(0)
   cardAmount       Decimal       @default(0)
+  upiAmount        Decimal       @default(0)
   oldGoldAmount    Decimal       @default(0)  // OG Purchase adjustment
   advanceAmount    Decimal       @default(0)  // Advance payment used from customer balance
 
@@ -422,6 +458,7 @@ model SalesVoucher {
 
   items            SalesItem[]
 
+  @@index([companyId])
   @@index([voucherDate])
   @@index([accountId])
   @@map("sales_vouchers")
@@ -479,6 +516,8 @@ model PurchaseVoucher {
 
   accountId       Int
   account         Account        @relation(fields: [accountId], references: [id])
+  companyId       Int
+  company         Company        @relation(fields: [companyId], references: [id])
   branchId        Int
   branch          Branch         @relation(fields: [branchId], references: [id])
   userId          Int
@@ -515,6 +554,7 @@ model PurchaseVoucher {
 
   items            PurchaseItem[]
 
+  @@index([companyId])
   @@index([voucherDate])
   @@map("purchase_vouchers")
 }
@@ -558,6 +598,8 @@ model CashEntry {
   voucherDate   DateTime      @default(now())
   voucherType   CashVoucherType  // Receipt or Payment
   bookName      String        @default("Cash")
+  companyId     Int
+  company       Company       @relation(fields: [companyId], references: [id])
   branchId      Int
   branch        Branch        @relation(fields: [branchId], references: [id])
   userId        Int
@@ -577,6 +619,7 @@ model CashEntry {
 
   lines         CashEntryLine[]
 
+  @@index([companyId])
   @@index([voucherDate])
   @@map("cash_entries")
 }
@@ -612,6 +655,8 @@ model BankEntry {
   voucherDate   DateTime      @default(now())
   voucherType   String        // "Receipt", "Payment", "Transfer"
   bookName      String
+  companyId     Int
+  company       Company       @relation(fields: [companyId], references: [id])
   branchId      Int
   branch        Branch        @relation(fields: [branchId], references: [id])
   userId        Int
@@ -626,6 +671,7 @@ model BankEntry {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
+  @@index([companyId])
   @@index([voucherDate])
   @@map("bank_entries")
 }
@@ -641,6 +687,8 @@ model JournalEntry {
   voucherNumber Int
   voucherDate   DateTime      @default(now())
   entryType     JournalType
+  companyId     Int
+  company       Company       @relation(fields: [companyId], references: [id])
   narration     String?
   reference     String?
   totalAmount   Decimal       @default(0)
@@ -650,6 +698,7 @@ model JournalEntry {
 
   lines         JournalEntryLine[]
 
+  @@index([companyId])
   @@map("journal_entries")
 }
 
@@ -683,6 +732,8 @@ model BranchTransfer {
   voucherNumber     Int
   voucherDate       DateTime @default(now())
   transferType      TransferType  // ISSUE or RECEIPT
+  companyId         Int
+  company           Company  @relation(fields: [companyId], references: [id])
 
   issuingBranchId   Int
   issuingBranch     Branch   @relation("IssuingBranch", fields: [issuingBranchId], references: [id])
@@ -703,6 +754,7 @@ model BranchTransfer {
 
   items             BranchTransferItem[]
 
+  @@index([companyId])
   @@index([voucherDate])
   @@map("branch_transfers")
 }
@@ -745,6 +797,8 @@ model LayawayEntry {
   dueDate         DateTime?
   accountId       Int
   account         Account       @relation(fields: [accountId], references: [id])
+  companyId       Int
+  company         Company       @relation(fields: [companyId], references: [id])
   branchId        Int
   branch          Branch        @relation(fields: [branchId], references: [id])
   salesmanName    String?
@@ -771,6 +825,7 @@ model LayawayEntry {
   cashAmount       Decimal      @default(0)
   bankAmount       Decimal      @default(0)
   cardAmount       Decimal      @default(0)
+  upiAmount        Decimal      @default(0)
   oldGoldAmount    Decimal      @default(0)
   paymentAmount    Decimal      @default(0)
   dueAmount        Decimal      @default(0)
@@ -848,12 +903,19 @@ model CustomerPayment {
   paymentDate   DateTime      @default(now())
   accountId     Int
   account       Account       @relation(fields: [accountId], references: [id])
+  companyId     Int
+  company       Company       @relation(fields: [companyId], references: [id])
   paymentType   PaymentType   // ADVANCE (before purchase) or DUE_PAYMENT (against outstanding)
 
   // Multi-source payment
   cashAmount    Decimal       @default(0)
   bankAmount    Decimal       @default(0)
   cardAmount    Decimal       @default(0)
+  upiAmount     Decimal       @default(0)
+  oldGoldGross  Decimal       @default(0)  // Old gold gross weight (grams)
+  oldGoldNet    Decimal       @default(0)  // Old gold net weight after deductions (grams)
+  oldGoldRate   Decimal       @default(0)  // Gold rate per gram used for valuation
+  oldGoldAmount Decimal       @default(0)  // oldGoldNet × oldGoldRate
   totalAmount   Decimal       @default(0)  // Sum of all payment sources
 
   // Balance tracking
@@ -870,6 +932,7 @@ model CustomerPayment {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
+  @@index([companyId])
   @@index([accountId])
   @@index([paymentDate])
   @@map("customer_payments")
@@ -888,6 +951,7 @@ enum VoucherStatus {
   ACTIVE
   CANCELLED
   VOID
+  CLOSED
 }
 
 // ============================================================
@@ -900,8 +964,10 @@ model VoucherSequence {
   entityType  String   // "SALES", "PURCHASE", "CASH", "BANK", "BRANCH_ISSUE", etc.
   lastNumber  Int      @default(0)
   financialYear String // "2025-2026"
+  companyId   Int
+  company     Company  @relation(fields: [companyId], references: [id])
 
-  @@unique([prefix, entityType, financialYear])
+  @@unique([companyId, prefix, entityType, financialYear])
   @@map("voucher_sequences")
 }
 
@@ -928,6 +994,8 @@ model GstConfig {
 model AuditLog {
   id          Int      @id @default(autoincrement())
   userId      Int
+  companyId   Int
+  company     Company  @relation(fields: [companyId], references: [id])
   branchId    Int?
   branch      Branch?  @relation(fields: [branchId], references: [id])
   action      String   // "CREATE", "UPDATE", "DELETE", "TRANSFER", "DISABLE", "OVERRIDE"
@@ -939,10 +1007,34 @@ model AuditLog {
   userAgent   String?
   createdAt   DateTime @default(now())
 
+  @@index([companyId])
   @@index([entityType, entityId])
   @@index([branchId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ============================================================
+// REFRESH TOKENS (Session management for web auth)
+// ============================================================
+
+model RefreshToken {
+  id          Int      @id @default(autoincrement())
+  token       String   @unique
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId   Int
+  branchId    Int?
+  userAgent   String?
+  ipAddress   String?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  revokedAt   DateTime?
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
 }
 
 // ============================================================
@@ -962,4 +1054,38 @@ model BranchStaff {
   @@unique([userId, branchId])
   @@index([branchId])
   @@map("branch_staff")
+}
+
+// ============================================================
+// FILE ATTACHMENTS (Web-first file storage)
+// ============================================================
+// Stores metadata for uploaded files. Actual file bytes live in
+// object storage (local disk in dev, S3/Minio in production).
+// Downloads served via time-limited signed URLs.
+
+model Attachment {
+  id            Int      @id @default(autoincrement())
+  companyId     Int
+  company       Company  @relation(fields: [companyId], references: [id])
+  uploadedById  Int
+  uploadedBy    User     @relation(fields: [uploadedById], references: [id])
+
+  // What this attachment belongs to (polymorphic via entityType + entityId)
+  entityType    String   // e.g. "SalesVoucher", "PurchaseVoucher", "Account", "Label"
+  entityId      Int
+
+  // File metadata
+  originalName  String   // User-visible filename
+  storagePath   String   // Internal key in object storage
+  mimeType      String
+  sizeBytes     Int
+  category      String   @default("document") // "document", "image", "invoice", "certificate"
+
+  createdAt     DateTime @default(now())
+  deletedAt     DateTime? // soft delete
+
+  @@index([companyId])
+  @@index([entityType, entityId])
+  @@index([uploadedById])
+  @@map("attachments")
 }

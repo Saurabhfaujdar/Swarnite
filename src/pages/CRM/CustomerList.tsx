@@ -91,7 +91,9 @@ export default function CustomerList() {
                     {a.type}
                   </span>
                 </td>
-                <td className="text-right">{formatIndianNumber(a.closingBalance || 0)}</td>
+                <td className={`text-right ${
+                  Number(a.closingBalance) > 0 ? 'text-red-600' : Number(a.closingBalance) < 0 ? 'text-green-600' : ''
+                }`}>{formatIndianNumber(Math.abs(Number(a.closingBalance || 0)))}</td>
                 <td className="text-xs">{a.balanceType || '-'}</td>
                 <td>
                   <button

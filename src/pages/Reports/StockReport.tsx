@@ -70,7 +70,7 @@ export default function StockReport() {
           <div className="ml-auto flex gap-2">
             <button onClick={handleExportExcel} className="btn-outline text-xs">📊 Excel</button>
             <button className="btn-outline text-xs">📄 PDF</button>
-            <button className="btn-outline text-xs">🖨️ Print</button>
+            <button onClick={() => window.print()} className="btn-outline text-xs">🖨️ Print</button>
           </div>
         </div>
       </div>

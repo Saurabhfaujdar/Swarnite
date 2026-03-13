@@ -61,6 +61,8 @@ const VOUCHER = {
   cashAmount: 50000,
   bankAmount: 20154,
   cardAmount: 0,
+  upiAmount: 0,
+  advanceAmount: 0,
   oldGoldAmount: 0,
   dueAmount: 0,
   status: 'ACTIVE',

@@ -22,6 +22,7 @@ export default function CustomerPaymentEntry() {
   const [cashAmount, setCashAmount] = useState(0);
   const [bankAmount, setBankAmount] = useState(0);
   const [cardAmount, setCardAmount] = useState(0);
+  const [upiAmount, setUpiAmount] = useState(0);
   const [bankName, setBankName] = useState('');
   const [chequeNo, setChequeNo] = useState('');
   const [narration, setNarration] = useState('');
@@ -29,7 +30,7 @@ export default function CustomerPaymentEntry() {
   const [savedPaymentId, setSavedPaymentId] = useState<number | null>(null);
 
   // Totals
-  const totalAmount = cashAmount + bankAmount + cardAmount;
+  const totalAmount = cashAmount + bankAmount + cardAmount + upiAmount;
   const currentBalance = customerData ? Number(customerData.closingBalance || 0) : 0;
   const balanceAfter = currentBalance - totalAmount;
 
@@ -86,6 +87,7 @@ export default function CustomerPaymentEntry() {
       cashAmount,
       bankAmount,
       cardAmount,
+      upiAmount,
       bankName: bankName || undefined,
       chequeNo: chequeNo || undefined,
       narration: narration || undefined,
@@ -101,6 +103,7 @@ export default function CustomerPaymentEntry() {
     setCashAmount(0);
     setBankAmount(0);
     setCardAmount(0);
+    setUpiAmount(0);
     setBankName('');
     setChequeNo('');
     setNarration('');
@@ -226,7 +229,7 @@ export default function CustomerPaymentEntry() {
           {/* Payment Details */}
           <div className="bg-white p-3 rounded shadow-sm">
             <h3 className="text-sm font-semibold text-gray-700 mb-2">Payment Sources</h3>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               <div>
                 <label className="text-xs text-gray-600">Cash Amount</label>
                 <input
@@ -255,6 +258,16 @@ export default function CustomerPaymentEntry() {
                   className="form-input w-full text-xs text-right"
                   value={cardAmount || ''}
                   onChange={(e) => setCardAmount(Number(e.target.value))}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-600">UPI Amount</label>
+                <input
+                  type="number"
+                  className="form-input w-full text-xs text-right"
+                  value={upiAmount || ''}
+                  onChange={(e) => setUpiAmount(Number(e.target.value))}
                   placeholder="0"
                 />
               </div>
@@ -444,15 +457,14 @@ export default function CustomerPaymentEntry() {
       </div>
 
       {/* Account Master Modal */}
-      {showCustomerModal && (
-        <AccountMasterModal
-          onClose={() => setShowCustomerModal(false)}
-          onSelect={(id: number) => {
-            setCustomerId(id);
-            setShowCustomerModal(false);
-          }}
-        />
-      )}
+      <AccountMasterModal
+        open={showCustomerModal}
+        onClose={() => setShowCustomerModal(false)}
+        onSaved={(account: any) => {
+          setCustomerId(account.id);
+          setShowCustomerModal(false);
+        }}
+      />
     </div>
   );
 }

@@ -6,6 +6,22 @@ jest.mock('../../server/prisma', () => ({
   prisma: mockPrisma,
 }));
 
+// ── Mock branchAccess middleware (bypass auth) ────────────
+jest.mock('../../server/middleware/branchAccess', () => ({
+  authenticate: (req: any, _res: any, next: any) => {
+    req.userId = 1; req.userRole = 'ADMIN'; req.companyId = 1;
+    req.branchId = 1; req.branchScope = []; req.isMasterBranch = true;
+    next();
+  },
+  requireBranch: (_req: any, _res: any, next: any) => next(),
+  requireMaster: (_req: any, _res: any, next: any) => next(),
+  requireAdmin: (_req: any, _res: any, next: any) => next(),
+  branchWhere: () => ({}),
+  tenantScope: () => ({ companyId: 1 }),
+  canAccessBranch: () => true,
+  canOverrideBranch: async () => true,
+}));
+
 import app from '../../server/app';
 
 // ── Dummy master data ──────────────────────────────────────
@@ -211,7 +227,7 @@ describe('GET /api/inventory/labels', () => {
 describe('GET /api/inventory/labels/search', () => {
   it('finds a label by labelNo query param', async () => {
     const label = { id: 1, labelNo: 'GP/1', item: ITEM_GOLD_PENDANT, branch: DUMMY_BRANCH, counter: DUMMY_COUNTER };
-    mockPrisma.label.findUnique.mockResolvedValueOnce(label);
+    mockPrisma.label.findFirst.mockResolvedValueOnce(label);
 
     const res = await request(app).get('/api/inventory/labels/search?labelNo=GP/1');
     expect(res.status).toBe(200);
@@ -224,7 +240,7 @@ describe('GET /api/inventory/labels/search', () => {
   });
 
   it('returns 404 if label not found', async () => {
-    mockPrisma.label.findUnique.mockResolvedValueOnce(null);
+    mockPrisma.label.findFirst.mockResolvedValueOnce(null);
 
     const res = await request(app).get('/api/inventory/labels/search?labelNo=XX/999');
     expect(res.status).toBe(404);
@@ -232,7 +248,7 @@ describe('GET /api/inventory/labels/search', () => {
 
   it('handles label numbers with slashes (e.g. GB/13)', async () => {
     const label = { id: 13, labelNo: 'GB/13', item: ITEM_GOLD_NECKLACE, branch: DUMMY_BRANCH, counter: DUMMY_COUNTER };
-    mockPrisma.label.findUnique.mockResolvedValueOnce(label);
+    mockPrisma.label.findFirst.mockResolvedValueOnce(label);
 
     const res = await request(app).get('/api/inventory/labels/search?labelNo=GB/13');
     expect(res.status).toBe(200);
@@ -243,7 +259,7 @@ describe('GET /api/inventory/labels/search', () => {
 describe('GET /api/inventory/labels/:id', () => {
   it('returns a label by ID', async () => {
     const label = { id: 5, labelNo: 'GR/5', item: ITEM_GOLD_NECKLACE, branch: DUMMY_BRANCH, counter: DUMMY_COUNTER };
-    mockPrisma.label.findUnique.mockResolvedValueOnce(label);
+    mockPrisma.label.findFirst.mockResolvedValueOnce(label);
 
     const res = await request(app).get('/api/inventory/labels/5');
     expect(res.status).toBe(200);
@@ -251,7 +267,7 @@ describe('GET /api/inventory/labels/:id', () => {
   });
 
   it('returns 404 when label not found', async () => {
-    mockPrisma.label.findUnique.mockResolvedValueOnce(null);
+    mockPrisma.label.findFirst.mockResolvedValueOnce(null);
     const res = await request(app).get('/api/inventory/labels/999');
     expect(res.status).toBe(404);
   });
@@ -613,7 +629,7 @@ describe('POST /api/inventory/labels/batch', () => {
         });
 
       expect(res.status).toBe(201);
-      expect(mockPrisma.branch.findFirst).toHaveBeenCalledWith({ where: { isActive: true } });
+      expect(mockPrisma.branch.findFirst).toHaveBeenCalledWith({ where: { isActive: true, companyId: 1 } });
     });
 
     it('returns 400 when no active branch exists', async () => {
@@ -743,6 +759,7 @@ describe('POST /api/inventory/labels/batch', () => {
 // ════════════════════════════════════════════════════════════
 describe('PUT /api/inventory/labels/:id', () => {
   it('updates a label', async () => {
+    mockPrisma.label.findFirst.mockResolvedValueOnce({ id: 1, labelNo: 'GN/1', status: 'IN_STOCK' });
     mockPrisma.label.update.mockResolvedValueOnce({ id: 1, labelNo: 'GN/1', status: 'SOLD' });
 
     const res = await request(app)
@@ -756,6 +773,7 @@ describe('PUT /api/inventory/labels/:id', () => {
 
 describe('DELETE /api/inventory/labels/:id', () => {
   it('deletes a label', async () => {
+    mockPrisma.label.findFirst.mockResolvedValueOnce({ id: 1, labelNo: 'GN/1' });
     mockPrisma.label.delete.mockResolvedValueOnce({ id: 1 });
 
     const res = await request(app).delete('/api/inventory/labels/1');

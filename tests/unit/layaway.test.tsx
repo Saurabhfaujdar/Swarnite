@@ -201,6 +201,7 @@ describe('LayawayEntry', () => {
       expect(screen.getByText('Cash Amt')).toBeDefined();
       expect(screen.getByText('Bank Amt')).toBeDefined();
       expect(screen.getByText('Card Amt')).toBeDefined();
+      expect(screen.getByText('UPI Amt')).toBeDefined();
       expect(screen.getByText('OG Purchase')).toBeDefined();
     });
 

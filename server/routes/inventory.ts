@@ -1,8 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { Prisma } from '@prisma/client';
+import { authenticate, branchWhere, canAccessBranch } from '../middleware/branchAccess';
 
 const router = Router();
+
+router.use(authenticate);
+
+/** Scope labels to the user's company + branch access */
+function labelScope(req: Request) {
+  return { branch: { companyId: req.companyId }, ...branchWhere(req) };
+}
 
 // ============================================================
 // LABELS / SKU Management
@@ -13,7 +21,7 @@ router.get('/labels', async (req: Request, res: Response) => {
   try {
     const { dateFrom, dateTo, groupName, status, counterId, page = '1', limit = '100' } = req.query;
 
-    const where: Prisma.LabelWhereInput = {};
+    const where: Prisma.LabelWhereInput = { ...labelScope(req) };
 
     if (dateFrom || dateTo) {
       where.createdAt = {};
@@ -61,8 +69,8 @@ router.get('/labels/search', async (req: Request, res: Response) => {
     const labelNo = req.query.labelNo as string;
     if (!labelNo) return res.status(400).json({ error: 'labelNo query parameter is required' });
 
-    const label = await prisma.label.findUnique({
-      where: { labelNo },
+    const label = await prisma.label.findFirst({
+      where: { labelNo, ...labelScope(req) },
       include: {
         item: { include: { itemGroup: true, purity: true, metalType: true } },
         branch: true,
@@ -79,8 +87,8 @@ router.get('/labels/search', async (req: Request, res: Response) => {
 // GET /api/inventory/labels/:id
 router.get('/labels/:id', async (req: Request, res: Response) => {
   try {
-    const label = await prisma.label.findUnique({
-      where: { id: Number(req.params.id) },
+    const label = await prisma.label.findFirst({
+      where: { id: Number(req.params.id), ...labelScope(req) },
       include: {
         item: { include: { itemGroup: true, purity: true, metalType: true } },
         branch: true,
@@ -98,6 +106,10 @@ router.get('/labels/:id', async (req: Request, res: Response) => {
 router.post('/labels', async (req: Request, res: Response) => {
   try {
     const data = req.body;
+
+    if (!canAccessBranch(req, data.branchId)) {
+      return res.status(403).json({ error: 'Access denied to target branch' });
+    }
 
     // Get or create prefix and increment
     const prefix = await prisma.labelPrefix.update({
@@ -144,9 +156,13 @@ router.post('/labels/batch', async (req: Request, res: Response) => {
     // Resolve branchId - use provided or fall back to first branch
     let resolvedBranchId = branchId;
     if (!resolvedBranchId) {
-      const branch = await prisma.branch.findFirst({ where: { isActive: true } });
+      const branch = await prisma.branch.findFirst({ where: { isActive: true, companyId: req.companyId } });
       if (!branch) return res.status(400).json({ error: 'No active branch found' });
       resolvedBranchId = branch.id;
+    }
+
+    if (!canAccessBranch(req, resolvedBranchId)) {
+      return res.status(403).json({ error: 'Access denied to target branch' });
     }
 
     for (const data of labelData) {
@@ -211,8 +227,11 @@ router.post('/labels/batch', async (req: Request, res: Response) => {
 // PUT /api/inventory/labels/:id
 router.put('/labels/:id', async (req: Request, res: Response) => {
   try {
+    const existing = await prisma.label.findFirst({ where: { id: Number(req.params.id), ...labelScope(req) } });
+    if (!existing) return res.status(404).json({ error: 'Label not found' });
+
     const label = await prisma.label.update({
-      where: { id: Number(req.params.id) },
+      where: { id: existing.id },
       data: req.body,
     });
     res.json(label);
@@ -224,7 +243,10 @@ router.put('/labels/:id', async (req: Request, res: Response) => {
 // DELETE /api/inventory/labels/:id
 router.delete('/labels/:id', async (req: Request, res: Response) => {
   try {
-    await prisma.label.delete({ where: { id: Number(req.params.id) } });
+    const existing = await prisma.label.findFirst({ where: { id: Number(req.params.id), ...labelScope(req) } });
+    if (!existing) return res.status(404).json({ error: 'Label not found' });
+
+    await prisma.label.delete({ where: { id: existing.id } });
     res.json({ message: 'Label deleted' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete label' });
@@ -264,7 +286,7 @@ router.get('/counter-report', async (req: Request, res: Response) => {
   try {
     const { dateFrom, dateTo, counterId } = req.query;
 
-    const where: Prisma.LabelWhereInput = {};
+    const where: Prisma.LabelWhereInput = { ...labelScope(req) };
     if (counterId) where.counterId = Number(counterId);
 
     // Get all items with their stock by counter
@@ -309,16 +331,18 @@ router.get('/counter-report', async (req: Request, res: Response) => {
 // ============================================================
 // STOCK SUMMARY
 // ============================================================
-router.get('/stock-summary', async (_req: Request, res: Response) => {
+router.get('/stock-summary', async (req: Request, res: Response) => {
   try {
+    const scope = labelScope(req);
     const summary = await prisma.label.groupBy({
       by: ['status'],
+      where: scope,
       _count: { id: true },
       _sum: { grossWeight: true, netWeight: true },
     });
 
-    const totalInStock = await prisma.label.count({ where: { status: 'IN_STOCK' } });
-    const totalSold = await prisma.label.count({ where: { status: 'SOLD' } });
+    const totalInStock = await prisma.label.count({ where: { ...scope, status: 'IN_STOCK' } });
+    const totalSold = await prisma.label.count({ where: { ...scope, status: 'SOLD' } });
 
     res.json({ summary, totalInStock, totalSold });
   } catch (error) {
@@ -329,10 +353,10 @@ router.get('/stock-summary', async (_req: Request, res: Response) => {
 // ============================================================
 // PREFIXES
 // ============================================================
-router.get('/prefixes', async (_req: Request, res: Response) => {
+router.get('/prefixes', async (req: Request, res: Response) => {
   try {
     const prefixes = await prisma.labelPrefix.findMany({
-      where: { isActive: true },
+      where: { isActive: true, companyId: req.companyId },
       include: { itemGroup: true },
     });
     res.json(prefixes);

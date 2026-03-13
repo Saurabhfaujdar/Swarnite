@@ -1,9 +1,10 @@
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home, ShoppingCart, Package, CreditCard, ArrowLeftRight,
-  BarChart3, Users, Clock, Settings, Tag, Wallet, Building2
+  BarChart3, Users, Clock, Settings, Tag, Wallet, Building2, LogOut
 } from 'lucide-react';
 import { getFinancialYear } from '../../lib/utils';
+import { useAuthStore } from '../../lib/auth';
 
 const navItems = [
   { to: '/', icon: Home, label: 'Dashboard' },
@@ -16,7 +17,6 @@ const navItems = [
   { to: '/branch/manage', icon: Building2, label: 'Store Mgmt' },
   { to: '/layaway/list', icon: Clock, label: 'LayAway' },
   { to: '/payments', icon: Wallet, label: 'Payments' },
-  { to: '/payments/list', icon: Wallet, label: 'Payment List' },
   { to: '/crm/customers', icon: Users, label: 'Customers' },
   { to: '/reports/daily-sales', icon: BarChart3, label: 'Reports' },
   { to: '/masters', icon: Settings, label: 'Masters' },
@@ -24,6 +24,14 @@ const navItems = [
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -56,8 +64,16 @@ export default function Layout() {
 
         {/* User info */}
         <div className="p-3 border-t border-gray-700 text-[10px] text-gray-400">
-          <div>User: Admin</div>
+          <div>{user?.fullName ?? 'User'}</div>
+          <div>{user?.branch?.name ?? ''}</div>
           <div>FY: {getFinancialYear()}</div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1 mt-2 text-gray-400 hover:text-red-400 transition-colors"
+          >
+            <LogOut size={12} />
+            <span>Logout</span>
+          </button>
         </div>
       </aside>
 
@@ -79,7 +95,7 @@ export default function Layout() {
         <div className="status-bar no-print">
           <span>My Favourite Reports</span>
           <span>
-            [User : Admin] - ({getFinancialYear()}) | JewelERP v1.0.0
+            [{user?.fullName ?? 'User'} : {user?.branch?.name ?? ''}] - ({getFinancialYear()}) | JewelERP v1.0.0
           </span>
         </div>
       </div>

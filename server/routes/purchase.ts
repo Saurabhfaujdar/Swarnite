@@ -1,8 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { Prisma } from '@prisma/client';
+import { authenticate, tenantScope, canAccessBranch } from '../middleware/branchAccess';
 
 const router = Router();
+
+router.use(authenticate);
 
 // ============================================================
 // GET /api/purchase - List purchase vouchers
@@ -11,7 +14,7 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const { dateFrom, dateTo, type, page = '1', limit = '50' } = req.query;
 
-    const where: Prisma.PurchaseVoucherWhereInput = { status: 'ACTIVE' };
+    const where: Prisma.PurchaseVoucherWhereInput = { status: 'ACTIVE', ...tenantScope(req) };
 
     if (dateFrom && dateTo) {
       where.voucherDate = {
@@ -46,8 +49,8 @@ router.get('/', async (req: Request, res: Response) => {
 // ============================================================
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const voucher = await prisma.purchaseVoucher.findUnique({
-      where: { id: Number(req.params.id) },
+    const voucher = await prisma.purchaseVoucher.findFirst({
+      where: { id: Number(req.params.id), ...tenantScope(req) },
       include: { account: true, items: true, branch: true },
     });
     if (!voucher) return res.status(404).json({ error: 'Not found' });
@@ -65,10 +68,15 @@ router.post('/', async (req: Request, res: Response) => {
     const data = req.body;
     const prefix = data.purchaseType === 'URD' ? 'URD' : 'PUR';
 
+    if (!canAccessBranch(req, data.branchId)) {
+      return res.status(403).json({ error: 'Access denied to target branch' });
+    }
+
     // Generate voucher number
     const sequence = await prisma.voucherSequence.upsert({
       where: {
-        prefix_entityType_financialYear: {
+        companyId_prefix_entityType_financialYear: {
+          companyId: req.companyId!,
           prefix,
           entityType: 'PURCHASE',
           financialYear: data.financialYear || '2025-2026',
@@ -76,6 +84,7 @@ router.post('/', async (req: Request, res: Response) => {
       },
       update: { lastNumber: { increment: 1 } },
       create: {
+        companyId: req.companyId!,
         prefix,
         entityType: 'PURCHASE',
         financialYear: data.financialYear || '2025-2026',
@@ -94,6 +103,7 @@ router.post('/', async (req: Request, res: Response) => {
           voucherDate: new Date(data.voucherDate),
           purchaseType: data.purchaseType || 'URD',
           accountId: data.accountId,
+          companyId: req.companyId!,
           branchId: data.branchId,
           userId: data.userId,
           description: data.description,
@@ -164,6 +174,11 @@ router.post('/', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
+    const voucher = await prisma.purchaseVoucher.findFirst({
+      where: { id, ...tenantScope(req) },
+    });
+    if (!voucher) return res.status(404).json({ error: 'Not found' });
+
     await prisma.purchaseVoucher.update({
       where: { id },
       data: { status: 'CANCELLED' },

@@ -24,8 +24,11 @@
 import { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
+import { authenticate } from '../middleware/branchAccess';
 
 const router = Router();
+
+router.use(authenticate);
 
 // ================================================================
 // GET /api/branches — List branches (respects scope)
@@ -36,7 +39,8 @@ router.get('/', async (req: Request, res: Response) => {
 
     const where: any = {};
     if (!includeDeleted) where.isDeleted = false;
-    if (companyId) where.companyId = Number(companyId);
+    // Always scope to user's company
+    where.companyId = req.companyId;
     if (search) {
       where.OR = [
         { name: { contains: search as string, mode: 'insensitive' } },
@@ -84,6 +88,8 @@ router.get('/audit-log', async (req: Request, res: Response) => {
 
     const where: any = {};
     if (branchId) where.branchId = Number(branchId);
+    // Scope audit logs to user's company branches
+    where.branch = { companyId: req.companyId };
     if (entityType) where.entityType = entityType;
     if (action) where.action = action;
 
@@ -296,6 +302,7 @@ router.post('/', async (req: Request, res: Response) => {
       data: {
         userId: req.userId || 0,
         branchId: branch.id,
+        companyId: req.companyId!,
         action: 'CREATE',
         entityType: 'Branch',
         entityId: branch.id,
@@ -351,6 +358,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       data: {
         userId: req.userId || 0,
         branchId: id,
+        companyId: req.companyId!,
         action: 'UPDATE',
         entityType: 'Branch',
         entityId: id,
@@ -392,6 +400,7 @@ router.put('/:id/disable', async (req: Request, res: Response) => {
       data: {
         userId: req.userId || 0,
         branchId: id,
+        companyId: req.companyId!,
         action: 'DISABLE',
         entityType: 'Branch',
         entityId: id,
@@ -429,6 +438,7 @@ router.put('/:id/enable', async (req: Request, res: Response) => {
       data: {
         userId: req.userId || 0,
         branchId: id,
+        companyId: req.companyId!,
         action: 'UPDATE',
         entityType: 'Branch',
         entityId: id,
@@ -506,6 +516,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       data: {
         userId: req.userId || 0,
         branchId: id,
+        companyId: req.companyId!,
         action: 'DELETE',
         entityType: 'Branch',
         entityId: id,
@@ -563,6 +574,7 @@ router.delete('/:id/permanent', async (req: Request, res: Response) => {
     await prisma.auditLog.create({
       data: {
         userId: req.userId || 0,
+        companyId: req.companyId!,
         action: 'DELETE',
         entityType: 'Branch',
         entityId: id,
@@ -617,14 +629,15 @@ router.post('/transfer', async (req: Request, res: Response) => {
     // Generate voucher number
     const sequence = await prisma.voucherSequence.upsert({
       where: {
-        prefix_entityType_financialYear: {
+        companyId_prefix_entityType_financialYear: {
+          companyId: req.companyId!,
           prefix: 'BT',
           entityType: 'BRANCH_TRANSFER',
           financialYear: data.financialYear || '2025-2026',
         },
       },
       update: { lastNumber: { increment: 1 } },
-      create: { prefix: 'BT', entityType: 'BRANCH_TRANSFER', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
+      create: { companyId: req.companyId!, prefix: 'BT', entityType: 'BRANCH_TRANSFER', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
     });
     const voucherNo = `BT/${sequence.lastNumber}`;
 
@@ -662,6 +675,7 @@ router.post('/transfer', async (req: Request, res: Response) => {
           voucherNumber: sequence.lastNumber,
           voucherDate: new Date(data.voucherDate || new Date()),
           transferType: 'ISSUE',
+          companyId: req.companyId!,
           issuingBranchId: data.fromBranchId,
           receivingBranchId: data.toBranchId,
           totalGrossWeight: data.totalGrossWeight || 0,
@@ -711,6 +725,7 @@ router.post('/transfer', async (req: Request, res: Response) => {
       data: {
         userId: req.userId || 0,
         branchId: data.fromBranchId,
+        companyId: req.companyId!,
         action: 'TRANSFER',
         entityType: 'BranchTransfer',
         entityId: result.id,

@@ -60,7 +60,7 @@ export default function CounterWiseReport() {
           <button onClick={() => refetch()} className="btn-primary">🔍 Generate</button>
           <div className="ml-auto flex gap-2">
             <button onClick={handleExport} className="btn-outline text-xs">📊 Excel</button>
-            <button className="btn-outline text-xs">🖨️ Print</button>
+            <button onClick={() => window.print()} className="btn-outline text-xs">🖨️ Print</button>
           </div>
         </div>
       </div>

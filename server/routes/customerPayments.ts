@@ -1,8 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { Prisma } from '@prisma/client';
+import { authenticate, tenantScope } from '../middleware/branchAccess';
 
 const router = Router();
+
+router.use(authenticate);
 
 // ============================================================
 // GET /api/customer-payments - List payments with filters
@@ -22,7 +25,7 @@ router.get('/', async (req: Request, res: Response) => {
       limit = '50',
     } = req.query;
 
-    const where: Prisma.CustomerPaymentWhereInput = {};
+    const where: Prisma.CustomerPaymentWhereInput = { companyId: req.companyId };
 
     if (accountId) where.accountId = Number(accountId);
     if (paymentType && paymentType !== 'ALL') where.paymentType = paymentType as any;
@@ -81,34 +84,16 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// GET /api/customer-payments/:id - Get single payment
-// ============================================================
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
-    const payment = await prisma.customerPayment.findUnique({
-      where: { id: Number(req.params.id) },
-      include: {
-        account: { select: { id: true, name: true, mobile: true, closingBalance: true, balanceType: true } },
-      },
-    });
-
-    if (!payment) return res.status(404).json({ error: 'Payment not found' });
-    res.json(payment);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch payment' });
-  }
-});
-
-// ============================================================
 // GET /api/customer-payments/balance/:accountId - Get balance history for a customer
+// (Must be defined before /:id to avoid Express matching "balance" as an id)
 // ============================================================
 router.get('/balance/:accountId', async (req: Request, res: Response) => {
   try {
     const accountId = Number(req.params.accountId);
     const { dateFrom, dateTo } = req.query;
 
-    const account = await prisma.account.findUnique({
-      where: { id: accountId },
+    const account = await prisma.account.findFirst({
+      where: { id: accountId, companyId: req.companyId },
       select: { id: true, name: true, mobile: true, closingBalance: true, balanceType: true },
     });
 
@@ -132,8 +117,9 @@ router.get('/balance/:accountId', async (req: Request, res: Response) => {
         select: {
           id: true, receiptNo: true, paymentDate: true,
           paymentType: true, totalAmount: true, cashAmount: true,
-          bankAmount: true, cardAmount: true, balanceBefore: true,
-          balanceAfter: true, narration: true, reference: true,
+          bankAmount: true, cardAmount: true, upiAmount: true,
+          oldGoldGross: true, oldGoldNet: true, oldGoldRate: true, oldGoldAmount: true,
+          balanceBefore: true, balanceAfter: true, narration: true, reference: true,
         },
         orderBy: { paymentDate: 'asc' },
       }),
@@ -210,7 +196,7 @@ router.get('/balance/:accountId', async (req: Request, res: Response) => {
         voucherNo: p.receiptNo,
         debit: 0,
         credit: Number(p.totalAmount),
-        details: p.narration || `${p.paymentType === 'ADVANCE' ? 'Advance' : 'Due'} payment`,
+        details: p.narration || `${p.paymentType === 'ADVANCE' ? 'Advance' : 'Due'} payment${Number(p.oldGoldAmount) > 0 ? ` (incl. Old Gold ₹${Number(p.oldGoldAmount).toLocaleString('en-IN')})` : ''}`,
       });
     }
 
@@ -249,6 +235,25 @@ router.get('/balance/:accountId', async (req: Request, res: Response) => {
 });
 
 // ============================================================
+// GET /api/customer-payments/:id - Get single payment
+// ============================================================
+router.get('/:id', async (req: Request, res: Response) => {
+  try {
+    const payment = await prisma.customerPayment.findFirst({
+      where: { id: Number(req.params.id), companyId: req.companyId },
+      include: {
+        account: { select: { id: true, name: true, mobile: true, closingBalance: true, balanceType: true } },
+      },
+    });
+
+    if (!payment) return res.status(404).json({ error: 'Payment not found' });
+    res.json(payment);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch payment' });
+  }
+});
+
+// ============================================================
 // POST /api/customer-payments - Record a customer payment
 // ============================================================
 router.post('/', async (req: Request, res: Response) => {
@@ -259,7 +264,12 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Customer (accountId) is required' });
     }
 
-    const totalAmount = Number(data.cashAmount || 0) + Number(data.bankAmount || 0) + Number(data.cardAmount || 0);
+    // Validate old gold: if weight is provided, rate must also be provided
+    const oldGoldNet = Number(data.oldGoldNet || 0);
+    const oldGoldRate = Number(data.oldGoldRate || 0);
+    const oldGoldAmount = oldGoldNet > 0 && oldGoldRate > 0 ? Math.round(oldGoldNet * oldGoldRate * 100) / 100 : 0;
+
+    const totalAmount = Number(data.cashAmount || 0) + Number(data.bankAmount || 0) + Number(data.cardAmount || 0) + Number(data.upiAmount || 0) + oldGoldAmount;
     if (totalAmount <= 0) {
       return res.status(400).json({ error: 'Payment amount must be greater than zero' });
     }
@@ -271,7 +281,8 @@ router.post('/', async (req: Request, res: Response) => {
     // Generate receipt number
     const sequence = await prisma.voucherSequence.upsert({
       where: {
-        prefix_entityType_financialYear: {
+        companyId_prefix_entityType_financialYear: {
+          companyId: req.companyId!,
           prefix: 'CPR',
           entityType: 'CUSTOMER_PAYMENT',
           financialYear: data.financialYear || '2025-2026',
@@ -279,6 +290,7 @@ router.post('/', async (req: Request, res: Response) => {
       },
       update: { lastNumber: { increment: 1 } },
       create: {
+        companyId: req.companyId!,
         prefix: 'CPR',
         entityType: 'CUSTOMER_PAYMENT',
         financialYear: data.financialYear || '2025-2026',
@@ -311,10 +323,16 @@ router.post('/', async (req: Request, res: Response) => {
           receiptNumber: sequence.lastNumber,
           paymentDate: new Date(data.paymentDate || new Date()),
           accountId: data.accountId,
+          companyId: req.companyId!,
           paymentType: data.paymentType,
           cashAmount: data.cashAmount || 0,
           bankAmount: data.bankAmount || 0,
           cardAmount: data.cardAmount || 0,
+          upiAmount: data.upiAmount || 0,
+          oldGoldGross: data.oldGoldGross || 0,
+          oldGoldNet: oldGoldNet,
+          oldGoldRate: oldGoldRate,
+          oldGoldAmount: oldGoldAmount,
           totalAmount,
           balanceBefore,
           balanceAfter,
@@ -364,8 +382,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
     const paymentId = Number(req.params.id);
 
     const result = await prisma.$transaction(async (tx) => {
-      const payment = await tx.customerPayment.findUnique({
-        where: { id: paymentId },
+      const payment = await tx.customerPayment.findFirst({
+        where: { id: paymentId, companyId: req.companyId },
       });
 
       if (!payment) throw new Error('NOT_FOUND');

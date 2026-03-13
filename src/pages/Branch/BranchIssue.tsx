@@ -171,7 +171,7 @@ export default function BranchIssue() {
 
       <div className="flex justify-end gap-2">
         <button onClick={handleSave} className="btn-success" disabled={saveMutation.isPending}>💾 Save Issue</button>
-        <button className="btn-primary">🖨️ Print</button>
+        <button className="btn-primary" onClick={() => window.print()}>🖨️ Print</button>
         <button onClick={() => setItems([])} className="btn-outline">Clear</button>
       </div>
     </div>

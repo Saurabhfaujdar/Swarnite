@@ -1,0 +1,133 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ── Test & build ─────────────────────────────────────────
+  lint-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: jewelerp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/jewelerp_test
+
+      - name: Run tests
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/jewelerp_test
+          JWT_SECRET: test-secret-ci
+          REFRESH_TOKEN_SECRET: test-refresh-secret-ci
+
+      - name: Build
+        run: npm run build
+
+  # ── Docker image ─────────────────────────────────────────
+  docker-build:
+    needs: lint-and-test
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}-${{ github.sha }}
+
+  # ── Deploy to staging (auto on main push) ────────────────
+  deploy-staging:
+    needs: docker-build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploy image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main to staging"
+          # Replace with your deployment method, e.g.:
+          # ssh $STAGING_HOST "cd /opt/jewelerp && docker compose --env-file deploy/staging.env pull && docker compose --env-file deploy/staging.env up -d"
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+
+  # ── Deploy to production (manual, on tags only) ──────────
+  deploy-production:
+    needs: docker-build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to production
+        run: |
+          echo "Deploy image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }} to production"
+          # Replace with your deployment method, e.g.:
+          # ssh $PROD_HOST "cd /opt/jewelerp && docker compose --env-file deploy/production.env pull && docker compose --env-file deploy/production.env up -d"
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}

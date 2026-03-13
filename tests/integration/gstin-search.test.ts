@@ -6,6 +6,22 @@ jest.mock('../../server/prisma', () => ({
   prisma: mockPrisma,
 }));
 
+// ── Mock branchAccess middleware (bypass auth) ────────────
+jest.mock('../../server/middleware/branchAccess', () => ({
+  authenticate: (req: any, _res: any, next: any) => {
+    req.userId = 1; req.userRole = 'ADMIN'; req.companyId = 1;
+    req.branchId = 1; req.branchScope = []; req.isMasterBranch = true;
+    next();
+  },
+  requireBranch: (_req: any, _res: any, next: any) => next(),
+  requireMaster: (_req: any, _res: any, next: any) => next(),
+  requireAdmin: (_req: any, _res: any, next: any) => next(),
+  branchWhere: () => ({}),
+  tenantScope: () => ({ companyId: 1 }),
+  canAccessBranch: () => true,
+  canOverrideBranch: async () => true,
+}));
+
 import app from '../../server/app';
 
 // ── Mock global fetch for external GST APIs ───────────────
@@ -485,7 +501,7 @@ describe('POST /api/accounts/gstin-search', () => {
         .send({ gstin: VALID_GSTIN_UP });
 
       expect(mockPrisma.account.findFirst).toHaveBeenCalledWith({
-        where: { gstin: VALID_GSTIN_UP, isActive: true },
+        where: { gstin: VALID_GSTIN_UP, isActive: true, companyId: 1 },
         select: { id: true, name: true, type: true, city: true, state: true },
       });
     });
@@ -592,6 +608,7 @@ describe('POST /api/accounts/gstin-search', () => {
         gstTradeName: 'Rajesh Gold Works',
         gstStatus: 'Active',
       };
+      mockPrisma.account.findFirst.mockResolvedValueOnce({ id: 1, name: 'Rajesh Kumar' });
       mockPrisma.account.update.mockResolvedValueOnce(updated);
 
       const res = await request(app)

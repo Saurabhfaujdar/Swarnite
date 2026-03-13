@@ -326,7 +326,7 @@ export default function LabelPreparation() {
           <button onClick={handleSave} className="btn-success" disabled={createMutation.isPending}>
             💾 Save & Generate Labels
           </button>
-          <button className="btn-primary">🖨️ Print Labels</button>
+          <button className="btn-primary" onClick={() => window.print()}>🖨️ Print Labels</button>
           <button onClick={() => setItems([])} className="btn-outline">Clear</button>
         </div>
       </div>

@@ -6,6 +6,22 @@ jest.mock('../../server/prisma', () => ({
   prisma: mockPrisma,
 }));
 
+// ── Mock branchAccess middleware (bypass auth) ────────────
+jest.mock('../../server/middleware/branchAccess', () => ({
+  authenticate: (req: any, _res: any, next: any) => {
+    req.userId = 1; req.userRole = 'ADMIN'; req.companyId = 1;
+    req.branchId = 1; req.branchScope = []; req.isMasterBranch = true;
+    next();
+  },
+  requireBranch: (_req: any, _res: any, next: any) => next(),
+  requireMaster: (_req: any, _res: any, next: any) => next(),
+  requireAdmin: (_req: any, _res: any, next: any) => next(),
+  branchWhere: () => ({}),
+  tenantScope: () => ({ companyId: 1 }),
+  canAccessBranch: () => true,
+  canOverrideBranch: async () => true,
+}));
+
 import app from '../../server/app';
 
 // ── Dummy data ─────────────────────────────────────────────
@@ -274,7 +290,7 @@ describe('GET /api/masters/gst-config', () => {
 // ════════════════════════════════════════════════════════════
 describe('GET /api/masters/company', () => {
   it('returns the company info', async () => {
-    mockPrisma.company.findFirst.mockResolvedValueOnce(DUMMY_COMPANY);
+    mockPrisma.company.findUnique.mockResolvedValueOnce(DUMMY_COMPANY);
 
     const res = await request(app).get('/api/masters/company');
     expect(res.status).toBe(200);
@@ -282,7 +298,7 @@ describe('GET /api/masters/company', () => {
   });
 
   it('returns null when no company exists', async () => {
-    mockPrisma.company.findFirst.mockResolvedValueOnce(null);
+    mockPrisma.company.findUnique.mockResolvedValueOnce(null);
 
     const res = await request(app).get('/api/masters/company');
     expect(res.status).toBe(200);
@@ -292,19 +308,17 @@ describe('GET /api/masters/company', () => {
 
 describe('POST /api/masters/company', () => {
   it('creates a new company if none exists', async () => {
-    mockPrisma.company.findFirst.mockResolvedValueOnce(null);
-    mockPrisma.company.create.mockResolvedValueOnce(DUMMY_COMPANY);
+    mockPrisma.company.update.mockResolvedValueOnce(DUMMY_COMPANY);
 
     const res = await request(app)
       .post('/api/masters/company')
       .send({ name: 'JaiGuru Jewels Pvt Ltd', gstin: '27AABCJ1234F1Z5' });
 
     expect(res.status).toBe(200);
-    expect(mockPrisma.company.create).toHaveBeenCalled();
+    expect(mockPrisma.company.update).toHaveBeenCalled();
   });
 
   it('updates existing company', async () => {
-    mockPrisma.company.findFirst.mockResolvedValueOnce(DUMMY_COMPANY);
     mockPrisma.company.update.mockResolvedValueOnce({ ...DUMMY_COMPANY, name: 'Updated Name' });
 
     const res = await request(app)

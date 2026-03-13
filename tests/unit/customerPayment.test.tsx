@@ -110,11 +110,12 @@ describe('CustomerPaymentEntry', () => {
     expect(options[1].textContent).toBe('Due Payment');
   });
 
-  it('has cash, bank, and card amount inputs', () => {
+  it('has cash, bank, card, and UPI amount inputs', () => {
     renderWithQuery(<CustomerPaymentEntry />);
     expect(screen.getByText('Cash Amount')).toBeInTheDocument();
     expect(screen.getByText('Bank Amount')).toBeInTheDocument();
     expect(screen.getByText('Card Amount')).toBeInTheDocument();
+    expect(screen.getByText('UPI Amount')).toBeInTheDocument();
   });
 
   it('has save and clear buttons', () => {
@@ -165,19 +166,20 @@ describe('CustomerPaymentEntry', () => {
     });
   });
 
-  it('calculates total from multiple payment sources', async () => {
+  it('calculates total from multiple payment sources including UPI', async () => {
     renderWithQuery(<CustomerPaymentEntry />);
 
-    // Find number inputs (cash, bank, card)
+    // Find number inputs (cash, bank, card, upi)
     const numberInputs = screen.getAllByRole('spinbutton');
-    // Cash = first, Bank = second, Card = third
+    // Cash = first, Bank = second, Card = third, UPI = fourth
     await userEvent.type(numberInputs[0], '5000');
     await userEvent.type(numberInputs[1], '3000');
     await userEvent.type(numberInputs[2], '2000');
+    await userEvent.type(numberInputs[3], '1000');
 
     await waitFor(() => {
-      // Sum = 10000 → formatted as ₹10,000.00 in both main area and summary
-      const totalEls = screen.getAllByText((content) => content.includes('10,000.00'));
+      // Sum = 11000 → formatted as ₹11,000.00 in both main area and summary
+      const totalEls = screen.getAllByText((content) => content.includes('11,000.00'));
       expect(totalEls.length).toBeGreaterThanOrEqual(1);
     });
   });

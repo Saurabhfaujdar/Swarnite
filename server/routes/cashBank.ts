@@ -1,7 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
+import { authenticate, tenantScope, canAccessBranch } from '../middleware/branchAccess';
 
 const router = Router();
+
+router.use(authenticate);
 
 // ============================================================
 // CASH ENTRIES
@@ -11,7 +14,7 @@ const router = Router();
 router.get('/cash', async (req: Request, res: Response) => {
   try {
     const { dateFrom, dateTo, type } = req.query;
-    const where: any = { status: 'ACTIVE' };
+    const where: any = { status: 'ACTIVE', ...tenantScope(req) };
 
     if (dateFrom && dateTo) {
       where.voucherDate = {
@@ -39,16 +42,21 @@ router.post('/cash', async (req: Request, res: Response) => {
     const data = req.body;
     const prefix = data.voucherType === 'RECEIPT' ? 'CI' : 'CO';
 
+    if (!canAccessBranch(req, data.branchId)) {
+      return res.status(403).json({ error: 'Access denied to target branch' });
+    }
+
     const sequence = await prisma.voucherSequence.upsert({
       where: {
-        prefix_entityType_financialYear: {
+        companyId_prefix_entityType_financialYear: {
+          companyId: req.companyId!,
           prefix,
           entityType: 'CASH',
           financialYear: data.financialYear || '2025-2026',
         },
       },
       update: { lastNumber: { increment: 1 } },
-      create: { prefix, entityType: 'CASH', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
+      create: { companyId: req.companyId!, prefix, entityType: 'CASH', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
     });
 
     const voucherNo = `${prefix}/${sequence.lastNumber}`;
@@ -62,6 +70,7 @@ router.post('/cash', async (req: Request, res: Response) => {
           voucherDate: new Date(data.voucherDate),
           voucherType: data.voucherType,
           bookName: data.bookName || 'Cash',
+          companyId: req.companyId!,
           branchId: data.branchId,
           userId: data.userId,
           totalCredit: data.totalCredit || 0,
@@ -123,7 +132,7 @@ router.post('/cash', async (req: Request, res: Response) => {
 router.get('/bank', async (req: Request, res: Response) => {
   try {
     const { dateFrom, dateTo } = req.query;
-    const where: any = { status: 'ACTIVE' };
+    const where: any = { status: 'ACTIVE', ...tenantScope(req) };
 
     if (dateFrom && dateTo) {
       where.voucherDate = {
@@ -149,14 +158,15 @@ router.post('/bank', async (req: Request, res: Response) => {
 
     const sequence = await prisma.voucherSequence.upsert({
       where: {
-        prefix_entityType_financialYear: {
+        companyId_prefix_entityType_financialYear: {
+          companyId: req.companyId!,
           prefix: 'BK',
           entityType: 'BANK',
           financialYear: data.financialYear || '2025-2026',
         },
       },
       update: { lastNumber: { increment: 1 } },
-      create: { prefix: 'BK', entityType: 'BANK', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
+      create: { companyId: req.companyId!, prefix: 'BK', entityType: 'BANK', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
     });
 
     const entry = await prisma.bankEntry.create({
@@ -167,6 +177,7 @@ router.post('/bank', async (req: Request, res: Response) => {
         voucherDate: new Date(data.voucherDate),
         voucherType: data.voucherType,
         bookName: data.bookName,
+        companyId: req.companyId!,
         branchId: data.branchId,
         userId: data.userId,
         totalAmount: data.totalAmount || 0,
@@ -190,7 +201,7 @@ router.post('/bank', async (req: Request, res: Response) => {
 router.get('/journal', async (req: Request, res: Response) => {
   try {
     const entries = await prisma.journalEntry.findMany({
-      where: { status: 'ACTIVE' },
+      where: { status: 'ACTIVE', companyId: req.companyId },
       include: { lines: { include: { account: true } } },
       orderBy: { voucherDate: 'desc' },
     });
@@ -206,14 +217,15 @@ router.post('/journal', async (req: Request, res: Response) => {
 
     const sequence = await prisma.voucherSequence.upsert({
       where: {
-        prefix_entityType_financialYear: {
+        companyId_prefix_entityType_financialYear: {
+          companyId: req.companyId!,
           prefix: 'JV',
           entityType: 'JOURNAL',
           financialYear: data.financialYear || '2025-2026',
         },
       },
       update: { lastNumber: { increment: 1 } },
-      create: { prefix: 'JV', entityType: 'JOURNAL', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
+      create: { companyId: req.companyId!, prefix: 'JV', entityType: 'JOURNAL', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
     });
 
     const entry = await prisma.$transaction(async (tx) => {
@@ -224,6 +236,7 @@ router.post('/journal', async (req: Request, res: Response) => {
           voucherNumber: sequence.lastNumber,
           voucherDate: new Date(data.voucherDate),
           entryType: data.entryType || 'JOURNAL',
+          companyId: req.companyId!,
           narration: data.narration,
           totalAmount: data.totalAmount || 0,
         },

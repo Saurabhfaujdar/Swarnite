@@ -37,6 +37,7 @@ const modelNames = [
   'label', 'item', 'labelPrefix',
   'voucherSequence',
   'customerPayment',
+  'refreshToken',
   'branchStaff',
   'auditLog',
 ];

@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { customerPaymentsAPI } from '../../lib/api';
-import { formatIndianNumber, getToday } from '../../lib/utils';
+import { customerPaymentsAPI, accountsAPI, mastersAPI } from '../../lib/api';
+import { formatIndianNumber, getToday, getFinancialYear } from '../../lib/utils';
 import toast from 'react-hot-toast';
+import AccountMasterModal from '../../components/AccountMasterModal';
+import { ChevronDown, ChevronUp, Plus } from 'lucide-react';
 
 export default function CustomerPaymentList() {
   const queryClient = useQueryClient();
 
-  // Filters
+  // --- List state ---
   const [search, setSearch] = useState('');
   const [paymentType, setPaymentType] = useState('ALL');
   const [status, setStatus] = useState('ACTIVE');
@@ -16,6 +18,35 @@ export default function CustomerPaymentList() {
   const [page, setPage] = useState(1);
   const [cancelId, setCancelId] = useState<number | null>(null);
 
+  // --- Entry form state ---
+  const [showForm, setShowForm] = useState(false);
+  const cashRef = useRef<HTMLInputElement>(null);
+  const [paymentDate, setPaymentDate] = useState(getToday());
+  const [entryPaymentType, setEntryPaymentType] = useState<'ADVANCE' | 'DUE_PAYMENT'>('ADVANCE');
+  const [customerId, setCustomerId] = useState<number | null>(null);
+  const [customerData, setCustomerData] = useState<any>(null);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [cashAmount, setCashAmount] = useState(0);
+  const [bankAmount, setBankAmount] = useState(0);
+  const [cardAmount, setCardAmount] = useState(0);
+  const [upiAmount, setUpiAmount] = useState(0);
+  const [oldGoldGross, setOldGoldGross] = useState(0);
+  const [oldGoldLess, setOldGoldLess] = useState(0);
+  const [oldGoldRate, setOldGoldRate] = useState(0);
+  const [bankName, setBankName] = useState('');
+  const [chequeNo, setChequeNo] = useState('');
+  const [narration, setNarration] = useState('');
+  const [reference, setReference] = useState('');
+  const [savedPaymentId, setSavedPaymentId] = useState<number | null>(null);
+
+  const oldGoldNet = Math.max(0, oldGoldGross - oldGoldLess);
+  const oldGoldAmount = oldGoldNet > 0 && oldGoldRate > 0 ? Math.round(oldGoldNet * oldGoldRate * 100) / 100 : 0;
+  const totalAmount = cashAmount + bankAmount + cardAmount + upiAmount + oldGoldAmount;
+  const currentBalance = customerData ? Number(customerData.closingBalance || 0) : 0;
+  const balanceAfter = currentBalance - totalAmount;
+
+  // --- Queries ---
   const { data, isLoading } = useQuery({
     queryKey: ['customer-payments', search, paymentType, status, dateFrom, dateTo, page],
     queryFn: () =>
@@ -31,6 +62,43 @@ export default function CustomerPaymentList() {
     select: (res: any) => res.data,
   });
 
+  const { data: customers } = useQuery({
+    queryKey: ['accounts', 'customer-search', customerSearch],
+    queryFn: () => accountsAPI.list({ search: customerSearch, type: 'CUSTOMER', limit: 10 }),
+    enabled: customerSearch.length >= 2 && showForm,
+    select: (res: any) => res.data?.accounts || [],
+  });
+
+  // Fetch latest gold rate for old gold valuation
+  const { data: latestRates } = useQuery({
+    queryKey: ['metal-rates-latest'],
+    queryFn: () => mastersAPI.latestRates(),
+    select: (res: any) => res.data,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Auto-set gold rate when latest rates are available and old gold rate is 0
+  useEffect(() => {
+    if (latestRates && oldGoldRate === 0) {
+      const goldRate = latestRates.find((r: any) => r.purityCode === '999' || r.purityCode === '24KT' || r.purityCode === '24K');
+      if (goldRate) setOldGoldRate(Number(goldRate.rate));
+    }
+  }, [latestRates]);
+
+  useEffect(() => {
+    if (customerId) {
+      accountsAPI.get(customerId).then((res: any) => setCustomerData(res.data));
+    }
+  }, [customerId]);
+
+  const { data: balanceHistory } = useQuery({
+    queryKey: ['balance-history', customerId],
+    queryFn: () => customerPaymentsAPI.balanceHistory(customerId!),
+    enabled: !!customerId,
+    select: (res: any) => res.data,
+  });
+
+  // --- Mutations ---
   const cancelMutation = useMutation({
     mutationFn: (id: number) => customerPaymentsAPI.cancel(id),
     onSuccess: () => {
@@ -43,6 +111,76 @@ export default function CustomerPaymentList() {
     },
   });
 
+  const saveMutation = useMutation({
+    mutationFn: (data: any) => customerPaymentsAPI.create(data),
+    onSuccess: (res: any) => {
+      toast.success(`Payment ${res.data.receiptNo} recorded successfully`);
+      setSavedPaymentId(res.data.id);
+      queryClient.invalidateQueries({ queryKey: ['customer-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['balance-history', customerId] });
+      setCustomerData((prev: any) => ({
+        ...prev,
+        closingBalance: res.data.account?.closingBalance,
+        balanceType: res.data.account?.balanceType,
+      }));
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to save payment');
+    },
+  });
+
+  const handleSave = () => {
+    if (!customerId) return toast.error('Select a customer');
+    if (totalAmount <= 0) return toast.error('Enter a payment amount');
+
+    saveMutation.mutate({
+      paymentDate,
+      paymentType: entryPaymentType,
+      accountId: customerId,
+      cashAmount,
+      bankAmount,
+      cardAmount,
+      upiAmount,
+      oldGoldGross: oldGoldGross || undefined,
+      oldGoldNet: oldGoldNet || undefined,
+      oldGoldRate: oldGoldRate || undefined,
+      oldGoldAmount: oldGoldAmount || undefined,
+      bankName: bankName || undefined,
+      chequeNo: chequeNo || undefined,
+      narration: narration || undefined,
+      reference: reference || undefined,
+      financialYear: getFinancialYear(),
+    });
+  };
+
+  const resetForm = () => {
+    setCustomerId(null);
+    setCustomerData(null);
+    setCustomerSearch('');
+    setCashAmount(0);
+    setBankAmount(0);
+    setCardAmount(0);
+    setUpiAmount(0);
+    setOldGoldGross(0);
+    setOldGoldLess(0);
+    setOldGoldRate(0);
+    setBankName('');
+    setChequeNo('');
+    setNarration('');
+    setReference('');
+    setSavedPaymentId(null);
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'F2') { e.preventDefault(); setShowCustomerModal(true); }
+      if (e.key === 'F9' && showForm) { e.preventDefault(); handleSave(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  });
+
   const payments = data?.payments || [];
   const total = data?.total || 0;
   const totalPages = Math.ceil(total / 50);
@@ -52,10 +190,441 @@ export default function CustomerPaymentList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-gray-800">Customer Payments</h2>
-        <span className="text-xs text-gray-500">{total} records</span>
+        <div className="flex items-center gap-3">
+          {showForm && (
+            <span className="text-xs text-gray-500">F2: Customer | F9: Save</span>
+          )}
+          <button
+            className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded font-medium transition-colors ${
+              showForm
+                ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+            onClick={() => { setShowForm(!showForm); if (!showForm) resetForm(); }}
+          >
+            {showForm ? <ChevronUp size={14} /> : <Plus size={14} />}
+            {showForm ? 'Hide Form' : 'New Payment'}
+          </button>
+        </div>
       </div>
 
-      {/* Filters */}
+      {/* ===== ENTRY FORM (collapsible) ===== */}
+      {showForm && (
+        <div className="border border-blue-200 rounded-lg bg-blue-50/30 p-3 space-y-3">
+          <div className="grid grid-cols-12 gap-3">
+            {/* Left: Form fields */}
+            <div className="col-span-8 space-y-3">
+              {/* Voucher Info Row */}
+              <div className="bg-white p-3 rounded shadow-sm">
+                <div className="grid grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-600">Date</label>
+                    <input
+                      type="date"
+                      className="form-input w-full text-xs"
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-600">Payment Type</label>
+                    <select
+                      className="form-input w-full text-xs"
+                      value={entryPaymentType}
+                      onChange={(e) => setEntryPaymentType(e.target.value as any)}
+                    >
+                      <option value="ADVANCE">Advance Payment</option>
+                      <option value="DUE_PAYMENT">Due Payment</option>
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs text-gray-600">Customer (F2)</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        className="form-input w-full text-xs"
+                        placeholder="Search customer by name/mobile..."
+                        value={customerData ? customerData.name : customerSearch}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value);
+                          setCustomerId(null);
+                          setCustomerData(null);
+                        }}
+                        onFocus={() => { if (customerData) { setCustomerSearch(customerData.name); setCustomerId(null); setCustomerData(null); } }}
+                      />
+                      {customers && customers.length > 0 && !customerId && customerSearch.length >= 2 && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border rounded shadow-lg max-h-48 overflow-auto">
+                          {customers.map((c: any) => (
+                            <div
+                              key={c.id}
+                              className="px-3 py-1.5 hover:bg-blue-50 cursor-pointer text-xs border-b"
+                              onClick={() => {
+                                setCustomerId(c.id);
+                                setCustomerSearch('');
+                              }}
+                            >
+                              <span className="font-medium">{c.name}</span>
+                              {c.mobile && <span className="text-gray-400 ml-2">{c.mobile}</span>}
+                              <span className={`float-right ${Number(c.closingBalance) > 0 ? 'text-red-600' : Number(c.closingBalance) < 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                ₹{formatIndianNumber(Math.abs(Number(c.closingBalance || 0)))}
+                                {Number(c.closingBalance) > 0 ? ' DR' : Number(c.closingBalance) < 0 ? ' CR' : ''}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Customer Info + Balance Card */}
+              {customerData && (
+                <div className="bg-white p-3 rounded shadow-sm">
+                  <div className="grid grid-cols-3 gap-4 text-xs">
+                    <div>
+                      <span className="text-gray-500">Customer:</span>
+                      <span className="font-medium ml-1">{customerData.name}</span>
+                      {customerData.mobile && <span className="text-gray-400 ml-2">({customerData.mobile})</span>}
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Current Balance:</span>
+                      <span className={`font-bold ml-1 ${currentBalance > 0 ? 'text-red-600' : currentBalance < 0 ? 'text-green-600' : ''}`}>
+                        ₹{formatIndianNumber(Math.abs(currentBalance))}
+                        {currentBalance > 0 ? ' (Debit – Customer Owes)' : currentBalance < 0 ? ' (Credit – Advance)' : ' (No Dues)'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">After Payment:</span>
+                      <span className={`font-bold ml-1 ${balanceAfter > 0 ? 'text-red-600' : balanceAfter < 0 ? 'text-green-600' : ''}`}>
+                        ₹{formatIndianNumber(Math.abs(balanceAfter))}
+                        {balanceAfter > 0 ? ' DR' : balanceAfter < 0 ? ' CR' : ''}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Payment Sources */}
+              <div className="bg-white p-3 rounded shadow-sm">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Payment Sources</h3>
+                <div className="grid grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-600">Cash Amount</label>
+                    <input
+                      ref={cashRef}
+                      type="number"
+                      className="form-input w-full text-xs text-right"
+                      value={cashAmount || ''}
+                      onChange={(e) => setCashAmount(Number(e.target.value))}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-600">Bank Amount</label>
+                    <input
+                      type="number"
+                      className="form-input w-full text-xs text-right"
+                      value={bankAmount || ''}
+                      onChange={(e) => setBankAmount(Number(e.target.value))}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-600">Card Amount</label>
+                    <input
+                      type="number"
+                      className="form-input w-full text-xs text-right"
+                      value={cardAmount || ''}
+                      onChange={(e) => setCardAmount(Number(e.target.value))}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-600">UPI Amount</label>
+                    <input
+                      type="number"
+                      className="form-input w-full text-xs text-right"
+                      value={upiAmount || ''}
+                      onChange={(e) => setUpiAmount(Number(e.target.value))}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+
+                {bankAmount > 0 && (
+                  <div className="grid grid-cols-2 gap-3 mt-2 border-t pt-2">
+                    <div>
+                      <label className="text-xs text-gray-600">Bank Name</label>
+                      <input
+                        type="text"
+                        className="form-input w-full text-xs"
+                        value={bankName}
+                        onChange={(e) => setBankName(e.target.value)}
+                        placeholder="Enter bank name"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600">Cheque/Ref No</label>
+                      <input
+                        type="text"
+                        className="form-input w-full text-xs"
+                        value={chequeNo}
+                        onChange={(e) => setChequeNo(e.target.value)}
+                        placeholder="Cheque or reference number"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Old Gold Section */}
+                <div className="mt-2 border-t pt-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <label className="text-xs font-semibold text-amber-700 cursor-pointer flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked={oldGoldGross > 0 || oldGoldLess > 0 || oldGoldRate > 0}
+                        onChange={(e) => {
+                          if (!e.target.checked) { setOldGoldGross(0); setOldGoldLess(0); }
+                        }}
+                        className="rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                      />
+                      Old Gold
+                    </label>
+                    {oldGoldAmount > 0 && (
+                      <span className="text-xs font-bold text-amber-700">= ₹{formatIndianNumber(oldGoldAmount)}</span>
+                    )}
+                  </div>
+                  {(oldGoldGross > 0 || oldGoldLess > 0 || oldGoldRate > 0) ? (
+                    <div className="grid grid-cols-4 gap-3">
+                      <div>
+                        <label className="text-xs text-gray-600">Gross Wt (g)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="form-input w-full text-xs text-right"
+                          value={oldGoldGross || ''}
+                          onChange={(e) => setOldGoldGross(Number(e.target.value))}
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-600">Less Wt (g)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="form-input w-full text-xs text-right"
+                          value={oldGoldLess || ''}
+                          onChange={(e) => setOldGoldLess(Number(e.target.value))}
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-600">Net Wt (g)</label>
+                        <input
+                          type="number"
+                          className="form-input w-full text-xs text-right bg-gray-50"
+                          value={oldGoldNet || ''}
+                          readOnly
+                          tabIndex={-1}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-600">Rate/g (₹)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="form-input w-full text-xs text-right"
+                          value={oldGoldRate || ''}
+                          onChange={(e) => setOldGoldRate(Number(e.target.value))}
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-xs text-amber-600 hover:text-amber-800 underline"
+                      onClick={() => {
+                        setOldGoldGross(0.01);
+                        const goldRate = latestRates?.find((r: any) => r.purityCode === '999' || r.purityCode === '24KT' || r.purityCode === '24K');
+                        if (goldRate && oldGoldRate === 0) setOldGoldRate(Number(goldRate.rate));
+                      }}
+                    >
+                      + Add Old Gold
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-3 pt-2 border-t flex justify-between items-center">
+                  <div className="text-xs text-gray-500">
+                    <input
+                      type="text"
+                      className="form-input w-full text-xs"
+                      value={narration}
+                      onChange={(e) => setNarration(e.target.value)}
+                      placeholder="Narration / remarks"
+                    />
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-gray-500 mr-2">Total Payment:</span>
+                    <span className="text-lg font-bold text-green-700">₹{formatIndianNumber(totalAmount)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Balance History */}
+              {balanceHistory && balanceHistory.history && balanceHistory.history.length > 0 && (
+                <div className="bg-white p-3 rounded shadow-sm">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Balance History</h3>
+                  <div className="max-h-40 overflow-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          <th className="text-left p-1.5">Date</th>
+                          <th className="text-left p-1.5">Type</th>
+                          <th className="text-left p-1.5">Voucher</th>
+                          <th className="text-right p-1.5">Debit</th>
+                          <th className="text-right p-1.5">Credit</th>
+                          <th className="text-right p-1.5">Balance</th>
+                          <th className="text-left p-1.5">Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {balanceHistory.history.map((h: any, i: number) => (
+                          <tr key={i} className="border-b hover:bg-gray-50">
+                            <td className="p-1.5">{new Date(h.date).toLocaleDateString('en-IN')}</td>
+                            <td className="p-1.5">
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                h.type === 'SALE' ? 'bg-orange-100 text-orange-700' :
+                                h.type === 'ADVANCE' ? 'bg-green-100 text-green-700' :
+                                h.type === 'DUE_PAYMENT' ? 'bg-blue-100 text-blue-700' :
+                                h.type === 'ADVANCE_USED' ? 'bg-purple-100 text-purple-700' :
+                                'bg-gray-100 text-gray-600'
+                              }`}>
+                                {h.type.replace('_', ' ')}
+                              </span>
+                            </td>
+                            <td className="p-1.5 font-mono">{h.voucherNo}</td>
+                            <td className="p-1.5 text-right text-red-600">{h.debit > 0 ? formatIndianNumber(h.debit) : ''}</td>
+                            <td className="p-1.5 text-right text-green-600">{h.credit > 0 ? formatIndianNumber(h.credit) : ''}</td>
+                            <td className={`p-1.5 text-right font-medium ${h.balance > 0 ? 'text-red-600' : h.balance < 0 ? 'text-green-600' : ''}`}>
+                              {formatIndianNumber(Math.abs(h.balance))} {h.balance > 0 ? 'DR' : h.balance < 0 ? 'CR' : ''}
+                            </td>
+                            <td className="p-1.5 text-gray-500 truncate max-w-[200px]">{h.details}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right: Summary + Actions */}
+            <div className="col-span-4 space-y-3">
+              <div className="bg-white p-3 rounded shadow-sm text-xs space-y-2">
+                <h3 className="font-semibold text-gray-700">Payment Summary</h3>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Type:</span>
+                    <span className={`font-medium ${entryPaymentType === 'ADVANCE' ? 'text-green-700' : 'text-blue-700'}`}>
+                      {entryPaymentType === 'ADVANCE' ? '⬤ Advance' : '⬤ Due Payment'}
+                    </span>
+                  </div>
+                  {customerData && (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Customer:</span>
+                        <span className="font-medium">{customerData.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Current Bal:</span>
+                        <span className={`font-bold ${currentBalance > 0 ? 'text-red-600' : currentBalance < 0 ? 'text-green-600' : ''}`}>
+                          ₹{formatIndianNumber(Math.abs(currentBalance))} {currentBalance > 0 ? 'DR' : currentBalance < 0 ? 'CR' : ''}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="border-t pt-2 space-y-1">
+                  {cashAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span>Cash:</span>
+                      <span className="text-green-700">₹{formatIndianNumber(cashAmount)}</span>
+                    </div>
+                  )}
+                  {bankAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span>Bank:</span>
+                      <span className="text-green-700">₹{formatIndianNumber(bankAmount)}</span>
+                    </div>
+                  )}
+                  {cardAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span>Card:</span>
+                      <span className="text-green-700">₹{formatIndianNumber(cardAmount)}</span>
+                    </div>
+                  )}
+                  {upiAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span>UPI:</span>
+                      <span className="text-green-700">₹{formatIndianNumber(upiAmount)}</span>
+                    </div>
+                  )}
+                  {oldGoldAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-amber-700">Old Gold:</span>
+                      <span className="text-amber-700">₹{formatIndianNumber(oldGoldAmount)}</span>
+                    </div>
+                  )}
+                  {oldGoldNet > 0 && (
+                    <div className="flex justify-between text-[10px] text-gray-400">
+                      <span>{oldGoldNet}g @ ₹{formatIndianNumber(oldGoldRate)}/g</span>
+                    </div>
+                  )}
+                </div>
+                <div className="border-t pt-2">
+                  <div className="flex justify-between text-sm font-bold">
+                    <span>Total:</span>
+                    <span className="text-green-700">₹{formatIndianNumber(totalAmount)}</span>
+                  </div>
+                  {customerData && (
+                    <div className="flex justify-between mt-1">
+                      <span className="text-gray-500">Balance After:</span>
+                      <span className={`font-bold ${balanceAfter > 0 ? 'text-red-600' : balanceAfter < 0 ? 'text-green-600' : ''}`}>
+                        ₹{formatIndianNumber(Math.abs(balanceAfter))} {balanceAfter > 0 ? 'DR' : balanceAfter < 0 ? 'CR' : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleSave}
+                  className="btn-success w-full"
+                  disabled={saveMutation.isPending || !customerId || totalAmount <= 0}
+                >
+                  {saveMutation.isPending ? 'Saving...' : 'Save Payment (F9)'}
+                </button>
+                <button onClick={resetForm} className="btn-outline w-full text-xs">
+                  Clear Form
+                </button>
+              </div>
+
+              {savedPaymentId && (
+                <div className="bg-green-50 border border-green-200 p-3 rounded text-center text-xs">
+                  <div className="text-green-700 font-bold">Payment Saved Successfully</div>
+                  <div className="text-gray-500 mt-1">Payment ID: {savedPaymentId}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== FILTERS ===== */}
       <div className="bg-white p-2 rounded shadow-sm flex flex-wrap items-end gap-2 text-xs">
         <div>
           <label className="text-gray-500 block">Search</label>
@@ -115,11 +684,12 @@ export default function CustomerPaymentList() {
         >
           Clear
         </button>
+        <span className="ml-auto text-xs text-gray-500">{total} records</span>
       </div>
 
-      {/* Table */}
+      {/* ===== TABLE ===== */}
       <div className="bg-white rounded shadow-sm overflow-hidden">
-        <div className="max-h-[calc(100vh-220px)] overflow-auto">
+        <div className={`overflow-auto ${showForm ? 'max-h-[calc(100vh-680px)]' : 'max-h-[calc(100vh-220px)]'}`}>
           <table className="w-full text-xs">
             <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
@@ -130,6 +700,7 @@ export default function CustomerPaymentList() {
                 <th className="text-right p-2">Cash</th>
                 <th className="text-right p-2">Bank</th>
                 <th className="text-right p-2">Card</th>
+                <th className="text-right p-2">Old Gold</th>
                 <th className="text-right p-2">Total</th>
                 <th className="text-right p-2">Bal Before</th>
                 <th className="text-right p-2">Bal After</th>
@@ -139,9 +710,9 @@ export default function CustomerPaymentList() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={12} className="p-8 text-center text-gray-400">Loading...</td></tr>
+                <tr><td colSpan={13} className="p-8 text-center text-gray-400">Loading...</td></tr>
               ) : payments.length === 0 ? (
-                <tr><td colSpan={12} className="p-8 text-center text-gray-400">No payments found</td></tr>
+                <tr><td colSpan={13} className="p-8 text-center text-gray-400">No payments found</td></tr>
               ) : (
                 payments.map((p: any) => (
                   <tr
@@ -164,6 +735,7 @@ export default function CustomerPaymentList() {
                     <td className="p-2 text-right">{Number(p.cashAmount) > 0 ? formatIndianNumber(Number(p.cashAmount)) : '-'}</td>
                     <td className="p-2 text-right">{Number(p.bankAmount) > 0 ? formatIndianNumber(Number(p.bankAmount)) : '-'}</td>
                     <td className="p-2 text-right">{Number(p.cardAmount) > 0 ? formatIndianNumber(Number(p.cardAmount)) : '-'}</td>
+                    <td className="p-2 text-right text-amber-700">{Number(p.oldGoldAmount) > 0 ? formatIndianNumber(Number(p.oldGoldAmount)) : '-'}</td>
                     <td className="p-2 text-right font-bold text-green-700">{formatIndianNumber(Number(p.totalAmount))}</td>
                     <td className={`p-2 text-right ${Number(p.balanceBefore) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatIndianNumber(Math.abs(Number(p.balanceBefore)))} {Number(p.balanceBefore) > 0 ? 'DR' : 'CR'}
@@ -245,6 +817,16 @@ export default function CustomerPaymentList() {
           </div>
         </div>
       )}
+
+      {/* Account Master Modal */}
+      <AccountMasterModal
+        open={showCustomerModal}
+        onClose={() => setShowCustomerModal(false)}
+        onSaved={(account: any) => {
+          setCustomerId(account.id);
+          setShowCustomerModal(false);
+        }}
+      />
     </div>
   );
 }

@@ -199,11 +199,12 @@ describe('SalesEntryList primary filters', () => {
     const statusSelect = screen.getByTestId('status-filter') as HTMLSelectElement;
     expect(statusSelect).toBeDefined();
     const options = statusSelect.querySelectorAll('option');
-    expect(options.length).toBe(4);
+    expect(options.length).toBe(5);
     expect(options[0].value).toBe('ALL');
     expect(options[1].value).toBe('ACTIVE');
     expect(options[2].value).toBe('CANCELLED');
-    expect(options[3].value).toBe('VOID');
+    expect(options[3].value).toBe('CLOSED');
+    expect(options[4].value).toBe('VOID');
   });
 
   it('renders salesman dropdown', async () => {
@@ -288,7 +289,7 @@ describe('SalesEntryList advanced filters', () => {
 
     const pmSelect = screen.getByTestId('filter-paymentMode') as HTMLSelectElement;
     const options = pmSelect.querySelectorAll('option');
-    expect(options.length).toBe(6); // All, Cash, Bank, Card, Old Gold, Due Only
+    expect(options.length).toBe(7); // All, Cash, Bank, Card, UPI, Old Gold, Due Only
   });
 
   it('sort by dropdown has all sort fields', async () => {
@@ -383,7 +384,7 @@ describe('SalesEntryList filter count & clear', () => {
 
     // Verify filters are reset
     expect(searchInput.value).toBe('');
-    expect(status.value).toBe('ALL');
+    expect(status.value).toBe('ACTIVE');
   });
 });
 

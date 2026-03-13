@@ -6,6 +6,22 @@ jest.mock('../../server/prisma', () => ({
   prisma: mockPrisma,
 }));
 
+// ── Mock branchAccess middleware (bypass auth) ────────────
+jest.mock('../../server/middleware/branchAccess', () => ({
+  authenticate: (req: any, _res: any, next: any) => {
+    req.userId = 1; req.userRole = 'ADMIN'; req.companyId = 1;
+    req.branchId = 1; req.branchScope = []; req.isMasterBranch = true;
+    next();
+  },
+  requireBranch: (_req: any, _res: any, next: any) => next(),
+  requireMaster: (_req: any, _res: any, next: any) => next(),
+  requireAdmin: (_req: any, _res: any, next: any) => next(),
+  branchWhere: () => ({}),
+  tenantScope: () => ({ companyId: 1 }),
+  canAccessBranch: () => true,
+  canOverrideBranch: async () => true,
+}));
+
 import app from '../../server/app';
 
 // ── Dummy data ─────────────────────────────────────────────
@@ -116,7 +132,7 @@ describe('GET /api/accounts', () => {
 // ════════════════════════════════════════════════════════════
 describe('GET /api/accounts/:id', () => {
   it('returns account by id', async () => {
-    mockPrisma.account.findUnique.mockResolvedValueOnce(DUMMY_ACCOUNTS[0]);
+    mockPrisma.account.findFirst.mockResolvedValueOnce(DUMMY_ACCOUNTS[0]);
 
     const res = await request(app).get('/api/accounts/1');
     expect(res.status).toBe(200);
@@ -124,7 +140,7 @@ describe('GET /api/accounts/:id', () => {
   });
 
   it('returns 404 when account not found', async () => {
-    mockPrisma.account.findUnique.mockResolvedValueOnce(null);
+    mockPrisma.account.findFirst.mockResolvedValueOnce(null);
 
     const res = await request(app).get('/api/accounts/999');
     expect(res.status).toBe(404);
@@ -158,6 +174,7 @@ describe('POST /api/accounts', () => {
 describe('PUT /api/accounts/:id', () => {
   it('updates an account', async () => {
     const updated = { ...DUMMY_ACCOUNTS[0], mobile: '1111111111' };
+    mockPrisma.account.findFirst.mockResolvedValueOnce(DUMMY_ACCOUNTS[0]);
     mockPrisma.account.update.mockResolvedValueOnce(updated);
 
     const res = await request(app)
@@ -174,6 +191,7 @@ describe('PUT /api/accounts/:id', () => {
 // ════════════════════════════════════════════════════════════
 describe('DELETE /api/accounts/:id', () => {
   it('soft-deletes (deactivates) an account', async () => {
+    mockPrisma.account.findFirst.mockResolvedValueOnce(DUMMY_ACCOUNTS[2]);
     mockPrisma.account.update.mockResolvedValueOnce({ ...DUMMY_ACCOUNTS[2], isActive: false });
 
     const res = await request(app).delete('/api/accounts/3');
@@ -221,7 +239,7 @@ describe('GET /api/accounts/:id/ledger', () => {
 // ════════════════════════════════════════════════════════════
 describe('GET /api/accounts/:id/outstanding', () => {
   it('returns outstanding balance info', async () => {
-    mockPrisma.account.findUnique.mockResolvedValueOnce({
+    mockPrisma.account.findFirst.mockResolvedValueOnce({
       name: 'Rajesh Kumar',
       closingBalance: 15000,
       balanceType: 'DR',

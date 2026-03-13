@@ -1,7 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
+import { authenticate, tenantScope, canAccessBranch } from '../middleware/branchAccess';
 
 const router = Router();
+
+router.use(authenticate);
 
 // ============================================================
 // GET /api/layaway - List layaway entries
@@ -17,7 +20,7 @@ router.get('/', async (req: Request, res: Response) => {
       search,
     } = req.query;
 
-    const where: any = {};
+    const where: any = { ...tenantScope(req) };
 
     if (status && status !== 'ALL') where.status = status;
     if (customerId) where.accountId = Number(customerId);
@@ -70,8 +73,8 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
-    const entry = await prisma.layawayEntry.findUnique({
-      where: { id },
+    const entry = await prisma.layawayEntry.findFirst({
+      where: { id, ...tenantScope(req) },
       include: {
         account: true,
         branch: { select: { name: true } },
@@ -112,11 +115,16 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'At least one item is required' });
     }
 
+    if (!data.branchId || !canAccessBranch(req, data.branchId)) {
+      return res.status(403).json({ error: 'Access denied to target branch' });
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       // Generate voucher number
       const sequence = await tx.voucherSequence.upsert({
         where: {
-          prefix_entityType_financialYear: {
+          companyId_prefix_entityType_financialYear: {
+            companyId: req.companyId!,
             prefix: 'LY',
             entityType: 'LAYAWAY',
             financialYear: data.financialYear || '2025-2026',
@@ -124,6 +132,7 @@ router.post('/', async (req: Request, res: Response) => {
         },
         update: { lastNumber: { increment: 1 } },
         create: {
+          companyId: req.companyId!,
           prefix: 'LY',
           entityType: 'LAYAWAY',
           financialYear: data.financialYear || '2025-2026',
@@ -142,7 +151,8 @@ router.post('/', async (req: Request, res: Response) => {
           voucherDate: new Date(data.voucherDate || new Date()),
           dueDate: data.dueDate ? new Date(data.dueDate) : null,
           accountId: data.accountId,
-          branchId: data.branchId || 1,
+          companyId: req.companyId!,
+          branchId: data.branchId,
           salesmanName: data.salesmanName || null,
           totalGrossWeight: data.totalGrossWeight || 0,
           totalNetWeight: data.totalNetWeight || 0,
@@ -161,6 +171,7 @@ router.post('/', async (req: Request, res: Response) => {
           cashAmount: data.cashAmount || 0,
           bankAmount: data.bankAmount || 0,
           cardAmount: data.cardAmount || 0,
+          upiAmount: data.upiAmount || 0,
           oldGoldAmount: data.oldGoldAmount || 0,
           paymentAmount: data.paymentAmount || 0,
           dueAmount: data.dueAmount || 0,
@@ -245,8 +256,8 @@ router.put('/:id', async (req: Request, res: Response) => {
     const id = Number(req.params.id);
     const data = req.body;
 
-    const entry = await prisma.layawayEntry.findUnique({
-      where: { id },
+    const entry = await prisma.layawayEntry.findFirst({
+      where: { id, ...tenantScope(req) },
       include: { items: true },
     });
 
@@ -297,6 +308,7 @@ router.put('/:id', async (req: Request, res: Response) => {
           cashAmount: data.cashAmount || 0,
           bankAmount: data.bankAmount || 0,
           cardAmount: data.cardAmount || 0,
+          upiAmount: data.upiAmount || 0,
           oldGoldAmount: data.oldGoldAmount || 0,
           paymentAmount: data.paymentAmount || 0,
           dueAmount: data.dueAmount || 0,
@@ -357,8 +369,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
-    const entry = await prisma.layawayEntry.findUnique({
-      where: { id },
+    const entry = await prisma.layawayEntry.findFirst({
+      where: { id, ...tenantScope(req) },
       include: { items: true },
     });
 

@@ -1,8 +1,27 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { Prisma } from '@prisma/client';
+import { authenticate, tenantScope, canAccessBranch } from '../middleware/branchAccess';
 
 const router = Router();
+
+// All sales routes require authentication
+router.use(authenticate);
+
+// Auto-close ACTIVE vouchers not edited for 20 days
+const CLOSE_AFTER_DAYS = 20;
+async function autoCloseStaleVouchers(tenantWhere: any) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - CLOSE_AFTER_DAYS);
+  await prisma.salesVoucher.updateMany({
+    where: {
+      ...tenantWhere,
+      status: 'ACTIVE',
+      updatedAt: { lt: cutoff },
+    },
+    data: { status: 'CLOSED' },
+  });
+}
 
 // ============================================================
 // GET /api/sales - List sales vouchers with filters
@@ -38,7 +57,12 @@ router.get('/', async (req: Request, res: Response) => {
       sortOrder = 'desc',
     } = req.query;
 
-    const where: Prisma.SalesVoucherWhereInput = {};
+    const where: Prisma.SalesVoucherWhereInput = {
+      ...tenantScope(req),
+    };
+
+    // Auto-close stale vouchers before listing
+    await autoCloseStaleVouchers(tenantScope(req));
 
     // Status filter (default to excluding cancelled unless explicitly requested)
     if (status && status !== 'ALL') {
@@ -116,6 +140,7 @@ router.get('/', async (req: Request, res: Response) => {
       if (mode === 'CASH') where.cashAmount = { gt: 0 };
       else if (mode === 'BANK') where.bankAmount = { gt: 0 };
       else if (mode === 'CARD') where.cardAmount = { gt: 0 };
+      else if (mode === 'UPI') where.upiAmount = { gt: 0 };
       else if (mode === 'OLD_GOLD') where.oldGoldAmount = { gt: 0 };
       else if (mode === 'DUE') where.dueAmount = { gt: 0 };
     }
@@ -178,8 +203,8 @@ router.get('/', async (req: Request, res: Response) => {
 // ============================================================
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const voucher = await prisma.salesVoucher.findUnique({
-      where: { id: Number(req.params.id) },
+    const voucher = await prisma.salesVoucher.findFirst({
+      where: { id: Number(req.params.id), ...tenantScope(req) },
       include: {
         account: true,
         salesman: true,
@@ -190,6 +215,17 @@ router.get('/:id', async (req: Request, res: Response) => {
     });
 
     if (!voucher) return res.status(404).json({ error: 'Voucher not found' });
+
+    // Auto-close if stale
+    if (voucher.status === 'ACTIVE') {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - CLOSE_AFTER_DAYS);
+      if (voucher.updatedAt < cutoff) {
+        await prisma.salesVoucher.update({ where: { id: voucher.id }, data: { status: 'CLOSED' } });
+        voucher.status = 'CLOSED';
+      }
+    }
+
     res.json(voucher);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch voucher' });
@@ -203,10 +239,22 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const data = req.body;
 
+    // Validate payment does not exceed voucher amount
+    const totalPaid = Number(data.cashAmount || 0) + Number(data.bankAmount || 0) + Number(data.cardAmount || 0) + Number(data.upiAmount || 0) + Number(data.oldGoldAmount || 0) + Number(data.advanceAmount || 0);
+    if (totalPaid > Number(data.voucherAmount || 0)) {
+      return res.status(400).json({ error: 'Total payment cannot exceed voucher amount' });
+    }
+
+    // Validate branch access for the write
+    if (!canAccessBranch(req, data.branchId)) {
+      return res.status(403).json({ error: 'Access denied to target branch' });
+    }
+
     // Generate voucher number
     const sequence = await prisma.voucherSequence.upsert({
       where: {
-        prefix_entityType_financialYear: {
+        companyId_prefix_entityType_financialYear: {
+          companyId: req.companyId!,
           prefix: data.voucherPrefix || 'JGI',
           entityType: 'SALES',
           financialYear: data.financialYear || '2025-2026',
@@ -214,6 +262,7 @@ router.post('/', async (req: Request, res: Response) => {
       },
       update: { lastNumber: { increment: 1 } },
       create: {
+        companyId: req.companyId!,
         prefix: data.voucherPrefix || 'JGI',
         entityType: 'SALES',
         financialYear: data.financialYear || '2025-2026',
@@ -233,6 +282,7 @@ router.post('/', async (req: Request, res: Response) => {
           voucherDate: new Date(data.voucherDate),
           accountId: data.accountId,
           salesmanId: data.salesmanId || null,
+          companyId: req.companyId!,
           branchId: data.branchId,
           userId: data.userId,
           totalGrossWeight: data.totalGrossWeight || 0,
@@ -255,6 +305,7 @@ router.post('/', async (req: Request, res: Response) => {
           cashAmount: data.cashAmount || 0,
           bankAmount: data.bankAmount || 0,
           cardAmount: data.cardAmount || 0,
+          upiAmount: data.upiAmount || 0,
           oldGoldAmount: data.oldGoldAmount || 0,
           advanceAmount: data.advanceAmount || 0,
           paymentAmount: data.paymentAmount || 0,
@@ -295,8 +346,15 @@ router.post('/', async (req: Request, res: Response) => {
             },
           });
 
-          // Update label status to SOLD
+          // Validate label is IN_STOCK and belongs to user's branch before selling
           if (item.labelId) {
+            const label = await tx.label.findUnique({ where: { id: item.labelId }, select: { branchId: true, status: true, labelNo: true } });
+            if (!label || !canAccessBranch(req, label.branchId)) {
+              throw new Error(`Label ${item.labelId} not accessible from your branch`);
+            }
+            if (label.status !== 'IN_STOCK') {
+              throw new Error(`Label ${label.labelNo || item.labelNo} is not available for sale (status: ${label.status})`);
+            }
             await tx.label.update({
               where: { id: item.labelId },
               data: { status: 'SOLD' },
@@ -322,7 +380,8 @@ router.post('/', async (req: Request, res: Response) => {
         // Get the latest receipt number for advance-used records
         const advSeq = await tx.voucherSequence.upsert({
           where: {
-            prefix_entityType_financialYear: {
+            companyId_prefix_entityType_financialYear: {
+              companyId: req.companyId!,
               prefix: 'CPR',
               entityType: 'CUSTOMER_PAYMENT',
               financialYear: data.financialYear || '2025-2026',
@@ -330,6 +389,7 @@ router.post('/', async (req: Request, res: Response) => {
           },
           update: { lastNumber: { increment: 1 } },
           create: {
+            companyId: req.companyId!,
             prefix: 'CPR',
             entityType: 'CUSTOMER_PAYMENT',
             financialYear: data.financialYear || '2025-2026',
@@ -349,10 +409,12 @@ router.post('/', async (req: Request, res: Response) => {
             receiptNumber: advSeq.lastNumber,
             paymentDate: new Date(data.voucherDate),
             accountId: data.accountId,
+            companyId: req.companyId!,
             paymentType: 'ADVANCE',
             cashAmount: 0,
             bankAmount: 0,
             cardAmount: 0,
+            upiAmount: 0,
             totalAmount: advanceUsed,
             balanceBefore: Number(account?.closingBalance || 0) + advanceUsed, // before the increment above
             balanceAfter: Number(account?.closingBalance || 0),
@@ -379,57 +441,83 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// PUT /api/sales/:id - Update sales voucher
+// PUT /api/sales/:id - Update sales voucher (payment & details)
 // ============================================================
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     const data = req.body;
 
-    const voucher = await prisma.$transaction(async (tx) => {
-      // Delete existing items
-      await tx.salesItem.deleteMany({ where: { salesVoucherId: id } });
+    const result = await prisma.$transaction(async (tx) => {
+      // Fetch existing voucher with tenant scope
+      const existing = await tx.salesVoucher.findFirst({
+        where: { id, ...tenantScope(req) },
+        include: { items: true },
+      });
 
-      // Update voucher
+      if (!existing) throw new Error('Voucher not found');
+      if (existing.status === 'CLOSED') throw new Error('Cannot edit a closed voucher. Vouchers are automatically closed after 20 days.');
+      if (existing.status !== 'ACTIVE') throw new Error('Cannot edit a cancelled voucher');
+
+      // Validate payment does not exceed voucher amount
+      const effectiveVoucherAmount = Number(data.voucherAmount ?? existing.voucherAmount);
+      const totalPaid = Number(data.cashAmount ?? existing.cashAmount ?? 0) + Number(data.bankAmount ?? existing.bankAmount ?? 0) + Number(data.cardAmount ?? existing.cardAmount ?? 0) + Number(data.upiAmount ?? existing.upiAmount ?? 0) + Number(data.oldGoldAmount ?? existing.oldGoldAmount ?? 0) + Number(data.advanceAmount ?? existing.advanceAmount ?? 0);
+      if (totalPaid > effectiveVoucherAmount) {
+        throw new Error('Total payment cannot exceed voucher amount');
+      }
+
+      // Calculate balance difference: old dueAmount vs new dueAmount
+      const oldDue = Number(existing.dueAmount);
+      const newDue = Number(data.dueAmount ?? oldDue);
+      const dueDiff = newDue - oldDue;
+
+      // Update voucher fields
       const updated = await tx.salesVoucher.update({
         where: { id },
         data: {
-          voucherDate: new Date(data.voucherDate),
-          accountId: data.accountId,
-          salesmanId: data.salesmanId,
-          metalAmount: data.metalAmount,
-          labourAmount: data.labourAmount,
-          otherCharge: data.otherCharge,
-          totalAmount: data.totalAmount,
-          taxableAmount: data.taxableAmount,
-          cgstAmount: data.cgstAmount,
-          sgstAmount: data.sgstAmount,
-          voucherAmount: data.voucherAmount,
-          cashAmount: data.cashAmount,
-          bankAmount: data.bankAmount,
-          cardAmount: data.cardAmount,
-          paymentAmount: data.paymentAmount,
-          dueAmount: data.dueAmount,
-          discountAmount: data.discountAmount,
-          narration: data.narration,
+          salesmanId: data.salesmanId !== undefined ? (data.salesmanId || null) : undefined,
+          cashAmount: data.cashAmount ?? existing.cashAmount,
+          bankAmount: data.bankAmount ?? existing.bankAmount,
+          cardAmount: data.cardAmount ?? existing.cardAmount,
+          upiAmount: data.upiAmount ?? existing.upiAmount,
+          oldGoldAmount: data.oldGoldAmount ?? existing.oldGoldAmount,
+          advanceAmount: data.advanceAmount ?? existing.advanceAmount,
+          paymentAmount: data.paymentAmount ?? existing.paymentAmount,
+          dueAmount: data.dueAmount ?? existing.dueAmount,
+          previousOs: data.previousOs ?? existing.previousOs,
+          finalDue: data.finalDue ?? existing.finalDue,
+          discountAmount: data.discountAmount ?? existing.discountAmount,
+          roundingDiscount: data.roundingDiscount ?? existing.roundingDiscount,
+          voucherAmount: data.voucherAmount ?? existing.voucherAmount,
+          narration: data.narration !== undefined ? data.narration : existing.narration,
+          reference: data.reference !== undefined ? data.reference : existing.reference,
         },
       });
 
-      // Re-create items
-      if (data.items) {
-        for (const item of data.items) {
-          await tx.salesItem.create({
-            data: { ...item, salesVoucherId: id },
-          });
-        }
+      // Adjust customer balance if due changed
+      if (dueDiff !== 0) {
+        await tx.account.update({
+          where: { id: existing.accountId },
+          data: {
+            closingBalance: { increment: dueDiff },
+          },
+        });
       }
 
       return updated;
     });
 
-    res.json(voucher);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update voucher' });
+    // Fetch complete voucher for response
+    const fullVoucher = await prisma.salesVoucher.findUnique({
+      where: { id },
+      include: { account: true, items: { include: { item: true, label: true } }, salesman: true, branch: true, user: { select: { id: true, fullName: true } } },
+    });
+
+    res.json(fullVoucher);
+  } catch (error: any) {
+    console.error('Error updating sales voucher:', error);
+    res.status(error.message === 'Voucher not found' ? 404 : error.message?.includes('Cannot edit') || error.message?.includes('cannot exceed') ? 400 : 500)
+      .json({ error: error.message || 'Failed to update voucher' });
   }
 });
 
@@ -441,8 +529,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
     const id = Number(req.params.id);
 
     await prisma.$transaction(async (tx) => {
-      const voucher = await tx.salesVoucher.findUnique({
-        where: { id },
+      const voucher = await tx.salesVoucher.findFirst({
+        where: { id, ...tenantScope(req) },
         include: { items: true },
       });
 

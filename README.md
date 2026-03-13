@@ -136,14 +136,15 @@ Below the items table, use the discount section:
 In the **"Credit Details"** sidebar on the right:
 
 | Field | Purpose |
-|-------|---------|
+|-------|--------|
 | Cash Amt | Cash received |
-| Bank Amt | Bank transfer / UPI |
+| Bank Amt | Bank transfer |
 | Card Amt | Card payment |
+| UPI Amt | UPI payment |
 | OG Purchase | Old gold adjustment |
 
 The system calculates:
-- **Due Amount** = Voucher Amount − (Cash + Bank + Card + Old Gold)
+- **Due Amount** = Voucher Amount − (Cash + Bank + Card + UPI + Old Gold)
 - **Previous O/S** = Customer's existing closing balance
 - **Final Due** = Due + Previous O/S
 
@@ -454,7 +455,7 @@ The system fetches the latest metal rates and calculates:
 
 The right sidebar auto-updates with:
 - **Voucher Details**: Metal Amt, Labour Amt, Oth. Charge, Discount, CGST, SGST, Total, Rounding
-- **Credit Details**: Enter Cash / Bank / Card / OG Purchase amounts
+- **Credit Details**: Enter Cash / Bank / Card / UPI / OG Purchase amounts
 - **O/S Details**: Voucher Amt, Payment Amt, Due Amt, Previous O/S, Final Due
 
 ### Step 5: Save
@@ -722,7 +723,7 @@ The generated bill follows the standard Indian jewelry GST Tax Invoice format:
 | Total amount in words | e.g. "Eighteen Thousand Eight Hundred Forty Rupees Only" |
 
 **Payment Details (left side):**
-- Cash, Bank, Card amounts
+- Cash, Bank, Card, UPI amounts
 - Old Purchase amount
 
 **Bank Account Details:**
@@ -769,7 +770,7 @@ The system uses Indian numbering for amount-to-words conversion:
 
 ## Workflow 12 — Customer Advance & Due Payments
 
-Track advance payments from customers, due payments against sales, and maintain a complete balance history per customer with multiple payment sources (Cash / Bank / Card).
+Track advance payments from customers, due payments against sales, and maintain a complete balance history per customer with multiple payment sources (Cash / Bank / Card / UPI).
 
 ### Concepts
 
@@ -792,6 +793,7 @@ Track advance payments from customers, due payments against sales, and maintain 
 | `cashAmount` | Decimal | Cash portion |
 | `bankAmount` | Decimal | Bank transfer portion |
 | `cardAmount` | Decimal | Card portion |
+| `upiAmount` | Decimal | UPI portion |
 | `totalAmount` | Decimal | Sum of all payment sources |
 | `balanceBefore` | Decimal | Customer balance before this payment |
 | `balanceAfter` | Decimal | Customer balance after this payment |
@@ -816,7 +818,7 @@ Track advance payments from customers, due payments against sales, and maintain 
 1. Navigate to **Payments** in the sidebar
 2. Set date and select **Advance Payment** type
 3. Search and select the customer (F2 for account master)
-4. Enter payment amounts across Cash / Bank / Card
+4. Enter payment amounts across Cash / Bank / Card / UPI
 5. If bank amount entered, provide Bank Name and Cheque/Ref No
 6. Add narration/remarks if needed
 7. Press **Save** (F9) → Receipt generated (e.g., CPR/1)
@@ -857,7 +859,7 @@ The **Balance History** table on the Payment Entry page shows a chronological ti
 
 **Customer Raj Jewellers — Balance: ₹15,000 DR (owes)**
 1. Records due payment: Cash ₹10,000 → Balance: ₹5,000 DR
-2. Records advance: Bank ₹20,000 → Balance: ₹-15,000 CR (advance)
+2. Records advance: Bank ₹10,000 + UPI ₹10,000 → Balance: ₹-15,000 CR (advance)
 3. Makes purchase ₹50,000 → Uses ₹15,000 advance + Cash ₹30,000 → Due: ₹5,000 DR
 
 ---

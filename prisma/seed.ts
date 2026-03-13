@@ -52,6 +52,7 @@ async function main() {
       password: hashedPassword,
       fullName: 'Administrator',
       role: 'ADMIN',
+      company: { connect: { id: company.id } },
       branch: { connect: { id: mainBranch.id } },
       isActive: true,
     },
@@ -68,6 +69,7 @@ async function main() {
       password: salesPassword,
       fullName: 'Sales Counter 1',
       role: 'USER',
+      company: { connect: { id: company.id } },
       branch: { connect: { id: mainBranch.id } },
       isActive: true,
     },
@@ -208,7 +210,7 @@ async function main() {
     await prisma.salesman.upsert({
       where: { code: s.code },
       update: {},
-      create: { name: s.name, code: s.code, isActive: true },
+      create: { name: s.name, code: s.code, companyId: company.id, isActive: true },
     });
   }
   console.log('  ✅ Salesmen created:', salesmenData.length);
@@ -230,6 +232,7 @@ async function main() {
         purityCode: rate.purityCode,
         rate: rate.rate,
         date: today,
+        companyId: company.id,
         isActive: true,
       },
     });
@@ -257,7 +260,7 @@ async function main() {
       await prisma.labelPrefix.upsert({
         where: { prefix: p.prefix },
         update: {},
-        create: { prefix: p.prefix, itemGroupId: group.id },
+        create: { prefix: p.prefix, itemGroupId: group.id, companyId: company.id },
       });
     }
   }
@@ -295,6 +298,7 @@ async function main() {
         type: cust.type,
         city: cust.city,
         state: 'Maharashtra',
+        companyId: company.id,
         balanceType: cust.type === 'SUPPLIER' ? 'CR' : 'DR',
         closingBalance: 0,
       },
@@ -313,7 +317,7 @@ async function main() {
   ];
   for (const seq of sequences) {
     await prisma.voucherSequence.create({
-      data: { prefix: seq.prefix, entityType: seq.entityType, lastNumber: 0, financialYear: seq.financialYear },
+      data: { prefix: seq.prefix, entityType: seq.entityType, lastNumber: 0, financialYear: seq.financialYear, companyId: company.id },
     });
   }
   console.log('  ✅ Voucher sequences created');

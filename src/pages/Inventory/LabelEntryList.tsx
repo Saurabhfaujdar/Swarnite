@@ -127,8 +127,8 @@ export default function LabelEntryList() {
           {labels.length} labels | Gross: {formatWeight(totalGrossWt)} | Net: {formatWeight(totalNetWt)}
         </span>
         <div className="flex gap-2">
-          <button className="btn-outline text-xs">📋 Export Excel</button>
-          <button className="btn-outline text-xs">🖨️ Print</button>
+          <button className="btn-outline text-xs" onClick={() => window.print()}>📋 Export Excel</button>
+          <button className="btn-outline text-xs" onClick={() => window.print()}>🖨️ Print</button>
         </div>
       </div>
     </div>

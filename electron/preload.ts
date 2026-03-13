@@ -1,8 +1,15 @@
-const { contextBridge, ipcRenderer } = require('electron');
+/**
+ * JewelERP — Thin Wrapper Preload
+ * ────────────────────────────────
+ * Minimal preload for the wrapper. Exposes only a platform
+ * identifier so the web app can detect it's running inside
+ * the desktop wrapper (e.g., to hide "Install App" prompts).
+ *
+ * No IPC channels, no business logic, no navigation control.
+ */
 
-contextBridge.exposeInMainWorld('electronAPI', {
-  getVersion: () => ipcRenderer.invoke('get-app-version'),
-  onNavigate: (callback: (route: string) => void) => {
-    ipcRenderer.on('navigate', (_event: any, route: string) => callback(route));
-  },
+const { contextBridge } = require('electron');
+
+contextBridge.exposeInMainWorld('jewelerpDesktop', {
+  platform: process.platform,  // 'win32' | 'darwin' | 'linux'
 });

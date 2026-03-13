@@ -1,7 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
+import { authenticate, tenantScope, canAccessBranch } from '../middleware/branchAccess';
 
 const router = Router();
+
+router.use(authenticate);
 
 // ============================================================
 // BRANCH TRANSFERS (Issue & Receipt)
@@ -11,7 +14,7 @@ const router = Router();
 router.get('/transfers', async (req: Request, res: Response) => {
   try {
     const { dateFrom, dateTo, type, branchId } = req.query;
-    const where: any = { status: 'ACTIVE' };
+    const where: any = { status: 'ACTIVE', companyId: req.companyId };
 
     if (dateFrom && dateTo) {
       where.voucherDate = {
@@ -48,8 +51,8 @@ router.get('/transfers', async (req: Request, res: Response) => {
 // GET /api/branch/transfers/:id
 router.get('/transfers/:id', async (req: Request, res: Response) => {
   try {
-    const transfer = await prisma.branchTransfer.findUnique({
-      where: { id: Number(req.params.id) },
+    const transfer = await prisma.branchTransfer.findFirst({
+      where: { id: Number(req.params.id), companyId: req.companyId },
       include: {
         issuingBranch: true,
         receivingBranch: true,
@@ -70,14 +73,15 @@ router.post('/issue', async (req: Request, res: Response) => {
 
     const sequence = await prisma.voucherSequence.upsert({
       where: {
-        prefix_entityType_financialYear: {
+        companyId_prefix_entityType_financialYear: {
+          companyId: req.companyId!,
           prefix: 'GBI',
           entityType: 'BRANCH_ISSUE',
           financialYear: data.financialYear || '2025-2026',
         },
       },
       update: { lastNumber: { increment: 1 } },
-      create: { prefix: 'GBI', entityType: 'BRANCH_ISSUE', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
+      create: { companyId: req.companyId!, prefix: 'GBI', entityType: 'BRANCH_ISSUE', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
     });
 
     const voucherNo = `GBI/${sequence.lastNumber}`;
@@ -90,6 +94,7 @@ router.post('/issue', async (req: Request, res: Response) => {
           voucherNumber: sequence.lastNumber,
           voucherDate: new Date(data.voucherDate),
           transferType: 'ISSUE',
+          companyId: req.companyId!,
           issuingBranchId: data.issuingBranchId,
           receivingBranchId: data.receivingBranchId,
           totalGrossWeight: data.totalGrossWeight || 0,
@@ -149,14 +154,15 @@ router.post('/receipt', async (req: Request, res: Response) => {
 
     const sequence = await prisma.voucherSequence.upsert({
       where: {
-        prefix_entityType_financialYear: {
+        companyId_prefix_entityType_financialYear: {
+          companyId: req.companyId!,
           prefix: 'GBR',
           entityType: 'BRANCH_RECEIPT',
           financialYear: data.financialYear || '2025-2026',
         },
       },
       update: { lastNumber: { increment: 1 } },
-      create: { prefix: 'GBR', entityType: 'BRANCH_RECEIPT', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
+      create: { companyId: req.companyId!, prefix: 'GBR', entityType: 'BRANCH_RECEIPT', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
     });
 
     const voucherNo = `GBR/${sequence.lastNumber}`;
@@ -169,6 +175,7 @@ router.post('/receipt', async (req: Request, res: Response) => {
           voucherNumber: sequence.lastNumber,
           voucherDate: new Date(data.voucherDate),
           transferType: 'RECEIPT',
+          companyId: req.companyId!,
           issuingBranchId: data.issuingBranchId,
           receivingBranchId: data.receivingBranchId,
           totalGrossWeight: data.totalGrossWeight || 0,
@@ -214,10 +221,10 @@ router.post('/receipt', async (req: Request, res: Response) => {
 });
 
 // GET /api/branch/list - List all branches
-router.get('/list', async (_req: Request, res: Response) => {
+router.get('/list', async (req: Request, res: Response) => {
   try {
     const branches = await prisma.branch.findMany({
-      where: { isActive: true },
+      where: { isActive: true, companyId: req.companyId },
       orderBy: { name: 'asc' },
     });
     res.json(branches);

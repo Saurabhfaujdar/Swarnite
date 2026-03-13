@@ -1,7 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
+import { authenticate } from '../middleware/branchAccess';
 
 const router = Router();
+
+router.use(authenticate);
 
 // ============================================================
 // ACCOUNTS / CUSTOMERS / SUPPLIERS
@@ -56,7 +59,7 @@ router.post('/gstin-search', async (req: Request, res: Response) => {
       clearTimeout(timeout);
 
       if (response.ok) {
-        const data = await response.json();
+        const data: any = await response.json();
         if (data.flag && data.data) {
           apiResult = {
             tradeName: data.data.tradeNam || data.data.tradeName || '',
@@ -100,7 +103,7 @@ router.post('/gstin-search', async (req: Request, res: Response) => {
         clearTimeout(timeout);
 
         if (response.ok) {
-          const data = await response.json();
+          const data: any = await response.json();
           if (data.taxpayerInfo) {
             const info = data.taxpayerInfo;
             apiResult = {
@@ -126,7 +129,7 @@ router.post('/gstin-search', async (req: Request, res: Response) => {
 
     // Also check if this GSTIN already exists in our database
     const existingAccount = await prisma.account.findFirst({
-      where: { gstin: cleanGstin, isActive: true },
+      where: { gstin: cleanGstin, isActive: true, companyId: req.companyId },
       select: { id: true, name: true, type: true, city: true, state: true },
     });
 
@@ -163,7 +166,7 @@ router.post('/gstin-search', async (req: Request, res: Response) => {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { search, type, page = '1', limit = '50' } = req.query;
-    const where: any = { isActive: true };
+    const where: any = { isActive: true, companyId: req.companyId };
 
     if (type) where.type = type;
     if (search) {
@@ -193,8 +196,8 @@ router.get('/', async (req: Request, res: Response) => {
 // GET /api/accounts/:id
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const account = await prisma.account.findUnique({
-      where: { id: Number(req.params.id) },
+    const account = await prisma.account.findFirst({
+      where: { id: Number(req.params.id), companyId: req.companyId },
     });
     if (!account) return res.status(404).json({ error: 'Account not found' });
     res.json(account);
@@ -276,7 +279,7 @@ router.get('/:id/ledger', async (req: Request, res: Response) => {
 // POST /api/accounts - Create new account
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const account = await prisma.account.create({ data: req.body });
+    const account = await prisma.account.create({ data: { ...req.body, companyId: req.companyId } });
     res.status(201).json(account);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create account' });
@@ -286,8 +289,11 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/accounts/:id
 router.put('/:id', async (req: Request, res: Response) => {
   try {
+    const existing = await prisma.account.findFirst({ where: { id: Number(req.params.id), companyId: req.companyId } });
+    if (!existing) return res.status(404).json({ error: 'Account not found' });
+
     const account = await prisma.account.update({
-      where: { id: Number(req.params.id) },
+      where: { id: existing.id },
       data: req.body,
     });
     res.json(account);
@@ -299,8 +305,11 @@ router.put('/:id', async (req: Request, res: Response) => {
 // DELETE /api/accounts/:id (soft delete)
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
+    const existing = await prisma.account.findFirst({ where: { id: Number(req.params.id), companyId: req.companyId } });
+    if (!existing) return res.status(404).json({ error: 'Account not found' });
+
     await prisma.account.update({
-      where: { id: Number(req.params.id) },
+      where: { id: existing.id },
       data: { isActive: false },
     });
     res.json({ message: 'Account deactivated' });
@@ -312,8 +321,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
 // GET /api/accounts/:id/outstanding - Get outstanding balance
 router.get('/:id/outstanding', async (req: Request, res: Response) => {
   try {
-    const account = await prisma.account.findUnique({
-      where: { id: Number(req.params.id) },
+    const account = await prisma.account.findFirst({
+      where: { id: Number(req.params.id), companyId: req.companyId },
       select: { closingBalance: true, balanceType: true, name: true },
     });
     res.json(account);

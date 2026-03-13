@@ -32,6 +32,10 @@ export default function DailySalesReport() {
       'Total': r.totalAmount,
       'Cash': r.cashAmount,
       'Bank': r.bankAmount,
+      'Card': r.cardAmount,
+      'UPI': r.upiAmount,
+      'Old Gold': r.oldGoldAmount,
+      'Advance': r.advanceAmount,
       'Due': r.dueAmount,
     })), 'DailySalesReport');
   };
@@ -39,13 +43,14 @@ export default function DailySalesReport() {
   const handleExportPDF = () => {
     exportToPDF(
       'Daily Sales Report',
-      ['Date', 'Vouchers', 'Gross Wt', 'Net Wt', 'Metal Amt', 'Labour', 'GST', 'Total', 'Cash', 'Bank', 'Due'],
+      ['Date', 'Vouchers', 'Gross Wt', 'Net Wt', 'Metal Amt', 'Labour', 'GST', 'Total', 'Cash', 'Bank', 'Card', 'UPI', 'Due'],
       rows.map((r: any) => [
         r.date, r.voucherCount, formatWeight(r.totalGrossWeight),
         formatWeight(r.totalNetWeight), formatIndianNumber(r.metalAmount),
-        formatIndianNumber(r.labourAmount), formatIndianNumber(r.gstAmount),
+        formatIndianNumber(r.labourAmount), formatIndianNumber((r.cgstAmount || 0) + (r.sgstAmount || 0)),
         formatIndianNumber(r.totalAmount), formatIndianNumber(r.cashAmount),
-        formatIndianNumber(r.bankAmount), formatIndianNumber(r.dueAmount),
+        formatIndianNumber(r.bankAmount), formatIndianNumber(r.cardAmount),
+        formatIndianNumber(r.upiAmount), formatIndianNumber(r.dueAmount),
       ]),
       'DailySalesReport'
     );
@@ -76,13 +81,13 @@ export default function DailySalesReport() {
           <div className="ml-auto flex gap-2">
             <button onClick={handleExportExcel} className="btn-outline text-xs">📊 Excel</button>
             <button onClick={handleExportPDF} className="btn-outline text-xs">📄 PDF</button>
-            <button className="btn-outline text-xs">🖨️ Print</button>
+            <button onClick={() => window.print()} className="btn-outline text-xs">🖨️ Print</button>
           </div>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-6 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <div className="bg-blue-50 p-3 rounded border text-center">
           <div className="text-xs text-blue-600">Total Vouchers</div>
           <div className="text-xl font-bold">{summary.totalVouchers || 0}</div>
@@ -95,17 +100,36 @@ export default function DailySalesReport() {
           <div className="text-xs text-green-700">Total Sales</div>
           <div className="text-xl font-bold">{formatIndianNumber(summary.totalAmount || 0)}</div>
         </div>
-        <div className="bg-emerald-50 p-3 rounded border text-center">
-          <div className="text-xs text-emerald-700">Cash Collected</div>
-          <div className="text-xl font-bold">{formatIndianNumber(summary.cashAmount || 0)}</div>
-        </div>
-        <div className="bg-purple-50 p-3 rounded border text-center">
-          <div className="text-xs text-purple-700">Bank Amount</div>
-          <div className="text-xl font-bold">{formatIndianNumber(summary.bankAmount || 0)}</div>
-        </div>
         <div className="bg-red-50 p-3 rounded border text-center">
           <div className="text-xs text-red-600">Total Due</div>
           <div className="text-xl font-bold text-red-600">{formatIndianNumber(summary.dueAmount || 0)}</div>
+        </div>
+      </div>
+      {/* Payment Breakdown */}
+      <div className="grid grid-cols-6 gap-3">
+        <div className="bg-emerald-50 p-3 rounded border text-center">
+          <div className="text-xs text-emerald-700">Cash</div>
+          <div className="text-lg font-bold">{formatIndianNumber(summary.cashAmount || 0)}</div>
+        </div>
+        <div className="bg-purple-50 p-3 rounded border text-center">
+          <div className="text-xs text-purple-700">Bank</div>
+          <div className="text-lg font-bold">{formatIndianNumber(summary.bankAmount || 0)}</div>
+        </div>
+        <div className="bg-indigo-50 p-3 rounded border text-center">
+          <div className="text-xs text-indigo-700">Card</div>
+          <div className="text-lg font-bold">{formatIndianNumber(summary.cardAmount || 0)}</div>
+        </div>
+        <div className="bg-cyan-50 p-3 rounded border text-center">
+          <div className="text-xs text-cyan-700">UPI</div>
+          <div className="text-lg font-bold">{formatIndianNumber(summary.upiAmount || 0)}</div>
+        </div>
+        <div className="bg-amber-50 p-3 rounded border text-center">
+          <div className="text-xs text-amber-700">Old Gold</div>
+          <div className="text-lg font-bold">{formatIndianNumber(summary.oldGoldAmount || 0)}</div>
+        </div>
+        <div className="bg-violet-50 p-3 rounded border text-center">
+          <div className="text-xs text-violet-700">Advance</div>
+          <div className="text-lg font-bold">{formatIndianNumber(summary.advanceAmount || 0)}</div>
         </div>
       </div>
 
@@ -127,13 +151,14 @@ export default function DailySalesReport() {
               <th className="text-right">Cash</th>
               <th className="text-right">Bank</th>
               <th className="text-right">Card</th>
+              <th className="text-right">UPI</th>
               <th className="text-right">Due</th>
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={14} className="text-center py-8">Loading...</td></tr>}
+            {isLoading && <tr><td colSpan={15} className="text-center py-8">Loading...</td></tr>}
             {!isLoading && rows.length === 0 && (
-              <tr><td colSpan={14} className="text-center py-8 text-gray-400">No data for selected period</td></tr>
+              <tr><td colSpan={15} className="text-center py-8 text-gray-400">No data for selected period</td></tr>
             )}
             {rows.map((r: any, idx: number) => (
               <tr key={idx}>
@@ -150,6 +175,7 @@ export default function DailySalesReport() {
                 <td className="text-right">{formatIndianNumber(r.cashAmount)}</td>
                 <td className="text-right">{formatIndianNumber(r.bankAmount)}</td>
                 <td className="text-right">{formatIndianNumber(r.cardAmount)}</td>
+                <td className="text-right">{formatIndianNumber(r.upiAmount)}</td>
                 <td className="text-right text-red-600">{formatIndianNumber(r.dueAmount)}</td>
               </tr>
             ))}
