@@ -144,7 +144,7 @@ router.post('/gstin-search', async (req: Request, res: Response) => {
       ...(apiResult || {
         tradeName: '',
         legalName: '',
-        status: 'Unable to verify — enter details manually',
+        status: '',
         type: '',
         address: '',
         blockNo: '',

@@ -60,7 +60,7 @@ export default function SavingsSchemeEntry() {
       bonusMonths,
       narration: narration || undefined,
       reference: reference || undefined,
-      branchId: user?.branchId,
+      branchId: user?.branchId ?? 1,
       financialYear: getFinancialYear(),
     });
   };
