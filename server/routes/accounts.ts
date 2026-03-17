@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { authenticate } from '../middleware/branchAccess';
+import { config } from '../config';
 
 const router = Router();
 
@@ -46,94 +47,72 @@ router.post('/gstin-search', async (req: Request, res: Response) => {
     const stateCode = cleanGstin.substring(0, 2);
     const stateName = stateMap[stateCode] || '';
 
-    // Try external GST verification API (free tier)
+    // Call official GST API: GET /commonapi/v1.3/search?gstin={}&action=TP
     let apiResult: any = null;
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
 
-      const response = await fetch(
-        `https://sheet.gstincheck.co.in/check/3b228cd6e06b5c5b9c8a9a580e38cd3e/${cleanGstin}`,
-        { signal: controller.signal }
-      );
+      const url = `${config.gstApiBaseUrl}/commonapi/v1.3/search?gstin=${cleanGstin}&action=TP`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+      });
       clearTimeout(timeout);
 
       if (response.ok) {
         const data: any = await response.json();
-        if (data.flag && data.data) {
+        // Official GST API response fields (ref: commonapi/v1.3/search action=TP)
+        // lgnm = legal name, tradeNam = trade name, sts = status, dty = dealer type
+        // stjCd = state jurisdiction code, stj = state jurisdiction
+        // ctjCd = centre jurisdiction code, ctj = centre jurisdiction
+        // rgdt = registration date, lstupdt = last updated date
+        // cxdt = cancellation date, ctb = constitution of business
+        // einvoiceStatus = e-invoice status, nba = nature of business activities
+        // pradr = principal address, adadr = additional addresses
+        if (data && data.gstin) {
+          const pradr = data.pradr?.addr || {};
           apiResult = {
-            tradeName: data.data.tradeNam || data.data.tradeName || '',
-            legalName: data.data.lgnm || data.data.legalName || '',
-            status: data.data.sts || data.data.status || '',
-            type: data.data.dty || data.data.dealerType || '',
+            tradeName: data.tradeNam || '',
+            legalName: data.lgnm || '',
+            status: data.sts || '',
+            type: data.dty || '',
+            constitutionOfBusiness: data.ctb || '',
+            registrationDate: data.rgdt || '',
+            lastUpdated: data.lstupdt || '',
+            cancellationDate: data.cxdt || '',
+            einvoiceStatus: data.einvoiceStatus || '',
+            stateJurisdictionCode: data.stjCd || '',
+            stateJurisdiction: data.stj || '',
+            centreJurisdictionCode: data.ctjCd || '',
+            centreJurisdiction: data.ctj || '',
+            natureOfBusiness: Array.isArray(data.nba) ? data.nba : [],
             address: [
-              data.data.pradr?.addr?.bno,
-              data.data.pradr?.addr?.bnm,
-              data.data.pradr?.addr?.st,
-              data.data.pradr?.addr?.loc,
-              data.data.pradr?.addr?.dst,
-              data.data.pradr?.addr?.stcd,
-              data.data.pradr?.addr?.pncd,
+              pradr.bno, pradr.bnm, pradr.st,
+              pradr.loc, pradr.dst, pradr.stcd, pradr.pncd,
             ].filter(Boolean).join(', '),
-            blockNo: data.data.pradr?.addr?.bno || '',
-            building: data.data.pradr?.addr?.bnm || '',
-            street: data.data.pradr?.addr?.st || '',
-            area: data.data.pradr?.addr?.loc || '',
-            city: data.data.pradr?.addr?.dst || '',
-            state: data.data.pradr?.addr?.stcd || stateName,
-            pincode: data.data.pradr?.addr?.pncd || '',
+            blockNo: pradr.bno || '',
+            building: pradr.bnm || '',
+            street: pradr.st || '',
+            area: pradr.loc || '',
+            city: pradr.dst || '',
+            state: pradr.stcd || stateName,
+            pincode: pradr.pncd || '',
+            additionalAddresses: Array.isArray(data.adadr) ? data.adadr : [],
           };
         }
       }
     } catch (fetchErr: any) {
-      // External API failed — fallback to format-based extraction
-      console.log('GST API fetch failed, using format-based extraction:', fetchErr.message);
+      console.log('GST API fetch failed:', fetchErr.message);
     }
 
-    // If external API didn't return data, try a secondary free API
-    if (!apiResult) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
-
-        const response = await fetch(
-          `https://appyflow.in/api/verifyGST?gstNo=${cleanGstin}&key_secret=free_tier`,
-          { signal: controller.signal }
-        );
-        clearTimeout(timeout);
-
-        if (response.ok) {
-          const data: any = await response.json();
-          if (data.taxpayerInfo) {
-            const info = data.taxpayerInfo;
-            apiResult = {
-              tradeName: info.tradeNam || '',
-              legalName: info.lgnm || '',
-              status: info.sts || '',
-              type: info.dty || '',
-              address: info.pradr?.adr || '',
-              blockNo: info.pradr?.addr?.bno || '',
-              building: info.pradr?.addr?.bnm || '',
-              street: info.pradr?.addr?.st || '',
-              area: info.pradr?.addr?.loc || '',
-              city: info.pradr?.addr?.dst || '',
-              state: info.pradr?.addr?.stcd || stateName,
-              pincode: info.pradr?.addr?.pncd || '',
-            };
-          }
-        }
-      } catch (fetchErr2: any) {
-        console.log('Secondary GST API also failed:', fetchErr2.message);
-      }
-    }
-
-    // Also check if this GSTIN already exists in our database
+    // Check if this GSTIN already exists in our database
     const existingAccount = await prisma.account.findFirst({
       where: { gstin: cleanGstin, isActive: true, companyId: req.companyId },
       select: { id: true, name: true, type: true, city: true, state: true },
     });
 
-    // Return either full API data or format-based data
     res.json({
       gstin: cleanGstin,
       valid: true,
@@ -146,6 +125,16 @@ router.post('/gstin-search', async (req: Request, res: Response) => {
         legalName: '',
         status: '',
         type: '',
+        constitutionOfBusiness: '',
+        registrationDate: '',
+        lastUpdated: '',
+        cancellationDate: '',
+        einvoiceStatus: '',
+        stateJurisdictionCode: '',
+        stateJurisdiction: '',
+        centreJurisdictionCode: '',
+        centreJurisdiction: '',
+        natureOfBusiness: [],
         address: '',
         blockNo: '',
         building: '',
@@ -154,6 +143,7 @@ router.post('/gstin-search', async (req: Request, res: Response) => {
         city: '',
         state: stateName,
         pincode: '',
+        additionalAddresses: [],
       }),
     });
   } catch (error) {
