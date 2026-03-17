@@ -6,20 +6,36 @@ const router = Router();
 
 router.use(authenticate);
 
+// ─── Helpers ────────────────────────────────────────────────
+
+async function recordStatusHistory(
+  tx: any,
+  layawayId: number,
+  fromStatus: string,
+  toStatus: string,
+  reason?: string,
+  changedBy = 'USER',
+) {
+  await tx.layawayStatusHistory.create({
+    data: { layawayId, fromStatus, toStatus, reason: reason || null, changedBy },
+  });
+}
+
+function deriveStatus(voucherAmount: number, paymentAmount: number, currentStatus: string): string {
+  if (currentStatus === 'CANCELLED' || currentStatus === 'CONVERTED' || currentStatus === 'EXPIRED') {
+    return currentStatus;
+  }
+  if (paymentAmount <= 0) return 'ACTIVE';
+  if (paymentAmount >= voucherAmount) return 'READY_FOR_CONVERSION';
+  return 'PARTIALLY_PAID';
+}
+
 // ============================================================
 // GET /api/layaway - List layaway entries
 // ============================================================
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const {
-      dateFrom,
-      dateTo,
-      customerId,
-      salesmanName,
-      status,
-      search,
-    } = req.query;
-
+    const { dateFrom, dateTo, customerId, salesmanName, status, search } = req.query;
     const where: any = { ...tenantScope(req) };
 
     if (status && status !== 'ALL') where.status = status;
@@ -37,29 +53,22 @@ router.get('/', async (req: Request, res: Response) => {
       where.OR = [
         { voucherNo: { contains: search as string, mode: 'insensitive' } },
         { account: { name: { contains: search as string, mode: 'insensitive' } } },
+        { account: { mobile: { contains: search as string } } },
       ];
     }
 
     const entries = await prisma.layawayEntry.findMany({
       where,
       include: {
-        account: { select: { id: true, name: true, mobile: true, closingBalance: true } },
+        account: { select: { id: true, name: true, mobile: true, closingBalance: true, balanceType: true } },
         branch: { select: { name: true } },
-        items: {
-          include: {
-            label: { select: { id: true, labelNo: true, status: true } },
-          },
-        },
-        payments: true,
+        items: { include: { label: { select: { id: true, labelNo: true, status: true } } } },
+        payments: { orderBy: { paymentDate: 'desc' } },
       },
       orderBy: { voucherDate: 'desc' },
     });
 
-    const totalAmount = entries.reduce(
-      (sum, e) => sum + Number(e.voucherAmount),
-      0,
-    );
-
+    const totalAmount = entries.reduce((sum, e) => sum + Number(e.voucherAmount), 0);
     res.json({ entries, totalAmount });
   } catch (error) {
     console.error('Error fetching layaway entries:', error);
@@ -80,24 +89,130 @@ router.get('/:id', async (req: Request, res: Response) => {
         branch: { select: { name: true } },
         items: {
           include: {
-            label: {
-              include: {
-                item: { include: { purity: true, metalType: true, itemGroup: true } },
-              },
-            },
+            label: { include: { item: { include: { purity: true, metalType: true, itemGroup: true } } } },
           },
         },
         payments: { orderBy: { paymentDate: 'desc' } },
+        statusHistory: { orderBy: { changedAt: 'asc' } },
       },
     });
 
-    if (!entry) {
-      return res.status(404).json({ error: 'Layaway entry not found' });
-    }
-
+    if (!entry) return res.status(404).json({ error: 'Layaway entry not found' });
     res.json(entry);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch layaway entry' });
+  }
+});
+
+// ============================================================
+// GET /api/layaway/:id/conversion-preview
+// Returns current metal rates, per-item variance, and balance due
+// ============================================================
+router.get('/:id/conversion-preview', async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+
+    const entry = await prisma.layawayEntry.findFirst({
+      where: { id, ...tenantScope(req) },
+      include: {
+        account: { select: { id: true, name: true, mobile: true } },
+        items: {
+          include: {
+            label: {
+              include: { item: { include: { purity: true, metalType: true } } },
+            },
+          },
+        },
+        payments: true,
+      },
+    });
+
+    if (!entry) return res.status(404).json({ error: 'Layaway not found' });
+    if (entry.status === 'CANCELLED' || entry.status === 'CONVERTED' || entry.status === 'EXPIRED') {
+      return res.status(400).json({ error: `Cannot convert a layaway with status ${entry.status}` });
+    }
+
+    // Fetch latest metal rates
+    const latestRates = await prisma.metalRate.findMany({
+      where: { isActive: true, companyId: req.companyId },
+      orderBy: { date: 'desc' },
+      distinct: ['metalTypeId', 'purityCode'],
+      include: { metalType: true },
+    });
+
+    const totalPaid = Number(entry.paymentAmount);
+    const bookingValue = Number(entry.voucherAmount);
+    const pricingModel = entry.pricingModel || 'FLOATING';
+
+    // Compute per-item current value based on pricing model
+    const itemPreviews = entry.items.map((item) => {
+      const metalTypeName = item.label?.item?.metalType?.name;
+      const purityCode = item.label?.item?.purity?.code;
+      const currentRateRecord = latestRates.find(
+        (r) => r.metalType?.name === metalTypeName && r.purityCode === purityCode,
+      );
+      const currentRate = currentRateRecord ? Number(currentRateRecord.rate) : 0;
+      const bookingRate = Number(item.metalRate);
+
+      const netWt = Number(item.netWeight);
+      const purityPct = Number(item.label?.item?.purity?.percentage || 0);
+      const fineWt = (netWt * purityPct) / 100;
+      const labourAmt = Number(item.labourAmount);
+      const otherAmt = Number(item.otherCharge);
+      const bookingItemValue = Number(item.totalAmount);
+
+      let currentItemValue = bookingItemValue;
+
+      if (pricingModel === 'FLOATING') {
+        // Recalculate entirely at current rate
+        const currentMetalAmt = fineWt * currentRate;
+        currentItemValue = currentMetalAmt + labourAmt + otherAmt;
+      } else if (pricingModel === 'HYBRID') {
+        // Metal value at current rate, making charges locked
+        const currentMetalAmt = fineWt * currentRate;
+        const bookingMetalAmt = Number(item.metalAmount);
+        currentItemValue = bookingItemValue - bookingMetalAmt + currentMetalAmt;
+      }
+      // LOCKED: currentItemValue = bookingItemValue (no change)
+
+      const variance = currentItemValue - bookingItemValue;
+
+      return {
+        id: item.id,
+        labelNo: item.labelNo,
+        itemName: item.itemName,
+        netWeight: netWt,
+        grossWeight: Number(item.grossWeight),
+        metalRateAtBooking: bookingRate,
+        currentMetalRate: currentRate,
+        bookingItemValue,
+        currentItemValue: Math.round(currentItemValue),
+        variance: Math.round(variance),
+        variancePct: bookingItemValue > 0 ? Math.round((variance / bookingItemValue) * 1000) / 10 : 0,
+        pricingModel,
+      };
+    });
+
+    const totalCurrentValue = itemPreviews.reduce((s, i) => s + i.currentItemValue, 0);
+    const totalVariance = totalCurrentValue - bookingValue;
+    const finalBalanceDue = totalCurrentValue - totalPaid;
+
+    res.json({
+      id: entry.id,
+      voucherNo: entry.voucherNo,
+      customer: entry.account,
+      pricingModel,
+      bookingValue,
+      totalCurrentValue,
+      totalVariance,
+      totalPaid,
+      balanceDue: Math.max(0, finalBalanceDue),
+      items: itemPreviews,
+      status: entry.status,
+    });
+  } catch (error) {
+    console.error('Conversion preview error:', error);
+    res.status(500).json({ error: 'Failed to generate conversion preview' });
   }
 });
 
@@ -108,19 +223,13 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const data = req.body;
 
-    if (!data.accountId) {
-      return res.status(400).json({ error: 'Customer is required' });
-    }
-    if (!data.items || data.items.length === 0) {
-      return res.status(400).json({ error: 'At least one item is required' });
-    }
-
+    if (!data.accountId) return res.status(400).json({ error: 'Customer is required' });
+    if (!data.items || data.items.length === 0) return res.status(400).json({ error: 'At least one item is required' });
     if (!data.branchId || !canAccessBranch(req, data.branchId)) {
       return res.status(403).json({ error: 'Access denied to target branch' });
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // Generate voucher number
       const sequence = await tx.voucherSequence.upsert({
         where: {
           companyId_prefix_entityType_financialYear: {
@@ -141,8 +250,10 @@ router.post('/', async (req: Request, res: Response) => {
       });
 
       const voucherNo = `LY/${sequence.lastNumber}`;
+      const voucherAmount = data.voucherAmount || 0;
+      const paymentAmount = data.paymentAmount || 0;
+      const initialStatus = deriveStatus(voucherAmount, paymentAmount, 'ACTIVE');
 
-      // Create the layaway entry
       const entry = await tx.layawayEntry.create({
         data: {
           voucherNo,
@@ -150,6 +261,9 @@ router.post('/', async (req: Request, res: Response) => {
           voucherNumber: sequence.lastNumber,
           voucherDate: new Date(data.voucherDate || new Date()),
           dueDate: data.dueDate ? new Date(data.dueDate) : null,
+          expiryDate: data.expiryDate ? new Date(data.expiryDate) : null,
+          pricingModel: data.pricingModel || 'FLOATING',
+          metalRateAtBooking: data.metalRateAtBooking || 0,
           accountId: data.accountId,
           companyId: req.companyId!,
           branchId: data.branchId,
@@ -167,21 +281,25 @@ router.post('/', async (req: Request, res: Response) => {
           sgstAmount: data.sgstAmount || 0,
           totalAmount: data.totalAmount || 0,
           roundingDiscount: data.roundingDiscount || 0,
-          voucherAmount: data.voucherAmount || 0,
+          voucherAmount,
           cashAmount: data.cashAmount || 0,
           bankAmount: data.bankAmount || 0,
           cardAmount: data.cardAmount || 0,
           upiAmount: data.upiAmount || 0,
           oldGoldAmount: data.oldGoldAmount || 0,
-          paymentAmount: data.paymentAmount || 0,
+          paymentAmount,
           dueAmount: data.dueAmount || 0,
           previousOs: data.previousOs || 0,
           finalDue: data.finalDue || 0,
           narration: data.narration || null,
           reference: data.reference || null,
           bookName: data.bookName || null,
+          status: initialStatus as any,
         },
       });
+
+      // Record initial status
+      await recordStatusHistory(tx, entry.id, 'NEW', initialStatus, 'Layaway booking created');
 
       // Create layaway items + update label status to LAYAWAY
       for (const item of data.items) {
@@ -208,13 +326,12 @@ router.post('/', async (req: Request, res: Response) => {
           },
         });
 
-        // Decrement pcsCount on the label; only set LAYAWAY if all pcs consumed
         if (item.labelId) {
           const label = await tx.label.findUnique({ where: { id: item.labelId }, select: { pcsCount: true } });
           if (!label) throw new Error(`Label not found: ${item.labelId}`);
           const layawayPcs = item.pcs || 1;
           if (layawayPcs > label.pcsCount) {
-            throw new Error(`Label ${item.labelNo} has only ${label.pcsCount} pcs in stock, cannot put ${layawayPcs} on layaway`);
+            throw new Error(`Label ${item.labelNo} has only ${label.pcsCount} pcs in stock`);
           }
           const remainingPcs = label.pcsCount - layawayPcs;
           await tx.label.update({
@@ -227,34 +344,182 @@ router.post('/', async (req: Request, res: Response) => {
         }
       }
 
-      // Update customer balance (debit the due amount)
+      // If token/partial payment collected at booking, record it
+      if (paymentAmount > 0) {
+        await tx.layawayPayment.create({
+          data: {
+            layawayId: entry.id,
+            amount: paymentAmount,
+            paymentMode: data.cashAmount > 0 ? 'Cash' : data.upiAmount > 0 ? 'UPI' : data.bankAmount > 0 ? 'Bank' : 'Card',
+            paymentDate: new Date(data.voucherDate || new Date()),
+            narration: 'Token / initial payment at booking',
+          },
+        });
+      }
+
+      // Update customer balance (debit due amount)
       if (data.dueAmount && data.dueAmount > 0) {
         await tx.account.update({
           where: { id: data.accountId },
-          data: {
-            closingBalance: { increment: data.dueAmount },
-            balanceType: 'DR',
-          },
+          data: { closingBalance: { increment: data.dueAmount }, balanceType: 'DR' },
         });
       }
 
       return entry;
     });
 
-    // Fetch the complete entry
     const fullEntry = await prisma.layawayEntry.findUnique({
       where: { id: result.id },
-      include: {
-        account: true,
-        items: true,
-        payments: true,
-      },
+      include: { account: true, items: true, payments: true, statusHistory: true },
     });
 
     res.status(201).json(fullEntry);
   } catch (error) {
     console.error('Error creating layaway entry:', error);
     res.status(500).json({ error: 'Failed to create layaway entry' });
+  }
+});
+
+// ============================================================
+// POST /api/layaway/:id/payment - Add payment to layaway
+// ============================================================
+router.post('/:id/payment', async (req: Request, res: Response) => {
+  try {
+    const layawayId = Number(req.params.id);
+    const data = req.body;
+
+    if (!data.amount || data.amount <= 0) {
+      return res.status(400).json({ error: 'Payment amount must be greater than zero' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const layaway = await tx.layawayEntry.findFirst({
+        where: { id: layawayId, ...tenantScope(req) },
+      });
+      if (!layaway) throw new Error('Layaway not found');
+      if (['CANCELLED', 'CONVERTED', 'EXPIRED'].includes(layaway.status)) {
+        throw new Error(`Cannot collect payment on a ${layaway.status} layaway`);
+      }
+
+      const newPaymentTotal = Number(layaway.paymentAmount) + Number(data.amount);
+      const voucherAmount = Number(layaway.voucherAmount);
+      if (newPaymentTotal > voucherAmount) {
+        throw new Error(`Payment of ₹${data.amount} would exceed booking value ₹${voucherAmount}. Balance due is ₹${voucherAmount - Number(layaway.paymentAmount)}`);
+      }
+
+      const payment = await tx.layawayPayment.create({
+        data: {
+          layawayId,
+          amount: data.amount,
+          paymentMode: data.paymentMode || 'Cash',
+          paymentDate: new Date(data.paymentDate || new Date()),
+          reference: data.reference || null,
+          narration: data.narration || null,
+        },
+      });
+
+      const newDue = voucherAmount - newPaymentTotal;
+      const newStatus = deriveStatus(voucherAmount, newPaymentTotal, layaway.status);
+
+      const updated = await tx.layawayEntry.update({
+        where: { id: layawayId },
+        data: {
+          paymentAmount: newPaymentTotal,
+          dueAmount: newDue,
+          finalDue: newDue,
+          status: newStatus as any,
+        },
+      });
+
+      if (newStatus !== layaway.status) {
+        await recordStatusHistory(tx, layawayId, layaway.status, newStatus,
+          `Payment of ₹${data.amount} collected`);
+      }
+
+      // Update customer balance
+      await tx.account.update({
+        where: { id: layaway.accountId },
+        data: { closingBalance: { decrement: Number(data.amount) } },
+      });
+
+      return { payment, layaway: updated };
+    });
+
+    res.status(201).json(result);
+  } catch (error: any) {
+    console.error('Error adding payment:', error);
+    res.status(error.message?.includes('exceed') ? 400 : 500)
+      .json({ error: error.message || 'Failed to add payment' });
+  }
+});
+
+// ============================================================
+// POST /api/layaway/:id/convert - Convert layaway to sale
+// Marks layaway as CONVERTED, releases labels to SOLD
+// ============================================================
+router.post('/:id/convert', async (req: Request, res: Response) => {
+  try {
+    const layawayId = Number(req.params.id);
+    const data = req.body;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const layaway = await tx.layawayEntry.findFirst({
+        where: { id: layawayId, ...tenantScope(req) },
+        include: { items: true },
+      });
+      if (!layaway) throw new Error('Layaway not found');
+      if (!['ACTIVE', 'PARTIALLY_PAID', 'READY_FOR_CONVERSION', 'OVERDUE'].includes(layaway.status)) {
+        throw new Error(`Layaway status ${layaway.status} cannot be converted`);
+      }
+
+      // Record any final balance payment
+      if (data.finalPaymentAmount && data.finalPaymentAmount > 0) {
+        await tx.layawayPayment.create({
+          data: {
+            layawayId,
+            amount: data.finalPaymentAmount,
+            paymentMode: data.finalPaymentMode || 'Cash',
+            paymentDate: new Date(),
+            narration: 'Final balance payment at conversion',
+          },
+        });
+        await tx.account.update({
+          where: { id: layaway.accountId },
+          data: { closingBalance: { decrement: Number(data.finalPaymentAmount) } },
+        });
+      }
+
+      // Release all reserved labels → SOLD
+      for (const item of layaway.items) {
+        if (item.labelId) {
+          await tx.label.update({
+            where: { id: item.labelId },
+            data: { status: 'SOLD' },
+          });
+        }
+      }
+
+      // Mark layaway CONVERTED, store sale reference
+      const converted = await tx.layawayEntry.update({
+        where: { id: layawayId },
+        data: {
+          status: 'CONVERTED',
+          convertedToSaleId: data.saleVoucherNo || null,
+          dueAmount: 0,
+          finalDue: 0,
+        },
+      });
+
+      await recordStatusHistory(tx, layawayId, layaway.status, 'CONVERTED',
+        data.saleVoucherNo ? `Converted to sale ${data.saleVoucherNo}` : 'Converted to sale');
+
+      return converted;
+    });
+
+    res.json({ message: 'Layaway converted successfully', layaway: result });
+  } catch (error: any) {
+    console.error('Error converting layaway:', error);
+    res.status(400).json({ error: error.message || 'Failed to convert layaway' });
   }
 });
 
@@ -270,39 +535,31 @@ router.put('/:id', async (req: Request, res: Response) => {
       where: { id, ...tenantScope(req) },
       include: { items: true },
     });
-
-    if (!entry) {
-      return res.status(404).json({ error: 'Layaway entry not found' });
-    }
-
-    if (entry.status === 'CANCELLED') {
-      return res.status(400).json({ error: 'Cannot modify a cancelled layaway' });
+    if (!entry) return res.status(404).json({ error: 'Layaway entry not found' });
+    if (entry.status === 'CANCELLED' || entry.status === 'CONVERTED') {
+      return res.status(400).json({ error: `Cannot modify a ${entry.status} layaway` });
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      // Restore old label pcsCount (add back the layaway pcs)
+      // Restore old label pcsCount
       for (const item of entry.items) {
         if (item.labelId) {
-          const layawayPcs = Number(item.pcs) || 1;
           await tx.label.update({
             where: { id: item.labelId },
-            data: {
-              pcsCount: { increment: layawayPcs },
-              status: 'IN_STOCK',
-            },
+            data: { pcsCount: { increment: Number(item.pcs) || 1 }, status: 'IN_STOCK' },
           });
         }
       }
 
-      // Delete old items
       await tx.layawayItem.deleteMany({ where: { layawayEntryId: id } });
 
-      // Update entry fields
       const updatedEntry = await tx.layawayEntry.update({
         where: { id },
         data: {
           voucherDate: data.voucherDate ? new Date(data.voucherDate) : undefined,
           dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+          expiryDate: data.expiryDate ? new Date(data.expiryDate) : undefined,
+          pricingModel: data.pricingModel,
           accountId: data.accountId,
           salesmanName: data.salesmanName,
           totalGrossWeight: data.totalGrossWeight || 0,
@@ -330,7 +587,6 @@ router.put('/:id', async (req: Request, res: Response) => {
         },
       });
 
-      // Re-create items + update labels to LAYAWAY
       if (data.items) {
         for (const item of data.items) {
           await tx.layawayItem.create({
@@ -361,15 +617,12 @@ router.put('/:id', async (req: Request, res: Response) => {
             if (!label) throw new Error(`Label not found: ${item.labelId}`);
             const layawayPcs = item.pcs || 1;
             if (layawayPcs > label.pcsCount) {
-              throw new Error(`Label ${item.labelNo} has only ${label.pcsCount} pcs in stock, cannot put ${layawayPcs} on layaway`);
+              throw new Error(`Label ${item.labelNo} has only ${label.pcsCount} pcs in stock`);
             }
             const remainingPcs = label.pcsCount - layawayPcs;
             await tx.label.update({
               where: { id: item.labelId },
-              data: {
-                pcsCount: remainingPcs,
-                ...(remainingPcs === 0 ? { status: 'LAYAWAY' } : {}),
-              },
+              data: { pcsCount: remainingPcs, ...(remainingPcs === 0 ? { status: 'LAYAWAY' } : {}) },
             });
           }
         }
@@ -386,8 +639,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// DELETE /api/layaway/:id - Cancel / delete layaway
-//   → Restores all label statuses back to IN_STOCK
+// DELETE /api/layaway/:id - Cancel layaway → restore labels
 // ============================================================
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
@@ -397,111 +649,37 @@ router.delete('/:id', async (req: Request, res: Response) => {
       where: { id, ...tenantScope(req) },
       include: { items: true },
     });
+    if (!entry) return res.status(404).json({ error: 'Layaway entry not found' });
+    if (entry.status === 'CANCELLED') return res.status(400).json({ error: 'Layaway is already cancelled' });
+    if (entry.status === 'CONVERTED') return res.status(400).json({ error: 'Cannot cancel a converted layaway' });
 
-    if (!entry) {
-      return res.status(404).json({ error: 'Layaway entry not found' });
-    }
-
-    if (entry.status === 'CANCELLED') {
-      return res.status(400).json({ error: 'Layaway is already cancelled' });
-    }
-
+    const prevStatus = entry.status;
     await prisma.$transaction(async (tx) => {
-      // Restore label pcsCount (add back the layaway pcs) and set IN_STOCK
       for (const item of entry.items) {
         if (item.labelId) {
-          const layawayPcs = Number(item.pcs) || 1;
           await tx.label.update({
             where: { id: item.labelId },
-            data: {
-              pcsCount: { increment: layawayPcs },
-              status: 'IN_STOCK',
-            },
+            data: { pcsCount: { increment: Number(item.pcs) || 1 }, status: 'IN_STOCK' },
           });
         }
       }
 
-      // Reverse customer balance (if due was added)
       if (Number(entry.dueAmount) > 0) {
         await tx.account.update({
           where: { id: entry.accountId },
-          data: {
-            closingBalance: { decrement: Number(entry.dueAmount) },
-          },
+          data: { closingBalance: { decrement: Number(entry.dueAmount) } },
         });
       }
 
-      // Mark as cancelled
-      await tx.layawayEntry.update({
-        where: { id },
-        data: { status: 'CANCELLED' },
-      });
+      await tx.layawayEntry.update({ where: { id }, data: { status: 'CANCELLED' } });
+      await recordStatusHistory(tx, id, prevStatus, 'CANCELLED',
+        req.body?.reason || 'Cancelled by user');
     });
 
     res.json({ message: 'Layaway cancelled and items restored to stock' });
   } catch (error) {
     console.error('Error cancelling layaway:', error);
     res.status(500).json({ error: 'Failed to cancel layaway' });
-  }
-});
-
-// ============================================================
-// POST /api/layaway/:id/payment - Add payment to layaway
-// ============================================================
-router.post('/:id/payment', async (req: Request, res: Response) => {
-  try {
-    const layawayId = Number(req.params.id);
-    const data = req.body;
-
-    if (!data.amount || data.amount <= 0) {
-      return res.status(400).json({ error: 'Payment amount is required' });
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      const payment = await tx.layawayPayment.create({
-        data: {
-          layawayId,
-          amount: data.amount,
-          paymentMode: data.paymentMode || 'Cash',
-          paymentDate: new Date(data.paymentDate || new Date()),
-          reference: data.reference,
-          narration: data.narration,
-        },
-      });
-
-      // Update layaway payment totals
-      const layaway = await tx.layawayEntry.update({
-        where: { id: layawayId },
-        data: {
-          paymentAmount: { increment: data.amount },
-          dueAmount: { decrement: data.amount },
-          finalDue: { decrement: data.amount },
-        },
-      });
-
-      // Update customer balance
-      await tx.account.update({
-        where: { id: layaway.accountId },
-        data: {
-          closingBalance: { decrement: data.amount },
-        },
-      });
-
-      // Check if fully paid → complete
-      if (Number(layaway.dueAmount) <= 0) {
-        await tx.layawayEntry.update({
-          where: { id: layawayId },
-          data: { status: 'COMPLETED' },
-        });
-      }
-
-      return { payment, layaway };
-    });
-
-    res.status(201).json(result);
-  } catch (error) {
-    console.error('Error adding payment:', error);
-    res.status(500).json({ error: 'Failed to add payment' });
   }
 });
 

@@ -176,7 +176,9 @@ export const layawayAPI = {
   create: (data: any) => api.post('/layaway', data),
   update: (id: number, data: any) => api.put(`/layaway/${id}`, data),
   addPayment: (id: number, data: any) => api.post(`/layaway/${id}/payment`, data),
-  cancel: (id: number) => api.delete(`/layaway/${id}`),
+  conversionPreview: (id: number) => api.get(`/layaway/${id}/conversion-preview`),
+  convert: (id: number, data: any) => api.post(`/layaway/${id}/convert`, data),
+  cancel: (id: number, reason?: string) => api.delete(`/layaway/${id}`, { data: { reason } }),
 };
 
 // Masters

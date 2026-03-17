@@ -40,6 +40,8 @@ export default function LayawayEntry() {
 
   // Form state
   const [voucherDate, setVoucherDate] = useState(getToday());
+  const [expiryDate, setExpiryDate] = useState('');
+  const [pricingModel, setPricingModel] = useState('FLOATING');
   const [customerId, setCustomerId] = useState<number | null>(null);
   const [customerData, setCustomerData] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState('');
@@ -68,6 +70,8 @@ export default function LayawayEntry() {
     layawayAPI.get(editId).then((res) => {
       const entry = res.data;
       setEditVoucherNo(entry.voucherNo);
+      setExpiryDate(entry.expiryDate?.slice(0, 10) || '');
+      setPricingModel(entry.pricingModel || 'FLOATING');
       setVoucherDate(entry.voucherDate?.slice(0, 10) || getToday());
       setCustomerId(entry.accountId);
       setCustomerData(entry.account);
@@ -258,6 +262,8 @@ export default function LayawayEntry() {
 
     saveMutation.mutate({
       voucherDate,
+      expiryDate: expiryDate || null,
+      pricingModel,
       accountId: customerId,
       salesmanName: salesmanName || null,
       branchId: 1,
@@ -320,6 +326,8 @@ export default function LayawayEntry() {
     setNarration('');
     setReference('');
     setBookName('');
+    setExpiryDate('');
+    setPricingModel('FLOATING');
     setCashAmount(0);
     setBankAmount(0);
     setCardAmount(0);
@@ -382,6 +390,28 @@ export default function LayawayEntry() {
                 value={voucherDate}
                 onChange={(e) => setVoucherDate(e.target.value)}
               />
+            </div>
+            <div>
+              <label className="form-label block">Expiry Date</label>
+              <input
+                type="date"
+                className="form-input w-36"
+                value={expiryDate}
+                onChange={(e) => setExpiryDate(e.target.value)}
+                placeholder="Reservation expiry"
+              />
+            </div>
+            <div>
+              <label className="form-label block">Pricing Model</label>
+              <select
+                className="form-select w-36"
+                value={pricingModel}
+                onChange={(e) => setPricingModel(e.target.value)}
+              >
+                <option value="FLOATING">Floating (Market Rate)</option>
+                <option value="LOCKED">Locked (Booking Rate)</option>
+                <option value="HYBRID">Hybrid (Metal Floating)</option>
+              </select>
             </div>
           </div>
         </div>

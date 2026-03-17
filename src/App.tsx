@@ -17,6 +17,7 @@ import BranchReceiptList from './pages/Branch/BranchReceiptList';
 import BranchManagement from './pages/Branch/BranchManagement';
 import LayawayEntry from './pages/Layaway/LayawayEntry';
 import LayawayList from './pages/Layaway/LayawayList';
+import LayawayDetail from './pages/Layaway/LayawayDetail';
 import SavingsSchemeEntry from './pages/SavingsScheme/SavingsSchemeEntry';
 import SavingsSchemeList from './pages/SavingsScheme/SavingsSchemeList';
 import SavingsSchemeDetail from './pages/SavingsScheme/SavingsSchemeDetail';
@@ -68,6 +69,7 @@ function App() {
         {/* Layaway */}
         <Route path="layaway" element={<LayawayEntry />} />
         <Route path="layaway/list" element={<LayawayList />} />
+        <Route path="layaway/detail/:id" element={<LayawayDetail />} />
         {/* Savings Scheme */}
         <Route path="savings-scheme" element={<SavingsSchemeEntry />} />
         <Route path="savings-scheme/list" element={<SavingsSchemeList />} />

@@ -798,6 +798,9 @@ model LayawayEntry {
   voucherNumber   Int
   voucherDate     DateTime      @default(now())
   dueDate         DateTime?
+  expiryDate      DateTime?     // Reservation expiry date
+  pricingModel    String        @default("FLOATING") // LOCKED | FLOATING | HYBRID
+  metalRateAtBooking Decimal    @default(0)          // Gold rate snapshot at booking time
   accountId       Int
   account         Account       @relation(fields: [accountId], references: [id])
   companyId       Int
@@ -824,16 +827,19 @@ model LayawayEntry {
   roundingDiscount Decimal      @default(0)
   voucherAmount    Decimal      @default(0)
 
-  // Payment
+  // Payment tracking
   cashAmount       Decimal      @default(0)
   bankAmount       Decimal      @default(0)
   cardAmount       Decimal      @default(0)
   upiAmount        Decimal      @default(0)
   oldGoldAmount    Decimal      @default(0)
-  paymentAmount    Decimal      @default(0)
-  dueAmount        Decimal      @default(0)
+  paymentAmount    Decimal      @default(0)  // Running total of all payments collected
+  dueAmount        Decimal      @default(0)  // voucherAmount - paymentAmount
   previousOs       Decimal      @default(0)
   finalDue         Decimal      @default(0)
+
+  // Conversion tracking
+  convertedToSaleId String?     // Sale voucher number after conversion
 
   narration        String?
   reference        String?
@@ -844,7 +850,10 @@ model LayawayEntry {
 
   items            LayawayItem[]
   payments         LayawayPayment[]
+  statusHistory    LayawayStatusHistory[]
 
+  @@index([accountId, status])
+  @@index([expiryDate, status])
   @@map("layaway_entries")
 }
 
@@ -862,7 +871,7 @@ model LayawayItem {
   netWeight       Decimal      @default(0)
   fineWeight      Decimal      @default(0)
   pcs             Int          @default(1)
-  metalRate       Decimal      @default(0)
+  metalRate       Decimal      @default(0)   // Booking-time metal rate snapshot
   metalAmount     Decimal      @default(0)
   diamondWeight   Decimal      @default(0)
   labourRate      Decimal      @default(0)
@@ -877,8 +886,13 @@ model LayawayItem {
 
 enum LayawayStatus {
   ACTIVE
+  PARTIALLY_PAID
+  OVERDUE
+  READY_FOR_CONVERSION
   COMPLETED
+  CONVERTED
   CANCELLED
+  EXPIRED
 }
 
 model LayawayPayment {
@@ -887,11 +901,26 @@ model LayawayPayment {
   layaway       LayawayEntry @relation(fields: [layawayId], references: [id], onDelete: Cascade)
   paymentDate   DateTime     @default(now())
   amount        Decimal
-  paymentMode   String       // "Cash", "Bank", "Card"
+  paymentMode   String       // "Cash", "Bank", "Card", "UPI"
   reference     String?
   narration     String?
 
   @@map("layaway_payments")
+}
+
+// Status transition audit trail
+model LayawayStatusHistory {
+  id            Int          @id @default(autoincrement())
+  layawayId     Int
+  layaway       LayawayEntry @relation(fields: [layawayId], references: [id], onDelete: Cascade)
+  fromStatus    String
+  toStatus      String
+  changedBy     String       @default("SYSTEM")
+  reason        String?
+  changedAt     DateTime     @default(now())
+
+  @@index([layawayId, changedAt])
+  @@map("layaway_status_history")
 }
 
 // ============================================================
