@@ -25,7 +25,7 @@ export default function SavingsSchemeEntry() {
   // Customer search
   const { data: customers } = useQuery({
     queryKey: ['customers-search', customerSearch],
-    queryFn: () => accountsAPI.list({ search: customerSearch, type: 'CUSTOMER' }).then((r) => r.data),
+    queryFn: () => accountsAPI.list({ search: customerSearch, type: 'CUSTOMER' }).then((r) => r.data?.accounts ?? r.data),
     enabled: customerSearch.length >= 2,
   });
 
