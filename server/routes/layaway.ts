@@ -208,11 +208,21 @@ router.post('/', async (req: Request, res: Response) => {
           },
         });
 
-        // Set label status to LAYAWAY (removes from stock)
+        // Decrement pcsCount on the label; only set LAYAWAY if all pcs consumed
         if (item.labelId) {
+          const label = await tx.label.findUnique({ where: { id: item.labelId }, select: { pcsCount: true } });
+          if (!label) throw new Error(`Label not found: ${item.labelId}`);
+          const layawayPcs = item.pcs || 1;
+          if (layawayPcs > label.pcsCount) {
+            throw new Error(`Label ${item.labelNo} has only ${label.pcsCount} pcs in stock, cannot put ${layawayPcs} on layaway`);
+          }
+          const remainingPcs = label.pcsCount - layawayPcs;
           await tx.label.update({
             where: { id: item.labelId },
-            data: { status: 'LAYAWAY' },
+            data: {
+              pcsCount: remainingPcs,
+              ...(remainingPcs === 0 ? { status: 'LAYAWAY' } : {}),
+            },
           });
         }
       }
@@ -270,12 +280,16 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      // Restore old label statuses to IN_STOCK
+      // Restore old label pcsCount (add back the layaway pcs)
       for (const item of entry.items) {
         if (item.labelId) {
+          const layawayPcs = Number(item.pcs) || 1;
           await tx.label.update({
             where: { id: item.labelId },
-            data: { status: 'IN_STOCK' },
+            data: {
+              pcsCount: { increment: layawayPcs },
+              status: 'IN_STOCK',
+            },
           });
         }
       }
@@ -343,9 +357,19 @@ router.put('/:id', async (req: Request, res: Response) => {
           });
 
           if (item.labelId) {
+            const label = await tx.label.findUnique({ where: { id: item.labelId }, select: { pcsCount: true } });
+            if (!label) throw new Error(`Label not found: ${item.labelId}`);
+            const layawayPcs = item.pcs || 1;
+            if (layawayPcs > label.pcsCount) {
+              throw new Error(`Label ${item.labelNo} has only ${label.pcsCount} pcs in stock, cannot put ${layawayPcs} on layaway`);
+            }
+            const remainingPcs = label.pcsCount - layawayPcs;
             await tx.label.update({
               where: { id: item.labelId },
-              data: { status: 'LAYAWAY' },
+              data: {
+                pcsCount: remainingPcs,
+                ...(remainingPcs === 0 ? { status: 'LAYAWAY' } : {}),
+              },
             });
           }
         }
@@ -383,12 +407,16 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
 
     await prisma.$transaction(async (tx) => {
-      // Restore all labels to IN_STOCK
+      // Restore label pcsCount (add back the layaway pcs) and set IN_STOCK
       for (const item of entry.items) {
         if (item.labelId) {
+          const layawayPcs = Number(item.pcs) || 1;
           await tx.label.update({
             where: { id: item.labelId },
-            data: { status: 'IN_STOCK' },
+            data: {
+              pcsCount: { increment: layawayPcs },
+              status: 'IN_STOCK',
+            },
           });
         }
       }

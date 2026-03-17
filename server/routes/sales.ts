@@ -348,16 +348,24 @@ router.post('/', async (req: Request, res: Response) => {
 
           // Validate label is IN_STOCK and belongs to user's branch before selling
           if (item.labelId) {
-            const label = await tx.label.findUnique({ where: { id: item.labelId }, select: { branchId: true, status: true, labelNo: true } });
+            const label = await tx.label.findUnique({ where: { id: item.labelId }, select: { branchId: true, status: true, labelNo: true, pcsCount: true } });
             if (!label || !canAccessBranch(req, label.branchId)) {
               throw new Error(`Label ${item.labelId} not accessible from your branch`);
             }
             if (label.status !== 'IN_STOCK') {
               throw new Error(`Label ${label.labelNo || item.labelNo} is not available for sale (status: ${label.status})`);
             }
+            const salePcs = item.pcs || 1;
+            if (salePcs > label.pcsCount) {
+              throw new Error(`Label ${label.labelNo || item.labelNo} has only ${label.pcsCount} pcs available, cannot sell ${salePcs}`);
+            }
+            const remainingPcs = label.pcsCount - salePcs;
             await tx.label.update({
               where: { id: item.labelId },
-              data: { status: 'SOLD' },
+              data: {
+                pcsCount: remainingPcs,
+                ...(remainingPcs === 0 ? { status: 'SOLD' } : {}),
+              },
             });
           }
         }
@@ -536,12 +544,16 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
       if (!voucher) throw new Error('Voucher not found');
 
-      // Restore label statuses
+      // Restore label statuses and pcsCount
       for (const item of voucher.items) {
         if (item.labelId) {
+          const salePcs = Number(item.pcs) || 1;
           await tx.label.update({
             where: { id: item.labelId },
-            data: { status: 'IN_STOCK' },
+            data: {
+              pcsCount: { increment: salePcs },
+              status: 'IN_STOCK',
+            },
           });
         }
       }

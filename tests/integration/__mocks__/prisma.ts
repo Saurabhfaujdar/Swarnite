@@ -37,6 +37,8 @@ const modelNames = [
   'label', 'item', 'labelPrefix',
   'voucherSequence',
   'customerPayment',
+  'savingsScheme',
+  'schemeInstallment',
   'refreshToken',
   'branchStaff',
   'auditLog',

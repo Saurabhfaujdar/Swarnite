@@ -136,6 +136,7 @@ export default function SalesEntryList() {
     onSuccess: () => {
       toast.success('Voucher cancelled successfully');
       queryClient.invalidateQueries({ queryKey: ['sales-list'] });
+      queryClient.invalidateQueries({ queryKey: ['labels-list'] });
       setCancelTarget(null);
     },
     onError: () => {
