@@ -96,6 +96,10 @@ export const config = {
   serveStatic: envBool('SERVE_STATIC', isProductionLike),
   staticDir: process.env.STATIC_DIR || 'dist',
 
+  // ─── GST API ─────────────────────────────────────────────
+  // Official GST taxpayer lookup: GET {gstApiBaseUrl}/commonapi/v1.3/search?gstin={gstin}&action=TP
+  gstApiBaseUrl: process.env.GST_API_BASE_URL || 'https://api.gst.gov.in',
+
   // ─── Backup (injected at container level) ────────────────
   backupEnabled: envBool('BACKUP_ENABLED', false),
   backupCron: process.env.BACKUP_CRON || '0 2 * * *', // 2 AM daily

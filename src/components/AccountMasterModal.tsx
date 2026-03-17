@@ -153,27 +153,6 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
     }
   }, [open, editData, forceType]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'F6') {
-        e.preventDefault();
-        setShowGSTSearch(true);
-        setTimeout(() => gstinInputRef.current?.focus(), 100);
-      }
-      if (e.key === 'Escape') {
-        if (showGSTSearch) {
-          setShowGSTSearch(false);
-        } else {
-          onClose();
-        }
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [open, showGSTSearch, onClose]);
-
   const updateField = useCallback((field: keyof AccountFormData, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   }, []);
@@ -187,6 +166,13 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
   }, [form.type]);
 
   /* ---- GST Search ---- */
+  const openGSTSearch = useCallback(() => {
+    setGstResult(null);
+    setGstSearchInput('');
+    setShowGSTSearch(true);
+    setTimeout(() => gstinInputRef.current?.focus(), 100);
+  }, []);
+
   const gstSearchMutation = useMutation({
     mutationFn: (gstin: string) => accountsAPI.gstSearch(gstin),
     onSuccess: (res) => {
@@ -210,6 +196,26 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
     },
   });
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'F6') {
+        e.preventDefault();
+        openGSTSearch();
+      }
+      if (e.key === 'Escape') {
+        if (showGSTSearch) {
+          setShowGSTSearch(false);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, showGSTSearch, onClose, openGSTSearch]);
+
   const handleGSTSearch = useCallback(() => {
     const cleaned = gstSearchInput.trim().toUpperCase();
     if (!cleaned) {
@@ -217,6 +223,7 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
       gstinInputRef.current?.focus();
       return;
     }
+    setGstResult(null);
     gstSearchMutation.mutate(cleaned);
   }, [gstSearchInput, gstSearchMutation]);
 
@@ -587,8 +594,7 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
             <button
               className="text-xs text-blue-700 hover:text-blue-900 underline cursor-pointer font-semibold"
               onClick={() => {
-                setShowGSTSearch(true);
-                setTimeout(() => gstinInputRef.current?.focus(), 100);
+                openGSTSearch();
               }}
             >
               Click Here Or Press F6 To Search GSTIN No.
