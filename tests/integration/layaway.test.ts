@@ -47,6 +47,7 @@ const LABEL_1 = {
   id: 100,
   labelNo: 'BCD/2',
   status: 'IN_STOCK',
+  pcsCount: 1,
   itemId: 1,
   grossWeight: 3.08,
   netWeight: 2.342,
@@ -64,6 +65,7 @@ const LABEL_2 = {
   id: 101,
   labelNo: 'GN/51',
   status: 'IN_STOCK',
+  pcsCount: 1,
   itemId: 2,
   grossWeight: 10.5,
   netWeight: 9.8,
@@ -74,6 +76,24 @@ const LABEL_2 = {
     metalType: { id: 1, name: 'Gold' },
     itemGroup: { id: 1, name: 'Necklace' },
     labourRate: 750,
+  },
+};
+
+const LABEL_MULTI_PCS = {
+  id: 102,
+  labelNo: 'SC/1',
+  status: 'IN_STOCK',
+  pcsCount: 7,
+  itemId: 3,
+  grossWeight: 1000,
+  netWeight: 1000,
+  item: {
+    id: 3,
+    name: 'Silver Coin',
+    purity: { id: 2, code: 'S999', percentage: 99.9 },
+    metalType: { id: 2, name: 'Silver' },
+    itemGroup: { id: 5, name: 'Coin' },
+    labourRate: 0,
   },
 };
 
@@ -355,13 +375,14 @@ describe('GET /api/layaway/:id', () => {
 // POST /api/layaway – Create layaway entry
 // ════════════════════════════════════════════════════════════
 describe('POST /api/layaway', () => {
-  it('creates a layaway entry, sets labels to LAYAWAY, updates customer balance', async () => {
+  it('creates a layaway entry, decrements pcsCount, updates customer balance', async () => {
     // Transaction mock returns entry
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.voucherSequence.upsert.mockResolvedValueOnce(VOUCHER_SEQUENCE);
     mockPrisma.layawayEntry.create.mockResolvedValueOnce(CREATED_ENTRY);
     mockPrisma.layawayItem.create.mockResolvedValueOnce(CREATED_ITEM);
-    mockPrisma.label.update.mockResolvedValueOnce({ ...LABEL_1, status: 'LAYAWAY' });
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 1 });
+    mockPrisma.label.update.mockResolvedValueOnce({ ...LABEL_1, pcsCount: 0, status: 'LAYAWAY' });
     mockPrisma.account.update.mockResolvedValueOnce({ ...CUSTOMER, closingBalance: 11796 });
     mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce({
       ...CREATED_ENTRY,
@@ -378,11 +399,14 @@ describe('POST /api/layaway', () => {
     expect(res.body.voucherNo).toBe('LY/1');
     expect(res.body.narration).toBe('1 DAY');
 
-    // Verify label was updated to LAYAWAY
+    // Verify label pcsCount was decremented and status set to LAYAWAY (all pcs consumed)
+    expect(mockPrisma.label.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: LABEL_1.id }, select: { pcsCount: true } }),
+    );
     expect(mockPrisma.label.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: LABEL_1.id },
-        data: { status: 'LAYAWAY' },
+        data: { pcsCount: 0, status: 'LAYAWAY' },
       }),
     );
 
@@ -397,11 +421,15 @@ describe('POST /api/layaway', () => {
     );
   });
 
-  it('creates entry with multiple items setting all label statuses to LAYAWAY', async () => {
+  it('creates entry with multiple items, decrements pcsCount for each', async () => {
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ ...VOUCHER_SEQUENCE, lastNumber: 2 });
     mockPrisma.layawayEntry.create.mockResolvedValueOnce({ ...CREATED_ENTRY, id: 2, voucherNo: 'LY/2' });
     mockPrisma.layawayItem.create.mockResolvedValue({});
+    // Each label has 1 pc, so after layaway both should be 0 → LAYAWAY
+    mockPrisma.label.findUnique
+      .mockResolvedValueOnce({ pcsCount: 1 })
+      .mockResolvedValueOnce({ pcsCount: 1 });
     mockPrisma.label.update.mockResolvedValue({});
     mockPrisma.account.update.mockResolvedValueOnce({});
     mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce({
@@ -411,21 +439,21 @@ describe('POST /api/layaway', () => {
 
     const payload = makeLayawayPayload({
       items: [
-        { labelId: 100, itemId: 1, labelNo: 'BCD/2', itemName: 'Bracelet', grossWeight: 3.08, netWeight: 2.34 },
-        { labelId: 101, itemId: 2, labelNo: 'GN/51', itemName: 'Necklace', grossWeight: 10.5, netWeight: 9.8 },
+        { labelId: 100, itemId: 1, labelNo: 'BCD/2', itemName: 'Bracelet', grossWeight: 3.08, netWeight: 2.34, pcs: 1 },
+        { labelId: 101, itemId: 2, labelNo: 'GN/51', itemName: 'Necklace', grossWeight: 10.5, netWeight: 9.8, pcs: 1 },
       ],
     });
 
     const res = await request(app).post('/api/layaway').send(payload);
     expect(res.status).toBe(201);
 
-    // Both labels should be set to LAYAWAY
-    expect(mockPrisma.label.update).toHaveBeenCalledTimes(2);
+    // Both labels should have pcsCount decremented to 0 and status set to LAYAWAY
+    expect(mockPrisma.label.findUnique).toHaveBeenCalledTimes(2);
     expect(mockPrisma.label.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 100 }, data: { status: 'LAYAWAY' } }),
+      expect.objectContaining({ where: { id: 100 }, data: { pcsCount: 0, status: 'LAYAWAY' } }),
     );
     expect(mockPrisma.label.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 101 }, data: { status: 'LAYAWAY' } }),
+      expect.objectContaining({ where: { id: 101 }, data: { pcsCount: 0, status: 'LAYAWAY' } }),
     );
   });
 
@@ -461,6 +489,7 @@ describe('POST /api/layaway', () => {
     mockPrisma.voucherSequence.upsert.mockResolvedValueOnce(VOUCHER_SEQUENCE);
     mockPrisma.layawayEntry.create.mockResolvedValueOnce({ ...CREATED_ENTRY, narration: 'Test narration' });
     mockPrisma.layawayItem.create.mockResolvedValue({});
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 1 });
     mockPrisma.label.update.mockResolvedValue({});
     mockPrisma.account.update.mockResolvedValue({});
     mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce({
@@ -485,6 +514,7 @@ describe('POST /api/layaway', () => {
     mockPrisma.voucherSequence.upsert.mockResolvedValueOnce(VOUCHER_SEQUENCE);
     mockPrisma.layawayEntry.create.mockResolvedValueOnce({ ...CREATED_ENTRY, dueAmount: 0 });
     mockPrisma.layawayItem.create.mockResolvedValue({});
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 1 });
     mockPrisma.label.update.mockResolvedValue({});
     mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce({
       ...CREATED_ENTRY, dueAmount: 0, account: CUSTOMER, items: [CREATED_ITEM], payments: [],
@@ -524,6 +554,7 @@ describe('POST /api/layaway', () => {
     mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ ...VOUCHER_SEQUENCE, lastNumber: 317 });
     mockPrisma.layawayEntry.create.mockResolvedValueOnce({ ...CREATED_ENTRY, voucherNo: 'LY/317' });
     mockPrisma.layawayItem.create.mockResolvedValue({});
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 1 });
     mockPrisma.label.update.mockResolvedValue({});
     mockPrisma.account.update.mockResolvedValue({});
     mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce({
@@ -555,18 +586,94 @@ describe('POST /api/layaway', () => {
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('Failed to create layaway entry');
   });
+
+  // ── pcsCount-specific tests ──────────────────────────────
+  it('partial layaway: decrements pcsCount but keeps status IN_STOCK when pcs remain', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ ...VOUCHER_SEQUENCE, lastNumber: 10 });
+    mockPrisma.layawayEntry.create.mockResolvedValueOnce({ ...CREATED_ENTRY, id: 10, voucherNo: 'LY/10' });
+    mockPrisma.layawayItem.create.mockResolvedValue({});
+    // Label has 7 pcs, we're putting 2 on layaway → 5 remain → should NOT set LAYAWAY
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 7 });
+    mockPrisma.label.update.mockResolvedValue({});
+    mockPrisma.account.update.mockResolvedValue({});
+    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce({
+      ...CREATED_ENTRY, id: 10, voucherNo: 'LY/10',
+      account: CUSTOMER, items: [], payments: [],
+    });
+
+    const payload = makeLayawayPayload({
+      items: [{ labelId: LABEL_MULTI_PCS.id, itemId: 3, labelNo: 'SC/1', itemName: 'Silver Coin', grossWeight: 1000, netWeight: 1000, pcs: 2 }],
+    });
+
+    const res = await request(app).post('/api/layaway').send(payload);
+    expect(res.status).toBe(201);
+
+    // pcsCount should be decremented from 7 to 5, status should NOT be changed
+    expect(mockPrisma.label.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: LABEL_MULTI_PCS.id },
+        data: { pcsCount: 5 },
+      }),
+    );
+  });
+
+  it('full layaway: sets status to LAYAWAY when all pcs are consumed', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ ...VOUCHER_SEQUENCE, lastNumber: 11 });
+    mockPrisma.layawayEntry.create.mockResolvedValueOnce({ ...CREATED_ENTRY, id: 11, voucherNo: 'LY/11' });
+    mockPrisma.layawayItem.create.mockResolvedValue({});
+    // Label has 3 pcs, putting all 3 on layaway → 0 remain → should set LAYAWAY
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 3 });
+    mockPrisma.label.update.mockResolvedValue({});
+    mockPrisma.account.update.mockResolvedValue({});
+    mockPrisma.layawayEntry.findUnique.mockResolvedValueOnce({
+      ...CREATED_ENTRY, id: 11, account: CUSTOMER, items: [], payments: [],
+    });
+
+    const payload = makeLayawayPayload({
+      items: [{ labelId: LABEL_MULTI_PCS.id, itemId: 3, labelNo: 'SC/1', itemName: 'Silver Coin', grossWeight: 1000, netWeight: 1000, pcs: 3 }],
+    });
+
+    const res = await request(app).post('/api/layaway').send(payload);
+    expect(res.status).toBe(201);
+
+    expect(mockPrisma.label.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: LABEL_MULTI_PCS.id },
+        data: { pcsCount: 0, status: 'LAYAWAY' },
+      }),
+    );
+  });
+
+  it('rejects layaway when requested pcs exceed available stock', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ ...VOUCHER_SEQUENCE, lastNumber: 12 });
+    mockPrisma.layawayEntry.create.mockResolvedValueOnce({ ...CREATED_ENTRY, id: 12 });
+    mockPrisma.layawayItem.create.mockResolvedValue({});
+    // Label has only 3 pcs, but requesting 5
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 3 });
+
+    const payload = makeLayawayPayload({
+      items: [{ labelId: LABEL_MULTI_PCS.id, itemId: 3, labelNo: 'SC/1', itemName: 'Silver Coin', grossWeight: 1000, netWeight: 1000, pcs: 5 }],
+    });
+
+    const res = await request(app).post('/api/layaway').send(payload);
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('Failed to create layaway entry');
+  });
 });
 
 // ════════════════════════════════════════════════════════════
 // DELETE /api/layaway/:id – Cancel layaway (restore stock)
 // ════════════════════════════════════════════════════════════
 describe('DELETE /api/layaway/:id', () => {
-  it('cancels layaway and restores all labels to IN_STOCK', async () => {
+  it('cancels layaway and restores pcsCount for all labels', async () => {
     const entry = {
       ...CREATED_ENTRY,
       items: [
-        { ...CREATED_ITEM, labelId: 100 },
-        { id: 2, layawayEntryId: 1, labelId: 101, itemId: 2, labelNo: 'GN/51' },
+        { ...CREATED_ITEM, labelId: 100, pcs: 1 },
+        { id: 2, layawayEntryId: 1, labelId: 101, itemId: 2, labelNo: 'GN/51', pcs: 1 },
       ],
     };
     mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(entry);
@@ -579,12 +686,18 @@ describe('DELETE /api/layaway/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.message).toBe('Layaway cancelled and items restored to stock');
 
-    // Both labels restored to IN_STOCK
+    // Both labels restored: pcsCount incremented and status set to IN_STOCK
     expect(mockPrisma.label.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 100 }, data: { status: 'IN_STOCK' } }),
+      expect.objectContaining({
+        where: { id: 100 },
+        data: { pcsCount: { increment: 1 }, status: 'IN_STOCK' },
+      }),
     );
     expect(mockPrisma.label.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 101 }, data: { status: 'IN_STOCK' } }),
+      expect.objectContaining({
+        where: { id: 101 },
+        data: { pcsCount: { increment: 1 }, status: 'IN_STOCK' },
+      }),
     );
 
     // Entry marked as CANCELLED
@@ -596,8 +709,8 @@ describe('DELETE /api/layaway/:id', () => {
     );
   });
 
-  it('reverses customer balance on cancellation', async () => {
-    const entry = { ...CREATED_ENTRY, dueAmount: 11796, items: [CREATED_ITEM] };
+  it('reverses customer balance and restores pcsCount on cancellation', async () => {
+    const entry = { ...CREATED_ENTRY, dueAmount: 11796, items: [{ ...CREATED_ITEM, pcs: 1 }] };
     mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(entry);
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.label.update.mockResolvedValue({});
@@ -616,7 +729,7 @@ describe('DELETE /api/layaway/:id', () => {
   });
 
   it('does not reverse balance when dueAmount is 0', async () => {
-    const entry = { ...CREATED_ENTRY, dueAmount: 0, items: [CREATED_ITEM] };
+    const entry = { ...CREATED_ENTRY, dueAmount: 0, items: [{ ...CREATED_ITEM, pcs: 1 }] };
     mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(entry);
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.label.update.mockResolvedValue({});
@@ -672,20 +785,44 @@ describe('DELETE /api/layaway/:id', () => {
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('Failed to cancel layaway');
   });
+
+  it('restores multiple pcs to label stock on cancellation', async () => {
+    const entry = {
+      ...CREATED_ENTRY,
+      items: [{ ...CREATED_ITEM, labelId: LABEL_MULTI_PCS.id, labelNo: 'SC/1', pcs: 3 }],
+    };
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(entry);
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.label.update.mockResolvedValue({});
+    mockPrisma.account.update.mockResolvedValue({});
+    mockPrisma.layawayEntry.update.mockResolvedValue({});
+
+    const res = await request(app).delete('/api/layaway/1');
+    expect(res.status).toBe(200);
+
+    // 3 pcs should be added back
+    expect(mockPrisma.label.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: LABEL_MULTI_PCS.id },
+        data: { pcsCount: { increment: 3 }, status: 'IN_STOCK' },
+      }),
+    );
+  });
 });
 
 // ════════════════════════════════════════════════════════════
 // PUT /api/layaway/:id – Update layaway entry
 // ════════════════════════════════════════════════════════════
 describe('PUT /api/layaway/:id', () => {
-  it('updates layaway entry and re-creates items', async () => {
-    const existingEntry = { ...CREATED_ENTRY, items: [{ ...CREATED_ITEM, labelId: 100 }] };
+  it('updates layaway entry, restores old pcsCount and decrements new', async () => {
+    const existingEntry = { ...CREATED_ENTRY, items: [{ ...CREATED_ITEM, labelId: 100, pcs: 1 }] };
     mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(existingEntry);
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.label.update.mockResolvedValue({});
     mockPrisma.layawayItem.deleteMany.mockResolvedValue({ count: 1 });
     mockPrisma.layawayEntry.update.mockResolvedValueOnce({ ...CREATED_ENTRY, narration: 'Updated' });
     mockPrisma.layawayItem.create.mockResolvedValue({});
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 1 });
 
     const res = await request(app)
       .put('/api/layaway/1')
@@ -693,9 +830,12 @@ describe('PUT /api/layaway/:id', () => {
 
     expect(res.status).toBe(200);
 
-    // Old labels restored first
+    // Old labels restored: pcsCount incremented and status IN_STOCK
     expect(mockPrisma.label.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 100 }, data: { status: 'IN_STOCK' } }),
+      expect.objectContaining({
+        where: { id: 100 },
+        data: { pcsCount: { increment: 1 }, status: 'IN_STOCK' },
+      }),
     );
 
     // Old items deleted

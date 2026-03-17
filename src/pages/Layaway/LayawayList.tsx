@@ -36,6 +36,7 @@ export default function LayawayList() {
     onSuccess: () => {
       toast.success('Layaway cancelled. Items restored to stock.');
       queryClient.invalidateQueries({ queryKey: ['layaways'] });
+      queryClient.invalidateQueries({ queryKey: ['labels-list'] });
       setSelectedId(null);
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to cancel'),

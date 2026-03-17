@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { layawayAPI, inventoryAPI, accountsAPI, mastersAPI } from '../../lib/api';
 import { formatIndianNumber, formatWeight, getToday, calculateGST, getDayName, getFinancialYear } from '../../lib/utils';
 import toast from 'react-hot-toast';
@@ -28,6 +29,14 @@ interface LayawayItem {
 export default function LayawayEntry() {
   const queryClient = useQueryClient();
   const labelInputRef = useRef<HTMLInputElement>(null);
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('id') ? Number(searchParams.get('id')) : null;
+  const [isEditLoaded, setIsEditLoaded] = useState(false);
+
+  // Pcs prompt modal state
+  const [pendingLabel, setPendingLabel] = useState<any>(null);
+  const [pendingPcs, setPendingPcs] = useState(1);
+  const [showPcsModal, setShowPcsModal] = useState(false);
 
   // Form state
   const [voucherDate, setVoucherDate] = useState(getToday());
@@ -51,6 +60,54 @@ export default function LayawayEntry() {
   const [discountAmount, setDiscountAmount] = useState(0);
   const [roundingDiscount, setRoundingDiscount] = useState(0);
   const [showNarrationModal, setShowNarrationModal] = useState(false);
+  const [editVoucherNo, setEditVoucherNo] = useState<string | null>(null);
+
+  // Load existing layaway for edit/view
+  useEffect(() => {
+    if (!editId || isEditLoaded) return;
+    layawayAPI.get(editId).then((res) => {
+      const entry = res.data;
+      setEditVoucherNo(entry.voucherNo);
+      setVoucherDate(entry.voucherDate?.slice(0, 10) || getToday());
+      setCustomerId(entry.accountId);
+      setCustomerData(entry.account);
+      setSalesmanName(entry.salesmanName || '');
+      setNarration(entry.narration || '');
+      setReference(entry.reference || '');
+      setBookName(entry.bookName || '');
+      setCashAmount(Number(entry.cashAmount) || 0);
+      setBankAmount(Number(entry.bankAmount) || 0);
+      setCardAmount(Number(entry.cardAmount) || 0);
+      setUpiAmount(Number(entry.upiAmount) || 0);
+      setOldGoldAmount(Number(entry.oldGoldAmount) || 0);
+      setDiscountAmount(Number(entry.discountAmount) || 0);
+      setRoundingDiscount(Number(entry.roundingDiscount) || 0);
+      setItems(
+        (entry.items || []).map((item: any) => ({
+          labelNo: item.labelNo,
+          itemName: item.itemName || item.label?.item?.name || '',
+          itemId: item.itemId,
+          labelId: item.labelId,
+          grossWeight: Number(item.grossWeight) || 0,
+          netWeight: Number(item.netWeight) || 0,
+          fineWeight: Number(item.fineWeight) || 0,
+          pcs: Number(item.pcs) || 1,
+          metalRate: Number(item.metalRate) || 0,
+          metalAmount: Number(item.metalAmount) || 0,
+          diamondWeight: Number(item.diamondWeight) || 0,
+          labourRate: Number(item.labourRate) || 0,
+          labourAmount: Number(item.labourAmount) || 0,
+          otherCharge: Number(item.otherCharge) || 0,
+          discountAmt: Number(item.discountAmt) || 0,
+          totalAmount: Number(item.totalAmount) || 0,
+          taxableAmount: Number(item.taxableAmount) || 0,
+        }))
+      );
+      setIsEditLoaded(true);
+    }).catch(() => {
+      toast.error('Failed to load layaway entry');
+    });
+  }, [editId, isEditLoaded]);
 
   // Calculated totals
   const totalGrossWeight = items.reduce((sum, i) => sum + i.grossWeight, 0);
@@ -88,6 +145,7 @@ export default function LayawayEntry() {
     onSuccess: (res) => {
       toast.success(`Layaway ${res.data.voucherNo} created!`);
       queryClient.invalidateQueries({ queryKey: ['layaways'] });
+      queryClient.invalidateQueries({ queryKey: ['labels-list'] });
       resetForm();
     },
     onError: () => toast.error('Failed to save layaway'),
@@ -106,12 +164,35 @@ export default function LayawayEntry() {
         return;
       }
 
+      if ((label.pcsCount || 0) <= 0) {
+        toast.error(`Label ${labelNo} has no pieces available in stock`);
+        return;
+      }
+
       // Check if already added
       if (items.find((i) => i.labelNo === label.labelNo)) {
         toast.error('Item already added');
         return;
       }
 
+      // Show pcs prompt if label has multiple pcs
+      setPendingLabel(label);
+      setPendingPcs(1);
+      if ((label.pcsCount || 1) > 1) {
+        setShowPcsModal(true);
+      } else {
+        addLabelToItems(label, 1);
+      }
+
+      setLabelNo('');
+      labelInputRef.current?.focus();
+    } catch (error) {
+      toast.error(`Label ${labelNo} not found`);
+    }
+  };
+
+  const addLabelToItems = async (label: any, pcs: number) => {
+    try {
       // Get latest metal rate
       const ratesRes = await mastersAPI.latestRates();
       const rates = ratesRes.data;
@@ -137,7 +218,7 @@ export default function LayawayEntry() {
         grossWeight: grossWt,
         netWeight: netWt,
         fineWeight: fineWt,
-        pcs: label.pcsCount || 1,
+        pcs,
         metalRate: rate,
         metalAmount: metalAmt,
         diamondWeight: 0,
@@ -149,12 +230,22 @@ export default function LayawayEntry() {
         taxableAmount: taxable,
       };
 
-      setItems([...items, newItem]);
-      setLabelNo('');
-      labelInputRef.current?.focus();
-    } catch (error) {
-      toast.error(`Label ${labelNo} not found`);
+      setItems((prev) => [...prev, newItem]);
+    } catch {
+      toast.error('Failed to get metal rates');
     }
+  };
+
+  const handlePcsConfirm = () => {
+    if (!pendingLabel) return;
+    const availablePcs = pendingLabel.pcsCount || 1;
+    if (pendingPcs < 1 || pendingPcs > availablePcs) {
+      toast.error(`Enter between 1 and ${availablePcs} pcs`);
+      return;
+    }
+    addLabelToItems(pendingLabel, pendingPcs);
+    setShowPcsModal(false);
+    setPendingLabel(null);
   };
 
   const removeItem = (index: number) => {
@@ -259,7 +350,7 @@ export default function LayawayEntry() {
         {/* Header */}
         <div className="panel">
           <div className="panel-header flex items-center justify-between">
-            <span>LayAway Entry [LY] - {customerData?.name || 'General Customer'}</span>
+            <span>LayAway Entry [{editVoucherNo || 'LY'}] - {customerData?.name || 'General Customer'}</span>
             <span className="text-xs text-gray-500">
               {getDayName(voucherDate)} | {voucherDate}
             </span>
@@ -344,6 +435,7 @@ export default function LayawayEntry() {
               <tr>
                 <th>Label No.</th>
                 <th>Item Name</th>
+                <th className="text-center">Pcs</th>
                 <th className="text-right">Gross Wt</th>
                 <th className="text-right">Net Wt</th>
                 <th className="text-right">Fine Wt</th>
@@ -365,6 +457,7 @@ export default function LayawayEntry() {
                   <tr key={idx} className="cursor-pointer hover:bg-blue-50">
                     <td className="font-medium">{item.labelNo}</td>
                     <td>{item.itemName}</td>
+                    <td className="text-center">{item.pcs}</td>
                     <td className="text-right">{formatWeight(item.grossWeight)}</td>
                     <td className="text-right">{formatWeight(item.netWeight)}</td>
                     <td className="text-right">{formatWeight(item.fineWeight)}</td>
@@ -386,7 +479,7 @@ export default function LayawayEntry() {
               })}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={14} className="text-center text-gray-400 py-8">
+                  <td colSpan={15} className="text-center text-gray-400 py-8">
                     Scan a label or barcode to add items for layaway
                   </td>
                 </tr>
@@ -635,6 +728,45 @@ export default function LayawayEntry() {
             </div>
             <div className="flex justify-end gap-2 p-4 border-t">
               <button onClick={() => setShowNarrationModal(false)} className="btn-primary">OK</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pcs Selection Modal */}
+      {showPcsModal && pendingLabel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-2xl w-[350px] flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 bg-blue-600 text-white rounded-t-lg">
+              <span className="font-semibold">Select Pieces for Layaway</span>
+              <button onClick={() => { setShowPcsModal(false); setPendingLabel(null); }} className="hover:bg-blue-500 rounded px-2">✕</button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="text-sm">
+                <span className="text-gray-600">Label:</span>{' '}
+                <span className="font-semibold">{pendingLabel.labelNo}</span>
+              </div>
+              <div className="text-sm">
+                <span className="text-gray-600">Available Pcs:</span>{' '}
+                <span className="font-semibold text-blue-700">{pendingLabel.pcsCount}</span>
+              </div>
+              <div>
+                <label className="form-label block text-sm">Pcs to put on Layaway</label>
+                <input
+                  type="number"
+                  className="form-input w-full"
+                  min={1}
+                  max={pendingLabel.pcsCount}
+                  value={pendingPcs}
+                  onChange={(e) => setPendingPcs(Number(e.target.value))}
+                  onKeyDown={(e) => e.key === 'Enter' && handlePcsConfirm()}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t">
+              <button onClick={() => { setShowPcsModal(false); setPendingLabel(null); }} className="btn-danger text-xs">Cancel</button>
+              <button onClick={handlePcsConfirm} className="btn-primary text-xs">Confirm</button>
             </div>
           </div>
         </div>

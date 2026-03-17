@@ -93,6 +93,7 @@ export default function RetailSalesEntry() {
     onSuccess: (res) => {
       toast.success(`Sales voucher ${res.data.voucherNo} created!`);
       queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['labels-list'] });
       setSavedVoucherId(res.data.id);
       // Auto-open voucher print dialog after save
       setShowVoucherPrint(true);
@@ -110,6 +111,11 @@ export default function RetailSalesEntry() {
 
       if (label.status !== 'IN_STOCK') {
         toast.error(`Label ${labelNo} is not in stock (${label.status})`);
+        return;
+      }
+
+      if ((label.pcsCount || 0) <= 0) {
+        toast.error(`Label ${labelNo} has no pieces available in stock`);
         return;
       }
 
