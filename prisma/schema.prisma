@@ -82,6 +82,7 @@ model Company {
   branchTransfers  BranchTransfer[]
   layawayEntries   LayawayEntry[]
   customerPayments CustomerPayment[]
+  savingsSchemes   SavingsScheme[]
   auditLogs        AuditLog[]
   attachments      Attachment[]
 
@@ -123,6 +124,7 @@ model Branch {
   branchReceipts     BranchTransfer[]  @relation("ReceivingBranch")
   labels             Label[]
   layawayEntries     LayawayEntry[]
+  savingsSchemes     SavingsScheme[]
   accounts           Account[]
   staff              BranchStaff[]
   auditLogs          AuditLog[]
@@ -343,6 +345,7 @@ model Account {
   layawayEntries   LayawayEntry[]
   journalEntries   JournalEntryLine[]
   customerPayments CustomerPayment[]
+  savingsSchemes   SavingsScheme[]
 
   @@index([companyId])
   @@index([branchId])
@@ -1054,6 +1057,83 @@ model BranchStaff {
   @@unique([userId, branchId])
   @@index([branchId])
   @@map("branch_staff")
+}
+
+// ============================================================
+// SAVINGS SCHEME (Monthly Installment Plan)
+// ============================================================
+
+model SavingsScheme {
+  id              Int              @id @default(autoincrement())
+  schemeNo        String           @unique  // "SS/1"
+  schemePrefix    String           @default("SS")
+  schemeNumber    Int
+  schemeName      String           @default("Gold Savings Scheme")
+  startDate       DateTime         @default(now())
+  maturityDate    DateTime
+  accountId       Int
+  account         Account          @relation(fields: [accountId], references: [id])
+  companyId       Int
+  company         Company          @relation(fields: [companyId], references: [id])
+  branchId        Int
+  branch          Branch           @relation(fields: [branchId], references: [id])
+
+  // Scheme config
+  durationMonths  Int              @default(11)   // Total installment months
+  monthlyAmount   Decimal          @default(0)    // Fixed monthly installment amount
+  bonusMonths     Int              @default(1)    // Bonus months given by shop on completion
+  bonusAmount     Decimal          @default(0)    // bonusMonths × monthlyAmount (auto-calculated)
+
+  // Tracking
+  paidInstallments Int             @default(0)    // Number of installments paid
+  missedInstallments Int           @default(0)    // Number of missed installments
+  totalPaidAmount  Decimal         @default(0)    // Sum of all installment payments
+  maturityValue    Decimal         @default(0)    // totalPaidAmount + bonusAmount
+
+  narration       String?
+  reference       String?
+  status          SchemeStatus     @default(ACTIVE)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  installments    SchemeInstallment[]
+
+  @@index([companyId])
+  @@index([accountId])
+  @@index([branchId])
+  @@index([startDate])
+  @@map("savings_schemes")
+}
+
+model SchemeInstallment {
+  id              Int              @id @default(autoincrement())
+  schemeId        Int
+  scheme          SavingsScheme    @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  installmentNo   Int              // 1, 2, 3, ... up to durationMonths
+  dueDate         DateTime         // Expected payment date for this installment
+  paidDate        DateTime?        // Actual payment date (null if unpaid)
+  amount          Decimal          @default(0)    // Amount paid
+  paymentMode     String?          // "Cash", "Bank", "Card", "UPI"
+  reference       String?          // Transaction reference / cheque no
+  narration       String?
+  status          InstallmentStatus @default(PENDING)
+  createdAt       DateTime         @default(now())
+
+  @@unique([schemeId, installmentNo])
+  @@map("scheme_installments")
+}
+
+enum SchemeStatus {
+  ACTIVE
+  MATURED       // All installments paid, awaiting redemption
+  REDEEMED      // Converted against a sale
+  CANCELLED
+}
+
+enum InstallmentStatus {
+  PENDING
+  PAID
+  MISSED
 }
 
 // ============================================================

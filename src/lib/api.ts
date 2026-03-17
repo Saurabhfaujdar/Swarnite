@@ -219,6 +219,17 @@ export const customerPaymentsAPI = {
   balanceHistory: (accountId: number, params?: any) => api.get(`/customer-payments/balance/${accountId}`, { params }),
 };
 
+// Savings Scheme
+export const savingsSchemeAPI = {
+  list: (params?: any) => api.get('/savings-scheme', { params }),
+  get: (id: number) => api.get(`/savings-scheme/${id}`),
+  create: (data: any) => api.post('/savings-scheme', data),
+  payInstallment: (id: number, data: any) => api.post(`/savings-scheme/${id}/installment`, data),
+  markMissed: (id: number) => api.put(`/savings-scheme/${id}/mark-missed`),
+  redeem: (id: number) => api.put(`/savings-scheme/${id}/redeem`),
+  cancel: (id: number) => api.delete(`/savings-scheme/${id}`),
+};
+
 // Files / Attachments
 export const filesAPI = {
   upload: (entityType: string, entityId: number, files: File[], category = 'document') => {

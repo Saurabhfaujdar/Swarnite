@@ -20,6 +20,7 @@ import authRoutes from './routes/auth';
 import cashBankRoutes from './routes/cashBank';
 import layawayRoutes from './routes/layaway';
 import customerPaymentRoutes from './routes/customerPayments';
+import savingsSchemeRoutes from './routes/savingsScheme';
 import filesRoutes from './routes/files';
 
 const app = express();
@@ -108,6 +109,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/cash-bank', cashBankRoutes);
 app.use('/api/layaway', layawayRoutes);
 app.use('/api/customer-payments', customerPaymentRoutes);
+app.use('/api/savings-scheme', savingsSchemeRoutes);
 app.use('/api/files', filesRoutes);
 
 // ─── Static files + SPA fallback (production builds) ───────
