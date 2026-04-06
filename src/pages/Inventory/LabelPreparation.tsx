@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 interface LabelItem {
   prefix: string;
   labelNo: string;
+  tagId: string;
   itemId: number;
   itemName: string;
   grossWeight: number;
@@ -28,6 +29,7 @@ export default function LabelPreparation() {
   // New item entry
   const [entry, setEntry] = useState({
     prefix: '',
+    tagId: '',
     itemId: 0,
     grossWeight: 0,
     netWeight: 0,
@@ -72,6 +74,14 @@ export default function LabelPreparation() {
     if (entry.huid && entry.huid.length !== 6) return toast.error('HUID must be exactly 6 alphanumeric characters');
 
     const item = allItems?.find((i: any) => i.id === entry.itemId);
+    const requiresTagId = item?.itemGroup?.requiresTagId;
+
+    if (requiresTagId && !entry.tagId.trim()) {
+      return toast.error(`Tag ID is required for ${item?.itemGroup?.name} items`);
+    }
+
+    // Enforce pcs = 1 when tagId is provided
+    const pcsCount = entry.tagId.trim() ? 1 : entry.pcsCount;
 
     setItems([
       ...items,
@@ -81,11 +91,14 @@ export default function LabelPreparation() {
         itemName: item?.name || '',
         netWeight: entry.netWeight || entry.grossWeight - entry.diamondWeight - entry.stoneWeight,
         mrp: entry.mrp || null,
+        pcsCount,
+        tagId: entry.tagId.trim(),
       },
     ]);
 
     setEntry({
       prefix: entry.prefix,
+      tagId: '',
       itemId: 0,
       grossWeight: 0,
       netWeight: 0,
@@ -107,6 +120,7 @@ export default function LabelPreparation() {
       labelDate,
       labels: items.map((i) => ({
         prefix: i.prefix,
+        tagId: i.tagId || undefined,
         itemId: i.itemId,
         grossWeight: i.grossWeight,
         netWeight: i.netWeight,
@@ -124,6 +138,10 @@ export default function LabelPreparation() {
   const totalGrossWt = items.reduce((s, i) => s + i.grossWeight, 0);
   const totalNetWt = items.reduce((s, i) => s + i.netWeight, 0);
   const totalPcs = items.reduce((s, i) => s + i.pcsCount, 0);
+
+  // Get selected item and check if it requires tag ID
+  const selectedItem = allItems?.find((i: any) => i.id === entry.itemId);
+  const requiresTagId = selectedItem?.itemGroup?.requiresTagId || false;
 
   return (
     <div className="flex flex-col gap-3 h-full">
@@ -165,7 +183,7 @@ export default function LabelPreparation() {
             <select
               className="form-select w-48"
               value={entry.itemId}
-              onChange={(e) => setEntry({ ...entry, itemId: Number(e.target.value) })}
+              onChange={(e) => setEntry({ ...entry, itemId: Number(e.target.value), tagId: '' })}
             >
               <option value={0}>Select Item</option>
               {allItems?.map((item: any) => (
@@ -173,6 +191,19 @@ export default function LabelPreparation() {
               ))}
             </select>
           </div>
+          {entry.itemId > 0 && (
+            <div>
+              <label className="form-label block text-xs">
+                Tag ID {requiresTagId && <span className="text-red-500">*</span>}
+              </label>
+              <input
+                className="form-input w-24 uppercase"
+                value={entry.tagId}
+                onChange={(e) => setEntry({ ...entry, tagId: e.target.value.toUpperCase() })}
+                placeholder="e.g. A001"
+              />
+            </div>
+          )}
           <div>
             <label className="form-label block text-xs">Gross Wt (gm)</label>
             <input
@@ -218,8 +249,10 @@ export default function LabelPreparation() {
             <input
               type="number"
               className="form-input w-16 text-right"
-              value={entry.pcsCount}
+              value={entry.tagId ? 1 : entry.pcsCount}
               onChange={(e) => setEntry({ ...entry, pcsCount: Number(e.target.value) })}
+              disabled={!!entry.tagId}
+              title={entry.tagId ? 'Pcs is fixed to 1 when Tag ID is provided' : ''}
             />
           </div>
           <div>
@@ -265,6 +298,7 @@ export default function LabelPreparation() {
             <tr>
               <th>Sr.</th>
               <th>Prefix</th>
+              <th>Tag ID</th>
               <th>Item Name</th>
               <th className="text-right">Gross Wt</th>
               <th className="text-right">Diamond Wt</th>
@@ -283,6 +317,7 @@ export default function LabelPreparation() {
               <tr key={idx}>
                 <td>{idx + 1}</td>
                 <td>{item.prefix || 'Auto'}</td>
+                <td>{item.tagId || '-'}</td>
                 <td>{item.itemName}</td>
                 <td className="text-right">{formatWeight(item.grossWeight)}</td>
                 <td className="text-right">{formatWeight(item.diamondWeight)}</td>

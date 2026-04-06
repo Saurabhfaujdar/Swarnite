@@ -439,11 +439,19 @@ describe('SalesEntryList column sorting', () => {
 // Navigation
 // ════════════════════════════════════════════════════════════
 describe('SalesEntryList navigation', () => {
-  it('navigates to sales/new on New Sale click', async () => {
+  it('navigates to sales/retail on New Sale click', async () => {
     renderList();
     const user = userEvent.setup();
-    await user.click(screen.getByText('+ New Sale'));
-    expect(mockNavigate).toHaveBeenCalledWith('/sales/new');
+    await user.click(screen.getByTestId('new-sale-btn'));
+    expect(mockNavigate).toHaveBeenCalledWith('/sales/retail');
+  });
+
+  it('renders New Sale button visible and enabled', () => {
+    renderList();
+    const btn = screen.getByTestId('new-sale-btn');
+    expect(btn).toBeDefined();
+    expect(btn.textContent).toContain('+ New Sale');
+    expect((btn as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('navigates to voucher detail on row click', async () => {

@@ -743,7 +743,7 @@ describe('Payment overpayment validation', () => {
       // total = 100000 > voucherAmount 77722
     }));
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Total payment cannot exceed voucher amount');
+    expect(res.body.error).toBe('Total payment cannot exceed voucher amount plus outstanding balance');
   });
 
   it('POST allows payment equal to voucher amount', async () => {
@@ -859,5 +859,105 @@ describe('CLOSED voucher handling', () => {
         data: { status: 'CLOSED' },
       })
     );
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// Label pcs handling on sales
+// ════════════════════════════════════════════════════════════
+describe('Label pcs handling', () => {
+  it('POST decrements label pcsCount and keeps IN_STOCK when pcs remain', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 20 });
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce(VOUCHER_1);
+    mockPrisma.salesItem.create.mockResolvedValueOnce(ITEM_1);
+    // Label has 5 pcs, selling 2
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ branchId: 1, status: 'IN_STOCK', labelNo: 'GN/51', pcsCount: 5 });
+    mockPrisma.label.update.mockResolvedValueOnce({});
+    mockPrisma.account.update.mockResolvedValueOnce({});
+    mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce(FULL_VOUCHER);
+
+    const res = await request(app).post('/api/sales').send(makeSalesPayload({
+      items: [{
+        ...ITEM_1,
+        pcs: 2, // selling 2 of 5 pcs
+      }],
+    }));
+    expect(res.status).toBe(201);
+    
+    // Verify label was updated with correct pcsCount and status
+    expect(mockPrisma.label.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pcsCount: 3, // 5 - 2 = 3 remaining
+          status: 'IN_STOCK', // should stay IN_STOCK
+        }),
+      })
+    );
+  });
+
+  it('POST sets label status to SOLD when all pcs are sold', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 21 });
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce(VOUCHER_1);
+    mockPrisma.salesItem.create.mockResolvedValueOnce(ITEM_1);
+    // Label has 3 pcs, selling all 3
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ branchId: 1, status: 'IN_STOCK', labelNo: 'GN/51', pcsCount: 3 });
+    mockPrisma.label.update.mockResolvedValueOnce({});
+    mockPrisma.account.update.mockResolvedValueOnce({});
+    mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce(FULL_VOUCHER);
+
+    const res = await request(app).post('/api/sales').send(makeSalesPayload({
+      items: [{
+        ...ITEM_1,
+        pcs: 3, // selling all 3 pcs
+      }],
+    }));
+    expect(res.status).toBe(201);
+    
+    // Verify label was marked SOLD
+    expect(mockPrisma.label.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pcsCount: 0,
+          status: 'SOLD',
+        }),
+      })
+    );
+  });
+
+  it('POST rejects when selling more pcs than available', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 22 });
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce(VOUCHER_1);
+    mockPrisma.salesItem.create.mockResolvedValueOnce(ITEM_1);
+    // Label has only 2 pcs, trying to sell 5
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ branchId: 1, status: 'IN_STOCK', labelNo: 'GN/51', pcsCount: 2 });
+
+    const res = await request(app).post('/api/sales').send(makeSalesPayload({
+      items: [{
+        ...ITEM_1,
+        pcs: 5, // trying to sell 5 when only 2 available
+      }],
+    }));
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('only 2 pcs available');
+  });
+
+  it('POST rejects when pcs is less than 1', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 23 });
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce(VOUCHER_1);
+    mockPrisma.salesItem.create.mockResolvedValueOnce(ITEM_1);
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ branchId: 1, status: 'IN_STOCK', labelNo: 'GN/51', pcsCount: 5 });
+
+    const res = await request(app).post('/api/sales').send(makeSalesPayload({
+      items: [{
+        ...ITEM_1,
+        pcs: 0, // invalid: must sell at least 1
+      }],
+    }));
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('Must sell at least 1');
   });
 });

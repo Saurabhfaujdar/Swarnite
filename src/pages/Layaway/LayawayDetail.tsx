@@ -73,6 +73,7 @@ export default function LayawayDetail() {
       toast.success('Layaway converted to sale!');
       queryClient.invalidateQueries({ queryKey: ['layaway', id] });
       queryClient.invalidateQueries({ queryKey: ['layaways'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-list'] });
       setShowConvertModal(false);
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to convert'),

@@ -18,8 +18,8 @@ router.get('/', async (req: Request, res: Response) => {
 
     if (dateFrom && dateTo) {
       where.voucherDate = {
-        gte: new Date(dateFrom as string),
-        lte: new Date(dateTo as string),
+        gte: new Date(dateFrom + 'T00:00:00'),
+        lte: new Date(dateTo + 'T23:59:59.999'),
       };
     }
     if (type) where.purchaseType = type as any;
@@ -72,29 +72,29 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Access denied to target branch' });
     }
 
-    // Generate voucher number
-    const sequence = await prisma.voucherSequence.upsert({
-      where: {
-        companyId_prefix_entityType_financialYear: {
+    const voucher = await prisma.$transaction(async (tx) => {
+      // Generate voucher number inside transaction to ensure rollback on failure
+      const sequence = await tx.voucherSequence.upsert({
+        where: {
+          companyId_prefix_entityType_financialYear: {
+            companyId: req.companyId!,
+            prefix,
+            entityType: 'PURCHASE',
+            financialYear: data.financialYear || '2025-2026',
+          },
+        },
+        update: { lastNumber: { increment: 1 } },
+        create: {
           companyId: req.companyId!,
           prefix,
           entityType: 'PURCHASE',
           financialYear: data.financialYear || '2025-2026',
+          lastNumber: 1,
         },
-      },
-      update: { lastNumber: { increment: 1 } },
-      create: {
-        companyId: req.companyId!,
-        prefix,
-        entityType: 'PURCHASE',
-        financialYear: data.financialYear || '2025-2026',
-        lastNumber: 1,
-      },
-    });
+      });
 
-    const voucherNo = `${prefix}/${sequence.lastNumber}`;
+      const voucherNo = `${prefix}/${sequence.lastNumber}`;
 
-    const voucher = await prisma.$transaction(async (tx) => {
       const purchaseVoucher = await tx.purchaseVoucher.create({
         data: {
           voucherNo,

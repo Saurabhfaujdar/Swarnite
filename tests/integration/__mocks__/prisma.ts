@@ -33,7 +33,7 @@ const modelNames = [
   'cashEntry', 'cashEntryLine',
   'inventoryItem', 'labelEntry', 'labelItem',
   'branchTransfer', 'branchTransferItem',
-  'layaway', 'layawayEntry', 'layawayItem', 'layawayPayment',
+  'layaway', 'layawayEntry', 'layawayItem', 'layawayPayment', 'layawayStatusHistory',
   'label', 'item', 'labelPrefix',
   'voucherSequence',
   'customerPayment',

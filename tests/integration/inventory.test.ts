@@ -28,14 +28,14 @@ import app from '../../server/app';
 const METAL_GOLD = { id: 1, name: 'Gold', code: 'GOLD', isActive: true };
 const METAL_SILVER = { id: 2, name: 'Silver', code: 'SILVER', isActive: true };
 
-const GROUP_NECKLACE = { id: 1, name: 'Necklace', code: 'NEC', metalTypeId: 1, isActive: true, metalType: METAL_GOLD };
-const GROUP_PENDANT = { id: 7, name: 'Pendant', code: 'PND', metalTypeId: 1, isActive: true, metalType: METAL_GOLD };
-const GROUP_MANGALSUTRA = { id: 8, name: 'Mangalsutra', code: 'MNG', metalTypeId: 1, isActive: true, metalType: METAL_GOLD };
-const GROUP_COIN = { id: 10, name: 'Coin', code: 'CON', metalTypeId: 1, isActive: true, metalType: METAL_GOLD };
-const GROUP_BRACELET = { id: 4, name: 'Bracelet', code: 'BRC', metalTypeId: 1, isActive: true, metalType: METAL_GOLD };
-const GROUP_NOSEPIN = { id: 9, name: 'Nose Pin', code: 'NOS', metalTypeId: 1, isActive: true, metalType: METAL_GOLD };
-const GROUP_SILVER_COIN = { id: 12, name: 'Silver Coin', code: 'SCN', metalTypeId: 2, isActive: true, metalType: METAL_SILVER };
-const GROUP_RING = { id: 5, name: 'Ring', code: 'RNG', metalTypeId: 1, isActive: true, metalType: METAL_GOLD };
+const GROUP_NECKLACE = { id: 1, name: 'Necklace', code: 'NEC', metalTypeId: 1, isActive: true, requiresTagId: true, metalType: METAL_GOLD };
+const GROUP_PENDANT = { id: 7, name: 'Pendant', code: 'PND', metalTypeId: 1, isActive: true, requiresTagId: true, metalType: METAL_GOLD };
+const GROUP_MANGALSUTRA = { id: 8, name: 'Mangalsutra', code: 'MNG', metalTypeId: 1, isActive: true, requiresTagId: true, metalType: METAL_GOLD };
+const GROUP_COIN = { id: 10, name: 'Coin', code: 'CON', metalTypeId: 1, isActive: true, requiresTagId: true, metalType: METAL_GOLD };
+const GROUP_BRACELET = { id: 4, name: 'Bracelet', code: 'BRC', metalTypeId: 1, isActive: true, requiresTagId: true, metalType: METAL_GOLD };
+const GROUP_NOSEPIN = { id: 9, name: 'Nose Pin', code: 'NOS', metalTypeId: 1, isActive: true, requiresTagId: false, metalType: METAL_GOLD };
+const GROUP_SILVER_COIN = { id: 12, name: 'Silver Coin', code: 'SCN', metalTypeId: 2, isActive: true, requiresTagId: true, metalType: METAL_SILVER };
+const GROUP_RING = { id: 5, name: 'Ring', code: 'RNG', metalTypeId: 1, isActive: true, requiresTagId: false, metalType: METAL_GOLD };
 
 const PURITY_22KT = { id: 1, name: '22 KT', code: '22KT', percentage: 91.6, isActive: true };
 const PURITY_24KT = { id: 2, name: '24 KT', code: '24KT', percentage: 99.9, isActive: true };
@@ -799,5 +799,209 @@ describe('GET /api/inventory/stock-summary', () => {
     expect(res.status).toBe(200);
     expect(res.body.totalInStock).toBe(50);
     expect(res.body.totalSold).toBe(20);
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// TAG ID FEATURE TESTS
+// ════════════════════════════════════════════════════════════
+describe('Tag ID feature for label creation', () => {
+  describe('POST /api/inventory/labels (single) with tagId', () => {
+    it('creates label with tagId for item group that requires it', async () => {
+      // Necklace requires tagId
+      mockPrisma.item.findUnique.mockResolvedValueOnce(ITEM_GOLD_NECKLACE);
+      mockPrisma.labelPrefix.findUnique.mockResolvedValueOnce(PREFIX_GN);
+      mockPrisma.label.findFirst.mockResolvedValueOnce(null); // No existing label with this tagId
+      mockPrisma.label.create.mockResolvedValueOnce({
+        id: 600,
+        labelNo: 'GN/A001',
+        tagId: 'A001',
+        prefixId: 1,
+        itemId: 1,
+        pcsCount: 1,
+        status: 'IN_STOCK',
+        item: ITEM_GOLD_NECKLACE,
+        branch: DUMMY_BRANCH,
+      });
+
+      const res = await request(app)
+        .post('/api/inventory/labels')
+        .send({
+          prefixId: 1,
+          itemId: 1,
+          tagId: 'A001',
+          grossWeight: 12.5,
+          netWeight: 11.8,
+          branchId: 1,
+          pcsCount: 5, // Should be overridden to 1 when tagId is provided
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.labelNo).toBe('GN/A001');
+      expect(res.body.tagId).toBe('A001');
+      expect(res.body.pcsCount).toBe(1); // Enforced to 1
+      // Should NOT increment prefix lastNumber when tagId is used
+      expect(mockPrisma.labelPrefix.update).not.toHaveBeenCalled();
+    });
+
+    it('fails when tagId is missing for item group that requires it', async () => {
+      // Necklace requires tagId (requiresTagId: true)
+      mockPrisma.item.findUnique.mockResolvedValueOnce(ITEM_GOLD_NECKLACE);
+
+      const res = await request(app)
+        .post('/api/inventory/labels')
+        .send({
+          prefixId: 1,
+          itemId: 1,
+          grossWeight: 12.5,
+          netWeight: 11.8,
+          branchId: 1,
+          // No tagId provided
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/Tag ID is required for Necklace items/);
+    });
+
+    it('creates label with auto-sequence for item group that does NOT require tagId', async () => {
+      // Nose Pin does NOT require tagId (requiresTagId: false)
+      mockPrisma.item.findUnique.mockResolvedValueOnce(ITEM_GOLD_NOSEPIN);
+      mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GN2, lastNumber: 1 });
+      mockPrisma.label.create.mockResolvedValueOnce({
+        id: 601,
+        labelNo: 'GN2/1',
+        tagId: null,
+        prefixId: 9,
+        itemId: 10,
+        pcsCount: 50,
+        status: 'IN_STOCK',
+        item: ITEM_GOLD_NOSEPIN,
+        branch: DUMMY_BRANCH,
+      });
+
+      const res = await request(app)
+        .post('/api/inventory/labels')
+        .send({
+          prefixId: 9,
+          itemId: 10,
+          grossWeight: 5.0,
+          netWeight: 4.8,
+          branchId: 1,
+          pcsCount: 50, // Multiple pcs allowed for bulk items
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.labelNo).toBe('GN2/1');
+      expect(res.body.tagId).toBeNull();
+      expect(res.body.pcsCount).toBe(50);
+      // Should increment prefix lastNumber
+      expect(mockPrisma.labelPrefix.update).toHaveBeenCalled();
+    });
+
+    it('fails when tagId already exists for prefix', async () => {
+      mockPrisma.item.findUnique.mockResolvedValueOnce(ITEM_GOLD_NECKLACE);
+      mockPrisma.labelPrefix.findUnique.mockResolvedValueOnce(PREFIX_GN);
+      // Existing label with same tagId
+      mockPrisma.label.findFirst.mockResolvedValueOnce({
+        id: 500,
+        labelNo: 'GN/A001',
+        tagId: 'A001',
+        prefixId: 1,
+      });
+
+      const res = await request(app)
+        .post('/api/inventory/labels')
+        .send({
+          prefixId: 1,
+          itemId: 1,
+          tagId: 'A001',
+          grossWeight: 12.5,
+          netWeight: 11.8,
+          branchId: 1,
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/Tag ID 'A001' already exists for prefix GN/);
+    });
+  });
+
+  describe('POST /api/inventory/labels/batch with tagId', () => {
+    it('creates batch labels with tagIds for items that require them', async () => {
+      mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
+
+      // Label 1: Gold Necklace with tagId (requires tagId)
+      mockPrisma.item.findUnique.mockResolvedValueOnce(ITEM_GOLD_NECKLACE);
+      mockPrisma.labelPrefix.findUnique.mockResolvedValueOnce(PREFIX_GN);
+      mockPrisma.label.findFirst.mockResolvedValueOnce(null);
+      mockPrisma.label.create.mockResolvedValueOnce({
+        id: 700,
+        labelNo: 'GN/B002',
+        tagId: 'B002',
+        pcsCount: 1,
+        status: 'IN_STOCK',
+      });
+
+      const res = await request(app)
+        .post('/api/inventory/labels/batch')
+        .send({
+          labels: [
+            { itemId: 1, prefix: 'GN', tagId: 'B002', grossWeight: 15.0, netWeight: 14.2, pcsCount: 3 },
+          ],
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.count).toBe(1);
+      expect(res.body.labels[0].labelNo).toBe('GN/B002');
+      expect(res.body.labels[0].tagId).toBe('B002');
+      expect(res.body.labels[0].pcsCount).toBe(1); // Enforced to 1
+    });
+
+    it('fails batch when item requires tagId but none provided', async () => {
+      mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 1 });
+      mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_GN);
+      // Need to return full item with itemGroup for validation
+      mockPrisma.item.findUnique.mockResolvedValueOnce(ITEM_GOLD_NECKLACE);
+
+      const res = await request(app)
+        .post('/api/inventory/labels/batch')
+        .send({
+          labels: [
+            { itemId: 1, grossWeight: 15.0, netWeight: 14.2 }, // No tagId
+          ],
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/Tag ID is required/);
+    });
+
+    it('mixes tagId and auto-sequence labels in same batch', async () => {
+      mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
+
+      // Label 1: Nose Pin (no tagId required, auto-sequence)
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 9 });
+      mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_GN2);
+      mockPrisma.item.findUnique.mockResolvedValueOnce(ITEM_GOLD_NOSEPIN);
+      mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GN2, lastNumber: 2 });
+      mockPrisma.label.create.mockResolvedValueOnce({
+        id: 800,
+        labelNo: 'GN2/2',
+        tagId: null,
+        pcsCount: 100,
+        status: 'IN_STOCK',
+      });
+
+      const res = await request(app)
+        .post('/api/inventory/labels/batch')
+        .send({
+          labels: [
+            { itemId: 10, grossWeight: 2.5, netWeight: 2.3, pcsCount: 100 }, // Bulk nose pins
+          ],
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.labels[0].labelNo).toBe('GN2/2');
+      expect(res.body.labels[0].pcsCount).toBe(100); // Multiple pcs allowed
+    });
   });
 });

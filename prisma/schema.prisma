@@ -170,16 +170,17 @@ model MetalType {
 }
 
 model ItemGroup {
-  id          Int        @id @default(autoincrement())
-  name        String     // e.g., "RING", "CHAIN", "BANGLE", "EARRING"
-  code        String     @unique
-  metalTypeId Int
-  metalType   MetalType  @relation(fields: [metalTypeId], references: [id])
-  hsnCode     String?    // HSN Code for GST (711319 for gold jewelry)
-  cgstRate    Decimal    @default(1.5)
-  sgstRate    Decimal    @default(1.5)
-  igstRate    Decimal    @default(3.0)
-  isActive    Boolean    @default(true)
+  id            Int        @id @default(autoincrement())
+  name          String     // e.g., "RING", "CHAIN", "BANGLE", "EARRING"
+  code          String     @unique
+  metalTypeId   Int
+  metalType     MetalType  @relation(fields: [metalTypeId], references: [id])
+  hsnCode       String?    // HSN Code for GST (711319 for gold jewelry)
+  cgstRate      Decimal    @default(1.5)
+  sgstRate      Decimal    @default(1.5)
+  igstRate      Decimal    @default(3.0)
+  requiresTagId Boolean    @default(false) // If true, labels require physical tag ID (chains, bangles, coins)
+  isActive      Boolean    @default(true)
 
   items       Item[]
   prefixes    LabelPrefix[]
@@ -242,9 +243,10 @@ model LabelPrefix {
 
 model Label {
   id            Int          @id @default(autoincrement())
-  labelNo       String       @unique  // "PA22/509", "ER-1/10"
+  labelNo       String       @unique  // "PA22/509" or "CH22/A001" (with tagId)
   prefixId      Int
   prefix        LabelPrefix  @relation(fields: [prefixId], references: [id])
+  tagId         String?      // Physical tag ID (e.g., "A001") for items requiring manual tagging
   itemId        Int
   item          Item         @relation(fields: [itemId], references: [id])
   grossWeight   Decimal      @default(0)
@@ -266,6 +268,7 @@ model Label {
   branchTransferItems BranchTransferItem[]
   layawayItems  LayawayItem[]
 
+  @@unique([prefixId, tagId]) // tagId must be unique within each prefix
   @@map("labels")
 }
 

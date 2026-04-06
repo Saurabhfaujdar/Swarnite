@@ -380,6 +380,7 @@ describe('POST /api/layaway', () => {
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.voucherSequence.upsert.mockResolvedValueOnce(VOUCHER_SEQUENCE);
     mockPrisma.layawayEntry.create.mockResolvedValueOnce(CREATED_ENTRY);
+    mockPrisma.layawayStatusHistory.create.mockResolvedValueOnce({}); // Status history
     mockPrisma.layawayItem.create.mockResolvedValueOnce(CREATED_ITEM);
     mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 1 });
     mockPrisma.label.update.mockResolvedValueOnce({ ...LABEL_1, pcsCount: 0, status: 'LAYAWAY' });

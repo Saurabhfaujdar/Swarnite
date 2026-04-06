@@ -44,8 +44,8 @@ router.get('/', async (req: Request, res: Response) => {
 
     if (dateFrom && dateTo) {
       where.voucherDate = {
-        gte: new Date(dateFrom as string),
-        lte: new Date(new Date(dateTo as string).setHours(23, 59, 59, 999)),
+        gte: new Date(dateFrom + 'T00:00:00'),
+        lte: new Date(dateTo + 'T23:59:59.999'),
       };
     }
 
@@ -229,8 +229,23 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Access denied to target branch' });
     }
 
+    // Validate all items have required fields
+    for (const item of data.items) {
+      if (!item.itemId) {
+        return res.status(400).json({ error: `Item "${item.itemName || item.labelNo}" is missing itemId` });
+      }
+    }
+
     const result = await prisma.$transaction(async (tx) => {
-      const sequence = await tx.voucherSequence.upsert({
+      // Get max existing voucher number to prevent conflicts
+      const maxExisting = await tx.layawayEntry.findFirst({
+        where: { companyId: req.companyId!, voucherPrefix: 'LY' },
+        orderBy: { voucherNumber: 'desc' },
+        select: { voucherNumber: true },
+      });
+      const minNextNumber = (maxExisting?.voucherNumber || 0) + 1;
+
+      let sequence = await tx.voucherSequence.upsert({
         where: {
           companyId_prefix_entityType_financialYear: {
             companyId: req.companyId!,
@@ -249,7 +264,24 @@ router.post('/', async (req: Request, res: Response) => {
         },
       });
 
-      const voucherNo = `LY/${sequence.lastNumber}`;
+      // Ensure voucher number doesn't conflict with existing entries
+      let voucherNumber = sequence.lastNumber;
+      if (voucherNumber < minNextNumber) {
+        voucherNumber = minNextNumber;
+        await tx.voucherSequence.update({
+          where: {
+            companyId_prefix_entityType_financialYear: {
+              companyId: req.companyId!,
+              prefix: 'LY',
+              entityType: 'LAYAWAY',
+              financialYear: data.financialYear || '2025-2026',
+            },
+          },
+          data: { lastNumber: voucherNumber },
+        });
+      }
+
+      const voucherNo = `LY/${voucherNumber}`;
       const voucherAmount = data.voucherAmount || 0;
       const paymentAmount = data.paymentAmount || 0;
       const initialStatus = deriveStatus(voucherAmount, paymentAmount, 'ACTIVE');
@@ -258,7 +290,7 @@ router.post('/', async (req: Request, res: Response) => {
         data: {
           voucherNo,
           voucherPrefix: 'LY',
-          voucherNumber: sequence.lastNumber,
+          voucherNumber,
           voucherDate: new Date(data.voucherDate || new Date()),
           dueDate: data.dueDate ? new Date(data.dueDate) : null,
           expiryDate: data.expiryDate ? new Date(data.expiryDate) : null,
@@ -374,9 +406,9 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     res.status(201).json(fullEntry);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating layaway entry:', error);
-    res.status(500).json({ error: 'Failed to create layaway entry' });
+    res.status(500).json({ error: error?.message || 'Failed to create layaway entry' });
   }
 });
 
@@ -489,34 +521,154 @@ router.post('/:id/convert', async (req: Request, res: Response) => {
         });
       }
 
-      // Release all reserved labels → SOLD
+      // Release all reserved labels → SOLD only when pcsCount is exactly 0
       for (const item of layaway.items) {
         if (item.labelId) {
-          await tx.label.update({
-            where: { id: item.labelId },
-            data: { status: 'SOLD' },
-          });
+          const label = await tx.label.findUnique({ where: { id: item.labelId }, select: { pcsCount: true } });
+          // Only mark as SOLD when ALL pieces are sold (pcsCount === 0)
+          if (label && label.pcsCount === 0) {
+            await tx.label.update({
+              where: { id: item.labelId },
+              data: { status: 'SOLD' },
+            });
+          } else if (label && label.pcsCount > 0) {
+            // Ensure it stays IN_STOCK if there are remaining pieces
+            await tx.label.update({
+              where: { id: item.labelId },
+              data: { status: 'IN_STOCK' },
+            });
+          }
         }
       }
 
-      // Mark layaway CONVERTED, store sale reference
+      // Generate a SalesVoucher number
+      const voucherPrefix = data.voucherPrefix || 'JGI';
+      const now = new Date();
+      const fy = now.getMonth() + 1 >= 4
+        ? `${now.getFullYear()}-${now.getFullYear() + 1}`
+        : `${now.getFullYear() - 1}-${now.getFullYear()}`;
+      const sequence = await tx.voucherSequence.upsert({
+        where: {
+          companyId_prefix_entityType_financialYear: {
+            companyId: req.companyId!,
+            prefix: voucherPrefix,
+            entityType: 'SALES',
+            financialYear: fy,
+          },
+        },
+        update: { lastNumber: { increment: 1 } },
+        create: {
+          companyId: req.companyId!,
+          prefix: voucherPrefix,
+          entityType: 'SALES',
+          financialYear: fy,
+          lastNumber: 1,
+        },
+      });
+      const saleVoucherNo = `${voucherPrefix}/${sequence.lastNumber}`;
+
+      // Calculate total payment amount including final payment
+      const finalAmt = Number(data.finalPaymentAmount) || 0;
+      const totalPayment = Number(layaway.paymentAmount) + finalAmt;
+
+      // Distribute final payment into the correct payment mode bucket
+      const finalMode = (data.finalPaymentMode || 'Cash') as string;
+      const saleCash = Number(layaway.cashAmount) + (finalMode === 'Cash' ? finalAmt : 0);
+      const saleBank = Number(layaway.bankAmount) + (finalMode === 'Bank' ? finalAmt : 0);
+      const saleCard = Number(layaway.cardAmount) + (finalMode === 'Card' ? finalAmt : 0);
+      const saleUpi  = Number(layaway.upiAmount)  + (finalMode === 'UPI'  ? finalAmt : 0);
+      const saleOg   = Number(layaway.oldGoldAmount) + (finalMode === 'OldGold' ? finalAmt : 0);
+
+      // Create the SalesVoucher from layaway data
+      const salesVoucher = await tx.salesVoucher.create({
+        data: {
+          voucherNo: saleVoucherNo,
+          voucherPrefix,
+          voucherNumber: sequence.lastNumber,
+          voucherDate: now,
+          accountId: layaway.accountId,
+          salesmanId: null,
+          companyId: req.companyId!,
+          branchId: layaway.branchId,
+          userId: req.userId!,
+          totalGrossWeight: layaway.totalGrossWeight,
+          totalNetWeight: layaway.totalNetWeight,
+          totalPcs: layaway.totalPcs,
+          metalAmount: layaway.metalAmount,
+          labourAmount: layaway.labourAmount,
+          otherCharge: layaway.otherCharge,
+          discountStAmount: 0,
+          totalAmount: layaway.totalAmount,
+          taxableAmount: layaway.taxableAmount,
+          cgstAmount: layaway.cgstAmount,
+          sgstAmount: layaway.sgstAmount,
+          igstAmount: 0,
+          totalGstAmount: Number(layaway.cgstAmount) + Number(layaway.sgstAmount),
+          discountPercent: 0,
+          discountAmount: layaway.discountAmount,
+          roundingDiscount: layaway.roundingDiscount,
+          voucherAmount: layaway.voucherAmount,
+          cashAmount: saleCash,
+          bankAmount: saleBank,
+          cardAmount: saleCard,
+          upiAmount: saleUpi,
+          oldGoldAmount: saleOg,
+          advanceAmount: 0,
+          paymentAmount: totalPayment,
+          dueAmount: 0,
+          previousOs: layaway.previousOs,
+          finalDue: 0,
+          narration: layaway.narration ? `Converted from Layaway ${layaway.voucherNo}. ${layaway.narration}` : `Converted from Layaway ${layaway.voucherNo}`,
+          reference: layaway.reference,
+          status: 'ACTIVE',
+        },
+      });
+
+      // Create SalesItems from layaway items
+      for (const item of layaway.items) {
+        await tx.salesItem.create({
+          data: {
+            salesVoucherId: salesVoucher.id,
+            labelId: item.labelId || null,
+            itemId: item.itemId,
+            labelNo: item.labelNo,
+            itemName: item.itemName,
+            grossWeight: item.grossWeight,
+            netWeight: item.netWeight,
+            fineWeight: item.fineWeight,
+            pcs: item.pcs,
+            metalRate: item.metalRate,
+            metalAmount: item.metalAmount,
+            diamondWeight: item.diamondWeight,
+            labourRate: item.labourRate,
+            labourAmount: item.labourAmount,
+            otherCharge: item.otherCharge,
+            discountStAmt: item.discountAmt,
+            totalAmount: item.totalAmount,
+            taxableAmount: item.taxableAmount,
+          },
+        });
+      }
+
+      // Mark layaway CONVERTED, store generated sale voucher number
       const converted = await tx.layawayEntry.update({
         where: { id: layawayId },
         data: {
           status: 'CONVERTED',
-          convertedToSaleId: data.saleVoucherNo || null,
+          convertedToSaleId: saleVoucherNo,
           dueAmount: 0,
           finalDue: 0,
+          ...(finalAmt > 0 ? { paymentAmount: { increment: finalAmt } } : {}),
         },
       });
 
       await recordStatusHistory(tx, layawayId, layaway.status, 'CONVERTED',
-        data.saleVoucherNo ? `Converted to sale ${data.saleVoucherNo}` : 'Converted to sale');
+        `Converted to sale ${saleVoucherNo}`);
 
-      return converted;
+      return { converted, saleVoucherNo };
     });
 
-    res.json({ message: 'Layaway converted successfully', layaway: result });
+    res.json({ message: 'Layaway converted successfully', layaway: result.converted, saleVoucherNo: result.saleVoucherNo });
   } catch (error: any) {
     console.error('Error converting layaway:', error);
     res.status(400).json({ error: error.message || 'Failed to convert layaway' });

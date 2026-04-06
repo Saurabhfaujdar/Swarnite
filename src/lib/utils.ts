@@ -42,9 +42,13 @@ export function formatDateForInput(date: string | Date | null | undefined): stri
   return d.toISOString().split('T')[0];
 }
 
-// Get today's date as string
+// Get today's date as string (local timezone)
 export function getToday(): string {
-  return new Date().toISOString().split('T')[0];
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 // Calculate GST

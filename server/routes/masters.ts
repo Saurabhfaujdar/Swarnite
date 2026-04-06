@@ -51,6 +51,18 @@ router.post('/item-groups', async (req: Request, res: Response) => {
   }
 });
 
+router.put('/item-groups/:id', async (req: Request, res: Response) => {
+  try {
+    const group = await prisma.itemGroup.update({
+      where: { id: Number(req.params.id) },
+      data: req.body,
+    });
+    res.json(group);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update item group' });
+  }
+});
+
 // ============================================================
 // PURITIES
 // ============================================================

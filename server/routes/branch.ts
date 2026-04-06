@@ -71,22 +71,23 @@ router.post('/issue', async (req: Request, res: Response) => {
   try {
     const data = req.body;
 
-    const sequence = await prisma.voucherSequence.upsert({
-      where: {
-        companyId_prefix_entityType_financialYear: {
-          companyId: req.companyId!,
-          prefix: 'GBI',
-          entityType: 'BRANCH_ISSUE',
-          financialYear: data.financialYear || '2025-2026',
-        },
-      },
-      update: { lastNumber: { increment: 1 } },
-      create: { companyId: req.companyId!, prefix: 'GBI', entityType: 'BRANCH_ISSUE', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
-    });
-
-    const voucherNo = `GBI/${sequence.lastNumber}`;
-
     const transfer = await prisma.$transaction(async (tx) => {
+      // Generate voucher number inside transaction to ensure rollback on failure
+      const sequence = await tx.voucherSequence.upsert({
+        where: {
+          companyId_prefix_entityType_financialYear: {
+            companyId: req.companyId!,
+            prefix: 'GBI',
+            entityType: 'BRANCH_ISSUE',
+            financialYear: data.financialYear || '2025-2026',
+          },
+        },
+        update: { lastNumber: { increment: 1 } },
+        create: { companyId: req.companyId!, prefix: 'GBI', entityType: 'BRANCH_ISSUE', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
+      });
+
+      const voucherNo = `GBI/${sequence.lastNumber}`;
+
       const branchTransfer = await tx.branchTransfer.create({
         data: {
           voucherNo,
@@ -152,22 +153,23 @@ router.post('/receipt', async (req: Request, res: Response) => {
   try {
     const data = req.body;
 
-    const sequence = await prisma.voucherSequence.upsert({
-      where: {
-        companyId_prefix_entityType_financialYear: {
-          companyId: req.companyId!,
-          prefix: 'GBR',
-          entityType: 'BRANCH_RECEIPT',
-          financialYear: data.financialYear || '2025-2026',
-        },
-      },
-      update: { lastNumber: { increment: 1 } },
-      create: { companyId: req.companyId!, prefix: 'GBR', entityType: 'BRANCH_RECEIPT', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
-    });
-
-    const voucherNo = `GBR/${sequence.lastNumber}`;
-
     const transfer = await prisma.$transaction(async (tx) => {
+      // Generate voucher number inside transaction to ensure rollback on failure
+      const sequence = await tx.voucherSequence.upsert({
+        where: {
+          companyId_prefix_entityType_financialYear: {
+            companyId: req.companyId!,
+            prefix: 'GBR',
+            entityType: 'BRANCH_RECEIPT',
+            financialYear: data.financialYear || '2025-2026',
+          },
+        },
+        update: { lastNumber: { increment: 1 } },
+        create: { companyId: req.companyId!, prefix: 'GBR', entityType: 'BRANCH_RECEIPT', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
+      });
+
+      const voucherNo = `GBR/${sequence.lastNumber}`;
+
       const branchTransfer = await tx.branchTransfer.create({
         data: {
           voucherNo,

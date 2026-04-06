@@ -266,13 +266,45 @@ router.get('/:id/ledger', async (req: Request, res: Response) => {
   }
 });
 
+// Allowed fields for Account create/update
+const ACCOUNT_FIELDS = [
+  'name', 'type', 'groupHead', 'customerCategory',
+  'mobile', 'phone', 'email',
+  'blockNo', 'building', 'street', 'area', 'address',
+  'city', 'state', 'pincode',
+  'gstin', 'gstVerified', 'gstTradeName', 'gstStatus', 'compositionScheme',
+  'pan', 'aadhar', 'idProof', 'reference', 'remark',
+  'closingBalance', 'balanceType', 'branchId',
+];
+
+function sanitizeAccountData(body: any): Record<string, any> {
+  const data: Record<string, any> = {};
+  // Map openingBalance → closingBalance
+  if (body.openingBalance !== undefined && body.closingBalance === undefined) {
+    body.closingBalance = body.openingBalance;
+  }
+  for (const key of ACCOUNT_FIELDS) {
+    if (body[key] !== undefined) data[key] = body[key];
+  }
+  return data;
+}
+
 // POST /api/accounts - Create new account
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const account = await prisma.account.create({ data: { ...req.body, companyId: req.companyId } });
+    const data = sanitizeAccountData(req.body);
+    if (!data.name || !String(data.name).trim()) {
+      return res.status(400).json({ error: 'Account name is required' });
+    }
+    if (!data.type) {
+      return res.status(400).json({ error: 'Account type is required' });
+    }
+    const account = await prisma.account.create({ data: { ...data, companyId: req.companyId } });
     res.status(201).json(account);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create account' });
+  } catch (error: any) {
+    console.error('Error creating account:', error);
+    const msg = error?.code === 'P2002' ? 'An account with this information already exists' : 'Failed to create account';
+    res.status(500).json({ error: msg });
   }
 });
 
@@ -282,13 +314,16 @@ router.put('/:id', async (req: Request, res: Response) => {
     const existing = await prisma.account.findFirst({ where: { id: Number(req.params.id), companyId: req.companyId } });
     if (!existing) return res.status(404).json({ error: 'Account not found' });
 
+    const data = sanitizeAccountData(req.body);
     const account = await prisma.account.update({
       where: { id: existing.id },
-      data: req.body,
+      data,
     });
     res.json(account);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update account' });
+  } catch (error: any) {
+    console.error('Error updating account:', error);
+    const msg = error?.code === 'P2002' ? 'An account with this information already exists' : 'Failed to update account';
+    res.status(500).json({ error: msg });
   }
 });
 

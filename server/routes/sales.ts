@@ -69,13 +69,15 @@ router.get('/', async (req: Request, res: Response) => {
       where.status = status as any;
     }
 
-    // Date range
+    // Date range (parse date strings as local time to avoid UTC mismatch)
     if (dateFrom || dateTo) {
       where.voucherDate = {};
-      if (dateFrom) where.voucherDate.gte = new Date(dateFrom as string);
+      if (dateFrom) {
+        const start = new Date(dateFrom + 'T00:00:00');
+        where.voucherDate.gte = start;
+      }
       if (dateTo) {
-        const end = new Date(dateTo as string);
-        end.setHours(23, 59, 59, 999);
+        const end = new Date(dateTo + 'T23:59:59.999');
         where.voucherDate.lte = end;
       }
     }
@@ -239,10 +241,16 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const data = req.body;
 
-    // Validate payment does not exceed voucher amount
+    // Validate payment does not exceed voucher amount + outstanding balance
     const totalPaid = Number(data.cashAmount || 0) + Number(data.bankAmount || 0) + Number(data.cardAmount || 0) + Number(data.upiAmount || 0) + Number(data.oldGoldAmount || 0) + Number(data.advanceAmount || 0);
-    if (totalPaid > Number(data.voucherAmount || 0)) {
-      return res.status(400).json({ error: 'Total payment cannot exceed voucher amount' });
+    const previousOs = Number(data.previousOs || 0);
+    const voucherAmt = Number(data.voucherAmount || 0);
+    const maxAllowed = voucherAmt + (previousOs > 0 ? previousOs : 0);
+    
+    console.log('Payment validation:', { totalPaid, previousOs, voucherAmt, maxAllowed, passes: totalPaid <= maxAllowed });
+    
+    if (totalPaid > maxAllowed) {
+      return res.status(400).json({ error: 'Total payment cannot exceed voucher amount plus outstanding balance' });
     }
 
     // Validate branch access for the write
@@ -250,29 +258,29 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Access denied to target branch' });
     }
 
-    // Generate voucher number
-    const sequence = await prisma.voucherSequence.upsert({
-      where: {
-        companyId_prefix_entityType_financialYear: {
+    const voucher = await prisma.$transaction(async (tx) => {
+      // Generate voucher number inside transaction to avoid orphaned sequence on rollback
+      const sequence = await tx.voucherSequence.upsert({
+        where: {
+          companyId_prefix_entityType_financialYear: {
+            companyId: req.companyId!,
+            prefix: data.voucherPrefix || 'JGI',
+            entityType: 'SALES',
+            financialYear: data.financialYear || '2025-2026',
+          },
+        },
+        update: { lastNumber: { increment: 1 } },
+        create: {
           companyId: req.companyId!,
           prefix: data.voucherPrefix || 'JGI',
           entityType: 'SALES',
           financialYear: data.financialYear || '2025-2026',
+          lastNumber: 1,
         },
-      },
-      update: { lastNumber: { increment: 1 } },
-      create: {
-        companyId: req.companyId!,
-        prefix: data.voucherPrefix || 'JGI',
-        entityType: 'SALES',
-        financialYear: data.financialYear || '2025-2026',
-        lastNumber: 1,
-      },
-    });
+      });
 
-    const voucherNo = `${data.voucherPrefix || 'JGI'}/${sequence.lastNumber}`;
+      const voucherNo = `${data.voucherPrefix || 'JGI'}/${sequence.lastNumber}`;
 
-    const voucher = await prisma.$transaction(async (tx) => {
       // Create the sales voucher
       const salesVoucher = await tx.salesVoucher.create({
         data: {
@@ -359,12 +367,17 @@ router.post('/', async (req: Request, res: Response) => {
             if (salePcs > label.pcsCount) {
               throw new Error(`Label ${label.labelNo || item.labelNo} has only ${label.pcsCount} pcs available, cannot sell ${salePcs}`);
             }
+            if (salePcs < 1) {
+              throw new Error(`Invalid pcs count: ${salePcs}. Must sell at least 1 pc.`);
+            }
             const remainingPcs = label.pcsCount - salePcs;
+            // Only mark as SOLD when ALL pieces are sold (pcsCount becomes 0)
+            const newStatus = remainingPcs === 0 ? 'SOLD' : 'IN_STOCK';
             await tx.label.update({
               where: { id: item.labelId },
               data: {
                 pcsCount: remainingPcs,
-                ...(remainingPcs === 0 ? { status: 'SOLD' } : {}),
+                status: newStatus,
               },
             });
           }
@@ -442,8 +455,15 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     res.status(201).json(fullVoucher);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating sales voucher:', error);
+    // Provide more specific error messages
+    if (error.code === 'P2002' && error.meta?.target?.includes('voucherNo')) {
+      return res.status(409).json({ error: 'Voucher number conflict. Please try again.' });
+    }
+    if (error.message) {
+      return res.status(400).json({ error: error.message });
+    }
     res.status(500).json({ error: 'Failed to create sales voucher' });
   }
 });

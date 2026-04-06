@@ -101,7 +101,9 @@ export default function SalesVoucherDetail() {
   const finalDue = editing ? editFinalDue : Number(voucher.finalDue || 0);
 
   const handleSaveEdit = () => {
-    if (editPayment > voucherAmt) return toast.error('Total payment cannot exceed voucher amount');
+    // Allow payment up to voucher + outstanding balance (if customer owes money)
+    const maxAllowed = voucherAmt + (previousOs > 0 ? previousOs : 0);
+    if (editPayment > maxAllowed) return toast.error('Total payment cannot exceed voucher amount plus outstanding balance');
     updateMutation.mutate({
       cashAmount: editCash,
       bankAmount: editBank,

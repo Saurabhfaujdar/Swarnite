@@ -89,7 +89,7 @@ export default function LabelEntryList() {
                 <td>{l.item?.purity?.code || '-'}</td>
                 <td className="text-right">{formatWeight(l.grossWeight)}</td>
                 <td className="text-right">{formatWeight(l.netWeight)}</td>
-                <td className="text-right">{l.pcsCount || 1}</td>
+                <td className="text-right">{l.pcsCount ?? 1}</td>
                 <td>{l.huid || '-'}</td>
                 <td>{l.size || '-'}</td>
                 <td>{l.counterCode || '-'}</td>

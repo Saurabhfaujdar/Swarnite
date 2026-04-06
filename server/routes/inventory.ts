@@ -111,22 +111,58 @@ router.post('/labels', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Access denied to target branch' });
     }
 
-    // Get or create prefix and increment
-    const prefix = await prisma.labelPrefix.update({
-      where: { id: data.prefixId },
-      data: { lastNumber: { increment: 1 } },
+    // Check if item group requires tagId
+    const item = await prisma.item.findUnique({
+      where: { id: data.itemId },
+      include: { itemGroup: true },
     });
+    if (!item) return res.status(400).json({ error: 'Item not found' });
 
-    const labelNo = `${prefix.prefix}/${prefix.lastNumber}`;
+    const requiresTagId = item.itemGroup.requiresTagId;
+    const tagId = data.tagId?.trim();
+
+    // Validate tagId requirements
+    if (requiresTagId && !tagId) {
+      return res.status(400).json({ error: `Tag ID is required for ${item.itemGroup.name} items` });
+    }
+
+    // If tagId is provided, enforce pcs = 1
+    const pcsCount = tagId ? 1 : (data.pcsCount || 1);
+
+    let labelNo: string;
+    let prefixRecord;
+
+    if (tagId) {
+      // Use tagId for label number, don't increment sequence
+      prefixRecord = await prisma.labelPrefix.findUnique({ where: { id: data.prefixId } });
+      if (!prefixRecord) return res.status(400).json({ error: 'Prefix not found' });
+      labelNo = `${prefixRecord.prefix}/${tagId}`;
+
+      // Check if tagId already exists for this prefix
+      const existing = await prisma.label.findFirst({
+        where: { prefixId: data.prefixId, tagId },
+      });
+      if (existing) {
+        return res.status(400).json({ error: `Tag ID '${tagId}' already exists for prefix ${prefixRecord.prefix}` });
+      }
+    } else {
+      // Auto-sequence (existing behavior)
+      prefixRecord = await prisma.labelPrefix.update({
+        where: { id: data.prefixId },
+        data: { lastNumber: { increment: 1 } },
+      });
+      labelNo = `${prefixRecord.prefix}/${prefixRecord.lastNumber}`;
+    }
 
     const label = await prisma.label.create({
       data: {
         labelNo,
         prefixId: data.prefixId,
+        tagId: tagId || null,
         itemId: data.itemId,
         grossWeight: data.grossWeight || 0,
         netWeight: data.netWeight || 0,
-        pcsCount: data.pcsCount || 1,
+        pcsCount,
         mrp: data.mrp,
         salePrice: data.salePrice,
         branchId: data.branchId,
@@ -183,6 +219,24 @@ router.post('/labels/batch', async (req: Request, res: Response) => {
 
       if (!itemPrefixId) return res.status(400).json({ error: 'Could not resolve label prefix for item' });
 
+      // Check if item group requires tagId
+      const item = await prisma.item.findUnique({
+        where: { id: data.itemId },
+        include: { itemGroup: true },
+      });
+      if (!item) return res.status(400).json({ error: 'Item not found' });
+
+      const requiresTagId = item.itemGroup.requiresTagId;
+      const tagId = data.tagId?.trim();
+
+      // Validate tagId requirements
+      if (requiresTagId && !tagId) {
+        return res.status(400).json({ error: `Tag ID is required for ${item.itemGroup.name} items` });
+      }
+
+      // If tagId is provided, enforce pcs = 1
+      const pcsCount = tagId ? 1 : (data.pcsCount || 1);
+
       // Resolve counterId: use top-level counterId, per-item counterId, or look up by counterCode
       let itemCounterId = counterId || data.counterId;
       if (!itemCounterId && data.counterCode) {
@@ -190,21 +244,40 @@ router.post('/labels/batch', async (req: Request, res: Response) => {
         if (found) itemCounterId = found.id;
       }
 
-      const prefix = await prisma.labelPrefix.update({
-        where: { id: itemPrefixId },
-        data: { lastNumber: { increment: 1 } },
-      });
+      let labelNo: string;
+      let prefixRecord;
 
-      const labelNo = `${prefix.prefix}/${prefix.lastNumber}`;
+      if (tagId) {
+        // Use tagId for label number, don't increment sequence
+        prefixRecord = await prisma.labelPrefix.findUnique({ where: { id: itemPrefixId } });
+        if (!prefixRecord) return res.status(400).json({ error: 'Prefix not found' });
+        labelNo = `${prefixRecord.prefix}/${tagId}`;
+
+        // Check if tagId already exists for this prefix
+        const existing = await prisma.label.findFirst({
+          where: { prefixId: itemPrefixId, tagId },
+        });
+        if (existing) {
+          return res.status(400).json({ error: `Tag ID '${tagId}' already exists for prefix ${prefixRecord.prefix}` });
+        }
+      } else {
+        // Auto-sequence (existing behavior)
+        prefixRecord = await prisma.labelPrefix.update({
+          where: { id: itemPrefixId },
+          data: { lastNumber: { increment: 1 } },
+        });
+        labelNo = `${prefixRecord.prefix}/${prefixRecord.lastNumber}`;
+      }
 
       const label = await prisma.label.create({
         data: {
           labelNo,
           prefixId: itemPrefixId,
+          tagId: tagId || null,
           itemId: data.itemId,
           grossWeight: data.grossWeight || 0,
           netWeight: data.netWeight || 0,
-          pcsCount: data.pcsCount || 1,
+          pcsCount,
           mrp: data.mrp,
           salePrice: data.salePrice,
           branchId: resolvedBranchId,

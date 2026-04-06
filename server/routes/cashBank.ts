@@ -46,22 +46,23 @@ router.post('/cash', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Access denied to target branch' });
     }
 
-    const sequence = await prisma.voucherSequence.upsert({
-      where: {
-        companyId_prefix_entityType_financialYear: {
-          companyId: req.companyId!,
-          prefix,
-          entityType: 'CASH',
-          financialYear: data.financialYear || '2025-2026',
-        },
-      },
-      update: { lastNumber: { increment: 1 } },
-      create: { companyId: req.companyId!, prefix, entityType: 'CASH', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
-    });
-
-    const voucherNo = `${prefix}/${sequence.lastNumber}`;
-
     const entry = await prisma.$transaction(async (tx) => {
+      // Generate voucher number inside transaction to ensure rollback on failure
+      const sequence = await tx.voucherSequence.upsert({
+        where: {
+          companyId_prefix_entityType_financialYear: {
+            companyId: req.companyId!,
+            prefix,
+            entityType: 'CASH',
+            financialYear: data.financialYear || '2025-2026',
+          },
+        },
+        update: { lastNumber: { increment: 1 } },
+        create: { companyId: req.companyId!, prefix, entityType: 'CASH', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
+      });
+
+      const voucherNo = `${prefix}/${sequence.lastNumber}`;
+
       const cashEntry = await tx.cashEntry.create({
         data: {
           voucherNo,
@@ -156,36 +157,39 @@ router.post('/bank', async (req: Request, res: Response) => {
   try {
     const data = req.body;
 
-    const sequence = await prisma.voucherSequence.upsert({
-      where: {
-        companyId_prefix_entityType_financialYear: {
-          companyId: req.companyId!,
-          prefix: 'BK',
-          entityType: 'BANK',
-          financialYear: data.financialYear || '2025-2026',
+    const entry = await prisma.$transaction(async (tx) => {
+      // Generate voucher number inside transaction to ensure rollback on failure
+      const sequence = await tx.voucherSequence.upsert({
+        where: {
+          companyId_prefix_entityType_financialYear: {
+            companyId: req.companyId!,
+            prefix: 'BK',
+            entityType: 'BANK',
+            financialYear: data.financialYear || '2025-2026',
+          },
         },
-      },
-      update: { lastNumber: { increment: 1 } },
-      create: { companyId: req.companyId!, prefix: 'BK', entityType: 'BANK', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
-    });
+        update: { lastNumber: { increment: 1 } },
+        create: { companyId: req.companyId!, prefix: 'BK', entityType: 'BANK', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
+      });
 
-    const entry = await prisma.bankEntry.create({
-      data: {
-        voucherNo: `BK/${sequence.lastNumber}`,
-        voucherPrefix: 'BK',
-        voucherNumber: sequence.lastNumber,
-        voucherDate: new Date(data.voucherDate),
-        voucherType: data.voucherType,
-        bookName: data.bookName,
-        companyId: req.companyId!,
-        branchId: data.branchId,
-        userId: data.userId,
-        totalAmount: data.totalAmount || 0,
-        narration: data.narration,
-        reference: data.reference,
-        chequeNo: data.chequeNo,
-        chequeDate: data.chequeDate ? new Date(data.chequeDate) : null,
-      },
+      return tx.bankEntry.create({
+        data: {
+          voucherNo: `BK/${sequence.lastNumber}`,
+          voucherPrefix: 'BK',
+          voucherNumber: sequence.lastNumber,
+          voucherDate: new Date(data.voucherDate),
+          voucherType: data.voucherType,
+          bookName: data.bookName,
+          companyId: req.companyId!,
+          branchId: data.branchId,
+          userId: data.userId,
+          totalAmount: data.totalAmount || 0,
+          narration: data.narration,
+          reference: data.reference,
+          chequeNo: data.chequeNo,
+          chequeDate: data.chequeDate ? new Date(data.chequeDate) : null,
+        },
+      });
     });
 
     res.status(201).json(entry);
@@ -215,20 +219,21 @@ router.post('/journal', async (req: Request, res: Response) => {
   try {
     const data = req.body;
 
-    const sequence = await prisma.voucherSequence.upsert({
-      where: {
-        companyId_prefix_entityType_financialYear: {
-          companyId: req.companyId!,
-          prefix: 'JV',
-          entityType: 'JOURNAL',
-          financialYear: data.financialYear || '2025-2026',
-        },
-      },
-      update: { lastNumber: { increment: 1 } },
-      create: { companyId: req.companyId!, prefix: 'JV', entityType: 'JOURNAL', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
-    });
-
     const entry = await prisma.$transaction(async (tx) => {
+      // Generate voucher number inside transaction to ensure rollback on failure
+      const sequence = await tx.voucherSequence.upsert({
+        where: {
+          companyId_prefix_entityType_financialYear: {
+            companyId: req.companyId!,
+            prefix: 'JV',
+            entityType: 'JOURNAL',
+            financialYear: data.financialYear || '2025-2026',
+          },
+        },
+        update: { lastNumber: { increment: 1 } },
+        create: { companyId: req.companyId!, prefix: 'JV', entityType: 'JOURNAL', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
+      });
+
       const journal = await tx.journalEntry.create({
         data: {
           voucherNo: `JV/${sequence.lastNumber}`,

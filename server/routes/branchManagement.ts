@@ -626,23 +626,22 @@ router.post('/transfer', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Destination branch is disabled' });
     }
 
-    // Generate voucher number
-    const sequence = await prisma.voucherSequence.upsert({
-      where: {
-        companyId_prefix_entityType_financialYear: {
-          companyId: req.companyId!,
-          prefix: 'BT',
-          entityType: 'BRANCH_TRANSFER',
-          financialYear: data.financialYear || '2025-2026',
-        },
-      },
-      update: { lastNumber: { increment: 1 } },
-      create: { companyId: req.companyId!, prefix: 'BT', entityType: 'BRANCH_TRANSFER', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
-    });
-    const voucherNo = `BT/${sequence.lastNumber}`;
-
     // === ATOMIC TRANSACTION ===
     const result = await prisma.$transaction(async (tx) => {
+      // Generate voucher number inside transaction to ensure rollback on failure
+      const sequence = await tx.voucherSequence.upsert({
+        where: {
+          companyId_prefix_entityType_financialYear: {
+            companyId: req.companyId!,
+            prefix: 'BT',
+            entityType: 'BRANCH_TRANSFER',
+            financialYear: data.financialYear || '2025-2026',
+          },
+        },
+        update: { lastNumber: { increment: 1 } },
+        create: { companyId: req.companyId!, prefix: 'BT', entityType: 'BRANCH_TRANSFER', financialYear: data.financialYear || '2025-2026', lastNumber: 1 },
+      });
+      const voucherNo = `BT/${sequence.lastNumber}`;
       // Validate all labels exist and belong to source branch
       const labelIds = data.items.map((i: any) => i.labelId).filter(Boolean);
 

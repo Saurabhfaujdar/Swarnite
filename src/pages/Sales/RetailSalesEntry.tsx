@@ -15,6 +15,9 @@ interface SalesItem {
   netWeight: number;
   fineWeight: number;
   pcs: number;
+  totalPcsAvailable?: number; // Total pcs available on label
+  originalGrossWeight?: number; // Full weight for all pcs
+  originalNetWeight?: number; // Full weight for all pcs
   metalRate: number;
   metalAmount: number;
   diamondWeight: number;
@@ -133,8 +136,14 @@ export default function RetailSalesEntry() {
       );
       const rate = metalRate ? Number(metalRate.rate) : 0;
 
-      const grossWt = Number(label.grossWeight);
-      const netWt = Number(label.netWeight);
+      // Default to 1 pc (customer typically buys 1 pc)
+      const defaultPcs = 1;
+      const totalPcs = label.pcsCount || 1;
+      const pcsRatio = defaultPcs / totalPcs;
+
+      // Scale weights by pcs ratio (weight is stored as total for all pcs)
+      const grossWt = Number(label.grossWeight) * pcsRatio;
+      const netWt = Number(label.netWeight) * pcsRatio;
       const purity = Number(label.item?.purity?.percentage || 0);
       const fineWt = (netWt * purity) / 100;
       const metalAmt = fineWt * rate;
@@ -150,7 +159,10 @@ export default function RetailSalesEntry() {
         grossWeight: grossWt,
         netWeight: netWt,
         fineWeight: fineWt,
-        pcs: label.pcsCount || 1,
+        pcs: defaultPcs,
+        totalPcsAvailable: totalPcs, // Store for later recalculation
+        originalGrossWeight: Number(label.grossWeight),
+        originalNetWeight: Number(label.netWeight),
         metalRate: rate,
         metalAmount: metalAmt,
         diamondWeight: 0,
@@ -177,7 +189,9 @@ export default function RetailSalesEntry() {
   const handleSave = () => {
     if (!customerId) return toast.error('Please select a customer');
     if (items.length === 0) return toast.error('Please add at least one item');
-    if (paymentAmount > voucherAmount) return toast.error('Total payment cannot exceed voucher amount');
+    // Allow payment up to voucher + outstanding balance (if customer owes money)
+    const maxAllowedPayment = voucherAmount + (previousOs > 0 ? previousOs : 0);
+    if (paymentAmount > maxAllowedPayment) return toast.error('Total payment cannot exceed voucher amount plus outstanding balance');
 
     saveMutation.mutate({
       voucherDate,
@@ -447,7 +461,7 @@ export default function RetailSalesEntry() {
                   onChange={(e) => {
                     const pct = Number(e.target.value);
                     setDiscountPercent(pct);
-                    setDiscountAmount((voucherAmount * pct) / 100);
+                    setDiscountAmount(Math.round((totalAmountBeforeDisc * pct) / 100));
                   }}
                 />
               </div>
@@ -457,7 +471,14 @@ export default function RetailSalesEntry() {
                   type="number"
                   className="form-input w-28 text-right bg-blue-100"
                   value={discountAmount}
-                  onChange={(e) => setDiscountAmount(Number(e.target.value))}
+                  onChange={(e) => {
+                    const amt = Number(e.target.value);
+                    setDiscountAmount(amt);
+                    // Auto-calculate discount % when amount is entered
+                    if (totalAmountBeforeDisc > 0) {
+                      setDiscountPercent(Math.round((amt / totalAmountBeforeDisc) * 10000) / 100);
+                    }
+                  }}
                 />
               </div>
               <div>
@@ -1106,16 +1127,30 @@ function ItemDetailModal({
   const [labourRate, setLabourRate] = useState(item.labourRate);
   const [otherCharge, setOtherCharge] = useState(item.otherCharge);
   const [discountStAmt, setDiscountStAmt] = useState(item.discountStAmt);
-  const [grossWeight, setGrossWeight] = useState(item.grossWeight);
-  const [netWeight, setNetWeight] = useState(item.netWeight);
   const [pcs, setPcs] = useState(item.pcs);
   const [remarks, setRemarks] = useState('');
 
-  // Derived calculations
-  const purity = item.fineWeight > 0 && item.netWeight > 0
+  // Original values for scaling
+  const totalPcsAvailable = item.totalPcsAvailable || item.pcs;
+  const originalGrossWeight = item.originalGrossWeight || item.grossWeight;
+  const originalNetWeight = item.originalNetWeight || item.netWeight;
+  const originalPurity = item.fineWeight > 0 && item.netWeight > 0
     ? (item.fineWeight / item.netWeight) * 100
     : 0;
-  const fineWeight = (netWeight * purity) / 100;
+
+  // Calculate weights based on pcs ratio
+  const pcsRatio = pcs / totalPcsAvailable;
+  const grossWeight = originalGrossWeight * pcsRatio;
+  const netWeight = originalNetWeight * pcsRatio;
+
+  // Validation errors
+  const pcsError = pcs > totalPcsAvailable ? `Only ${totalPcsAvailable} pcs available` : '';
+  const pcsMinError = pcs < 1 ? 'Minimum 1 pc required' : '';
+  const netWtError = netWeight > grossWeight ? 'Net Wt. cannot exceed Gross Wt.' : '';
+  const hasValidationErrors = !!(netWtError || pcsError || pcsMinError);
+
+  // Derived calculations
+  const fineWeight = Math.min((netWeight * originalPurity) / 100, netWeight);
   const metalAmount = fineWeight * metalRate;
   const labourAmount = netWeight * labourRate;
   const totalAmount = metalAmount + labourAmount + otherCharge - discountStAmt;
@@ -1183,14 +1218,16 @@ function ItemDetailModal({
                 <input className="form-input w-full bg-gray-100" value={item.itemName} readOnly />
               </div>
               <div>
-                <label className="form-label block text-xs">Pcs</label>
+                <label className="form-label block text-xs">Pcs (of {totalPcsAvailable})</label>
                 <input
                   type="number"
-                  className="form-input w-full text-right"
+                  className={`form-input w-full text-right ${pcsError || pcsMinError ? 'border-red-500 bg-red-50' : ''}`}
                   value={pcs}
                   onChange={(e) => setPcs(Number(e.target.value))}
                   min={1}
+                  max={totalPcsAvailable}
                 />
+                {(pcsError || pcsMinError) && <p className="text-xs text-red-600 mt-0.5">{pcsError || pcsMinError}</p>}
               </div>
             </div>
 
@@ -1200,20 +1237,20 @@ function ItemDetailModal({
                 <label className="form-label block text-xs">Gross Wt.</label>
                 <input
                   type="number"
-                  className="form-input w-full text-right"
-                  value={grossWeight}
-                  onChange={(e) => setGrossWeight(Number(e.target.value))}
-                  step="0.001"
+                  className="form-input w-full text-right bg-gray-100"
+                  value={grossWeight.toFixed(3)}
+                  readOnly
+                  title="Weight is auto-calculated based on pcs"
                 />
               </div>
               <div>
                 <label className="form-label block text-xs">Net Wt.</label>
                 <input
                   type="number"
-                  className="form-input w-full text-right"
-                  value={netWeight}
-                  onChange={(e) => setNetWeight(Number(e.target.value))}
-                  step="0.001"
+                  className="form-input w-full text-right bg-gray-100"
+                  value={netWeight.toFixed(3)}
+                  readOnly
+                  title="Weight is auto-calculated based on pcs"
                 />
               </div>
               <div>
@@ -1334,7 +1371,11 @@ function ItemDetailModal({
           <button onClick={onClose} className="btn-outline text-xs px-5">
             Cancel
           </button>
-          <button onClick={handleSave} className="btn-success text-xs px-5">
+          <button
+            onClick={handleSave}
+            disabled={hasValidationErrors}
+            className={`btn-success text-xs px-5 ${hasValidationErrors ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
             ✓ OK - Apply Changes
           </button>
         </div>

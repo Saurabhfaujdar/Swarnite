@@ -278,29 +278,28 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Payment type must be ADVANCE or DUE_PAYMENT' });
     }
 
-    // Generate receipt number
-    const sequence = await prisma.voucherSequence.upsert({
-      where: {
-        companyId_prefix_entityType_financialYear: {
+    const payment = await prisma.$transaction(async (tx) => {
+      // Generate receipt number inside transaction to ensure rollback on failure
+      const sequence = await tx.voucherSequence.upsert({
+        where: {
+          companyId_prefix_entityType_financialYear: {
+            companyId: req.companyId!,
+            prefix: 'CPR',
+            entityType: 'CUSTOMER_PAYMENT',
+            financialYear: data.financialYear || '2025-2026',
+          },
+        },
+        update: { lastNumber: { increment: 1 } },
+        create: {
           companyId: req.companyId!,
           prefix: 'CPR',
           entityType: 'CUSTOMER_PAYMENT',
           financialYear: data.financialYear || '2025-2026',
+          lastNumber: 1,
         },
-      },
-      update: { lastNumber: { increment: 1 } },
-      create: {
-        companyId: req.companyId!,
-        prefix: 'CPR',
-        entityType: 'CUSTOMER_PAYMENT',
-        financialYear: data.financialYear || '2025-2026',
-        lastNumber: 1,
-      },
-    });
+      });
 
-    const receiptNo = `CPR/${sequence.lastNumber}`;
-
-    const payment = await prisma.$transaction(async (tx) => {
+      const receiptNo = `CPR/${sequence.lastNumber}`;
       // Get current customer balance
       const account = await tx.account.findUnique({
         where: { id: data.accountId },

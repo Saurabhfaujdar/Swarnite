@@ -152,7 +152,7 @@ export default function LayawayEntry() {
       queryClient.invalidateQueries({ queryKey: ['labels-list'] });
       resetForm();
     },
-    onError: () => toast.error('Failed to save layaway'),
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to save layaway'),
   });
 
   // Add item by label scan

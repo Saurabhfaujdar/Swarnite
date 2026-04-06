@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Home, ShoppingCart, Package, CreditCard, ArrowLeftRight,
+  Home, ShoppingCart, Package, ArrowLeftRight,
   BarChart3, Users, Clock, Settings, Tag, Wallet, Building2, LogOut, PiggyBank
 } from 'lucide-react';
 import { getFinancialYear } from '../../lib/utils';
@@ -12,7 +12,6 @@ const navItems = [
   { to: '/sales/list', icon: ShoppingCart, label: 'Sales List' },
   { to: '/purchase/urd', icon: Package, label: 'Purchase (URD)' },
   { to: '/inventory/labels', icon: Tag, label: 'Labels' },
-  { to: '/cash-bank/cash', icon: CreditCard, label: 'Cash Entry' },
   { to: '/branch/receipt-list', icon: ArrowLeftRight, label: 'Branch' },
   { to: '/branch/manage', icon: Building2, label: 'Store Mgmt' },
   { to: '/layaway/list', icon: Clock, label: 'LayAway' },

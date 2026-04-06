@@ -260,7 +260,7 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
       if (onSaved) onSaved(res.data);
       onClose();
     },
-    onError: () => toast.error('Failed to save account'),
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to save account'),
   });
 
   const handleSave = useCallback(() => {

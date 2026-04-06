@@ -237,7 +237,7 @@ export default function SalesEntryList() {
                 </span>
               )}
             </button>
-            <button onClick={() => navigate('/sales/new')} className="btn-success text-xs">+ New Sale</button>
+            <button data-testid="new-sale-btn" onClick={() => navigate('/sales/retail')} className="btn-success text-xs">+ New Sale</button>
           </div>
         </div>
 
