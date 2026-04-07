@@ -299,7 +299,7 @@ router.post('/', async (req: Request, res: Response) => {
     if (!data.type) {
       return res.status(400).json({ error: 'Account type is required' });
     }
-    const account = await prisma.account.create({ data: { ...data, companyId: req.companyId } });
+    const account = await prisma.account.create({ data: { ...data, companyId: req.companyId! } });
     res.status(201).json(account);
   } catch (error: any) {
     console.error('Error creating account:', error);

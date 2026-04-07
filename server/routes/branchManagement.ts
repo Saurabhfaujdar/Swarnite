@@ -729,7 +729,7 @@ router.post('/transfer', async (req: Request, res: Response) => {
         entityType: 'BranchTransfer',
         entityId: result.id,
         newData: {
-          voucherNo,
+          voucherNo: result.voucherNo,
           from: fromBranch.name,
           to: toBranch.name,
           itemCount: data.items.length,
