@@ -40,7 +40,8 @@ COPY --from=builder /app/dist ./dist
 RUN chown -R jewelerp:jewelerp /app
 USER jewelerp
 
-EXPOSE 3001
+# Cloud Run sets PORT env var at runtime (default 8080)
+EXPOSE 8080
 
 ARG APP_VERSION=1.0.0
 ENV NODE_ENV=production \
@@ -48,8 +49,9 @@ ENV NODE_ENV=production \
     SERVE_STATIC=true \
     STATIC_DIR=dist
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost:3001/api/health || exit 1
+# Cloud Run has its own health check mechanism, no Docker HEALTHCHECK needed
+# HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+#   CMD wget -qO- http://localhost:${PORT:-8080}/api/health || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist-server/index.js"]
