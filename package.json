@@ -106,5 +106,8 @@
       "dist-electron/**/*",
       "dist-server/**/*"
     ]
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }
