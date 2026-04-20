@@ -91,6 +91,7 @@ export default function VoucherPrintDialog({ voucherId, onClose }: VoucherPrintD
       pcs: item.pcs || 1,
       grossWt: Number(item.grossWeight || 0),
       netWt: Number(item.netWeight || 0),
+      metalRate: Number(item.metalRate || 0),
       amount: Number(item.totalAmount || 0),
     }));
 
@@ -163,6 +164,7 @@ export default function VoucherPrintDialog({ voucherId, onClose }: VoucherPrintD
         <td style="padding: 6px 4px; text-align: center; border-right: 1px solid #eee;">${item.pcs}</td>
         <td style="padding: 6px 4px; text-align: right; border-right: 1px solid #eee;">${formatWeight(item.grossWt)}</td>
         <td style="padding: 6px 4px; text-align: right; border-right: 1px solid #eee;">${formatWeight(item.netWt)}</td>
+        <td style="padding: 6px 4px; text-align: right; border-right: 1px solid #eee;">${item.metalRate > 0 ? formatIndianNumber(item.metalRate) : ''}</td>
         <td style="padding: 6px 4px; text-align: right;">${formatIndianNumber(item.amount)}</td>
       </tr>
     `).join('');
@@ -212,6 +214,7 @@ export default function VoucherPrintDialog({ voucherId, onClose }: VoucherPrintD
               <th style="padding: 6px 4px; text-align: center; border-right: 1px solid #ccc; width: 40px;">PCS</th>
               <th style="padding: 6px 4px; text-align: right; border-right: 1px solid #ccc; width: 70px;">Gross Wt.</th>
               <th style="padding: 6px 4px; text-align: right; border-right: 1px solid #ccc; width: 70px;">Net Wt.</th>
+              <th style="padding: 6px 4px; text-align: right; border-right: 1px solid #ccc; width: 80px;">RATE</th>
               <th style="padding: 6px 4px; text-align: right; width: 90px;">AMOUNT<br/><span style="font-size:10px">(Rs.) (P.)</span></th>
             </tr>
           </thead>

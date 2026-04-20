@@ -13,6 +13,7 @@ const navItems = [
   { to: '/purchase/urd', icon: Package, label: 'Purchase (URD)' },
   { to: '/inventory/labels', icon: Tag, label: 'Labels' },
   { to: '/branch/receipt-list', icon: ArrowLeftRight, label: 'Branch' },
+  { to: '/branch/stock-requests', icon: Package, label: 'Stock Requests' },
   { to: '/branch/manage', icon: Building2, label: 'Store Mgmt' },
   { to: '/layaway/list', icon: Clock, label: 'LayAway' },
   { to: '/savings-scheme/list', icon: PiggyBank, label: 'Savings Scheme' },
@@ -36,7 +37,7 @@ export default function Layout() {
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar Navigation */}
-      <aside className="w-48 bg-jewel-dark text-white flex flex-col flex-shrink-0">
+      <aside className="w-48 bg-jewel-dark text-white flex flex-col flex-shrink-0 z-10">
         {/* Logo */}
         <div className="p-3 border-b border-gray-700">
           <h1 className="text-lg font-bold text-jewel-gold">JewelERP</h1>
@@ -63,7 +64,7 @@ export default function Layout() {
         </nav>
 
         {/* User info */}
-        <div className="p-3 border-t border-gray-700 text-[10px] text-gray-400">
+        <div className="p-3 border-t border-gray-700 text-[10px] text-gray-400 flex-shrink-0">
           <div>{user?.fullName ?? 'User'}</div>
           <div>{user?.branch?.name ?? ''}</div>
           <div>FY: {getFinancialYear()}</div>

@@ -9,6 +9,7 @@ export interface InvoiceItem {
   pcs: number;
   grossWt: number;
   netWt: number;
+  metalRate: number;
   amount: number;
 }
 
@@ -118,6 +119,7 @@ const TaxInvoice = forwardRef<HTMLDivElement, { data: InvoiceData }>(({ data }, 
             <th style={{ padding: '6px 4px', textAlign: 'center', borderRight: '1px solid #ccc', width: '40px' }}>PCS</th>
             <th style={{ padding: '6px 4px', textAlign: 'right', borderRight: '1px solid #ccc', width: '70px' }}>Gross Wt.</th>
             <th style={{ padding: '6px 4px', textAlign: 'right', borderRight: '1px solid #ccc', width: '70px' }}>Net Wt.</th>
+            <th style={{ padding: '6px 4px', textAlign: 'right', borderRight: '1px solid #ccc', width: '80px' }}>RATE</th>
             <th style={{ padding: '6px 4px', textAlign: 'right', width: '90px' }}>
               <div>AMOUNT</div>
               <div style={{ fontSize: '10px' }}>(Rs.) (P.)</div>
@@ -134,6 +136,7 @@ const TaxInvoice = forwardRef<HTMLDivElement, { data: InvoiceData }>(({ data }, 
               <td style={{ padding: '6px 4px', textAlign: 'center', borderRight: '1px solid #eee' }}>{item.pcs}</td>
               <td style={{ padding: '6px 4px', textAlign: 'right', borderRight: '1px solid #eee' }}>{formatWeight(item.grossWt)}</td>
               <td style={{ padding: '6px 4px', textAlign: 'right', borderRight: '1px solid #eee' }}>{formatWeight(item.netWt)}</td>
+              <td style={{ padding: '6px 4px', textAlign: 'right', borderRight: '1px solid #eee' }}>{item.metalRate > 0 ? formatIndianNumber(item.metalRate) : ''}</td>
               <td style={{ padding: '6px 4px', textAlign: 'right' }}>{formatIndianNumber(item.amount)}</td>
             </tr>
           ))}
@@ -141,6 +144,7 @@ const TaxInvoice = forwardRef<HTMLDivElement, { data: InvoiceData }>(({ data }, 
           {data.items.length < 5 && Array.from({ length: 5 - data.items.length }).map((_, i) => (
             <tr key={`empty-${i}`} style={{ borderBottom: '1px solid #eee' }}>
               <td style={{ padding: '6px 4px', borderRight: '1px solid #eee' }}>&nbsp;</td>
+              <td style={{ borderRight: '1px solid #eee' }}></td>
               <td style={{ borderRight: '1px solid #eee' }}></td>
               <td style={{ borderRight: '1px solid #eee' }}></td>
               <td style={{ borderRight: '1px solid #eee' }}></td>

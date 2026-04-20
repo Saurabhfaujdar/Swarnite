@@ -42,6 +42,8 @@ const modelNames = [
   'refreshToken',
   'branchStaff',
   'auditLog',
+  'stockRequest',
+  'stockRequestItem',
 ];
 
 for (const name of modelNames) {

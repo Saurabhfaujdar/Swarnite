@@ -23,6 +23,7 @@
 
 import { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../prisma';
 import { authenticate } from '../middleware/branchAccess';
 
@@ -804,6 +805,155 @@ router.get('/transfer/history', async (req: Request, res: Response) => {
     res.json({ transfers, total, page: Number(page) || 1, limit });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch transfer history' });
+  }
+});
+
+// ================================================================
+// GET /api/branches/:id/users — List users of a branch
+// ================================================================
+router.get('/:id/users', async (req: Request, res: Response) => {
+  try {
+    const branchId = Number(req.params.id);
+
+    if (req.branchScope && req.branchScope.length > 0 && !req.branchScope.includes(branchId)) {
+      return res.status(403).json({ error: 'Access denied to this branch' });
+    }
+
+    const users = await prisma.user.findMany({
+      where: { branchId, companyId: req.companyId },
+      select: { id: true, username: true, fullName: true, role: true, isActive: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch branch users' });
+  }
+});
+
+// ================================================================
+// POST /api/branches/:id/user — Create a user for a branch (master only)
+// ================================================================
+router.post('/:id/user', async (req: Request, res: Response) => {
+  try {
+    if (!req.isMasterBranch && req.userRole !== 'ADMIN') {
+      return res.status(403).json({ error: 'Only master branch can create branch users' });
+    }
+
+    const branchId = Number(req.params.id);
+    const { username, password, fullName, role } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    // Verify branch exists
+    const branch = await prisma.branch.findUnique({ where: { id: branchId } });
+    if (!branch || branch.isDeleted) {
+      return res.status(404).json({ error: 'Branch not found' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const user = await prisma.user.create({
+      data: {
+        username,
+        password: hashedPassword,
+        fullName: fullName || username,
+        role: role || 'USER',
+        branchId,
+        companyId: req.companyId!,
+      },
+      select: { id: true, username: true, fullName: true, role: true, isActive: true, createdAt: true },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.userId || 0,
+        branchId,
+        companyId: req.companyId!,
+        action: 'CREATE',
+        entityType: 'User',
+        entityId: user.id,
+        newData: { username, fullName: user.fullName, role: user.role, branchId } as any,
+      },
+    });
+
+    res.status(201).json(user);
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      return res.status(409).json({ error: 'Username already exists' });
+    }
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// ================================================================
+// PUT /api/branches/:id/user/:userId — Update branch user credentials (master only)
+// ================================================================
+router.put('/:id/user/:userId', async (req: Request, res: Response) => {
+  try {
+    if (!req.isMasterBranch && req.userRole !== 'ADMIN') {
+      return res.status(403).json({ error: 'Only master branch can update branch users' });
+    }
+
+    const branchId = Number(req.params.id);
+    const userId = Number(req.params.userId);
+
+    if (isNaN(branchId) || isNaN(userId)) {
+      return res.status(400).json({ error: 'Invalid branch or user ID' });
+    }
+
+    const { username, password, fullName, role, isActive } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.branchId !== branchId || user.companyId !== req.companyId) {
+      return res.status(404).json({ error: 'User not found in this branch' });
+    }
+
+    const updateData: any = {};
+    if (username !== undefined) updateData.username = username;
+    if (fullName !== undefined) updateData.fullName = fullName;
+    if (role !== undefined) updateData.role = role;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (password) {
+      if (password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      }
+      updateData.password = await bcrypt.hash(password, 12);
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: { id: true, username: true, fullName: true, role: true, isActive: true, createdAt: true },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.userId || 0,
+        branchId,
+        companyId: req.companyId!,
+        action: 'UPDATE',
+        entityType: 'User',
+        entityId: userId,
+        newData: { username: updated.username, fullName: updated.fullName, role: updated.role, passwordChanged: !!password } as any,
+      },
+    });
+
+    res.json(updated);
+  } catch (error: any) {
+    console.error('PUT /branches/:id/user/:userId error:', error);
+    if (error.code === 'P2002') {
+      return res.status(409).json({ error: 'Username already exists' });
+    }
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.status(500).json({ error: error.message || 'Failed to update user' });
   }
 });
 

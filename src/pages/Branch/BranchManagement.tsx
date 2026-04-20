@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { branchManagementAPI } from '../../lib/api';
-import { Building2, Plus, Edit2, Trash2, Power, PowerOff, ArrowRightLeft, Eye, ChevronDown, ChevronRight, RefreshCw, Shield, Store } from 'lucide-react';
+import { Building2, Plus, Edit2, Trash2, Power, PowerOff, ArrowRightLeft, Eye, ChevronDown, ChevronRight, RefreshCw, Shield, Store, UserPlus, Key, Pencil } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface Branch {
   id: number;
@@ -58,13 +59,23 @@ export default function BranchManagement() {
 
   // Create branch form
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: '', code: '', address: '', city: '', state: '', phone: '', email: '', gstin: '' });
+  const [createForm, setCreateForm] = useState({ name: '', code: '', address: '', city: '', state: '', phone: '', email: '', gstin: '', username: '', password: '', userFullName: '' });
+
+  // Branch users
+  const [branchUsers, setBranchUsers] = useState<{ id: number; username: string; fullName: string; role: string; isActive: boolean }[]>([]);
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [showEditUser, setShowEditUser] = useState<{ id: number; username: string; fullName: string; role: string; isActive: boolean } | null>(null);
+  const [editUserForm, setEditUserForm] = useState({ username: '', password: '', fullName: '', role: 'USER', isActive: true });
+  const [userForm, setUserForm] = useState({ username: '', password: '', fullName: '', role: 'USER' as string });
 
   // Dialogs
   const [showDisable, setShowDisable] = useState<Branch | null>(null);
   const [showDelete, setShowDelete] = useState<Branch | null>(null);
   const [showEdit, setShowEdit] = useState<Branch | null>(null);
   const [editForm, setEditForm] = useState({ name: '', address: '', city: '', state: '', phone: '', email: '', gstin: '' });
+  const [editBranchUsers, setEditBranchUsers] = useState<{ id: number; username: string; fullName: string; role: string; isActive: boolean }[]>([]);
+  const [resetPasswordId, setResetPasswordId] = useState<number | null>(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState('');
 
   const fetchBranches = useCallback(async () => {
     setLoading(true);
@@ -107,16 +118,70 @@ export default function BranchManagement() {
     if (!createForm.name || !createForm.code) return;
     try {
       const masterBranch = branches.find(b => b.isMaster);
-      await branchManagementAPI.create({
-        ...createForm,
+      const res = await branchManagementAPI.create({
+        name: createForm.name, code: createForm.code, address: createForm.address,
+        city: createForm.city, state: createForm.state, phone: createForm.phone,
+        email: createForm.email, gstin: createForm.gstin,
         companyId: masterBranch?.companyId || 1,
         parentId: masterBranch?.id,
       });
+      // If user credentials provided, create a user for the new branch
+      if (createForm.username && createForm.password) {
+        try {
+          await branchManagementAPI.createBranchUser(res.data.id, {
+            username: createForm.username,
+            password: createForm.password,
+            fullName: createForm.userFullName || createForm.username,
+            role: 'USER',
+          });
+        } catch (userErr: any) {
+          alert('Branch created but user creation failed: ' + (userErr.response?.data?.error || 'Unknown error'));
+        }
+      }
       setShowCreate(false);
-      setCreateForm({ name: '', code: '', address: '', city: '', state: '', phone: '', email: '', gstin: '' });
+      setCreateForm({ name: '', code: '', address: '', city: '', state: '', phone: '', email: '', gstin: '', username: '', password: '', userFullName: '' });
       fetchBranches();
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to create branch');
+    }
+  };
+
+  const fetchBranchUsers = async (branchId: number) => {
+    try {
+      const res = await branchManagementAPI.branchUsers(branchId);
+      setBranchUsers(res.data || []);
+    } catch { setBranchUsers([]); }
+  };
+
+  const handleAddUser = async () => {
+    if (!selectedBranch || !userForm.username || !userForm.password) return;
+    try {
+      await branchManagementAPI.createBranchUser(selectedBranch.id, userForm);
+      setShowAddUser(false);
+      setUserForm({ username: '', password: '', fullName: '', role: 'USER' });
+      fetchBranchUsers(selectedBranch.id);
+      fetchStats(selectedBranch.id);
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to create user');
+    }
+  };
+
+  const handleEditUser = async () => {
+    if (!selectedBranch || !showEditUser) return;
+    try {
+      const data: any = {
+        username: editUserForm.username,
+        fullName: editUserForm.fullName,
+        role: editUserForm.role,
+        isActive: editUserForm.isActive,
+      };
+      if (editUserForm.password) data.password = editUserForm.password;
+      await branchManagementAPI.updateBranchUser(selectedBranch.id, showEditUser.id, data);
+      setShowEditUser(null);
+      fetchBranchUsers(selectedBranch.id);
+      toast.success('User updated');
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to update user');
     }
   };
 
@@ -160,7 +225,7 @@ export default function BranchManagement() {
     }
   };
 
-  const openEdit = (branch: Branch) => {
+  const openEdit = async (branch: Branch) => {
     setEditForm({
       name: branch.name,
       address: branch.address || '',
@@ -171,11 +236,30 @@ export default function BranchManagement() {
       gstin: branch.gstin || '',
     });
     setShowEdit(branch);
+    setResetPasswordId(null);
+    setResetPasswordValue('');
+    try {
+      const res = await branchManagementAPI.branchUsers(branch.id);
+      setEditBranchUsers(res.data || []);
+    } catch { setEditBranchUsers([]); }
+  };
+
+  const handleResetPassword = async (userId: number) => {
+    if (!showEdit || !resetPasswordValue || resetPasswordValue.length < 6) return;
+    try {
+      await branchManagementAPI.updateBranchUser(showEdit.id, userId, { password: resetPasswordValue });
+      toast.success('Password reset successfully');
+      setResetPasswordId(null);
+      setResetPasswordValue('');
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to reset password');
+    }
   };
 
   const selectBranch = (branch: Branch) => {
     setSelectedBranch(branch);
     fetchStats(branch.id);
+    fetchBranchUsers(branch.id);
   };
 
   const masterBranch = branches.find(b => b.isMaster);
@@ -350,6 +434,44 @@ export default function BranchManagement() {
                     <span className="font-medium">Phone:</span> {selectedBranch.phone}
                   </div>
                 )}
+
+                {/* Branch Users */}
+                <div className="border-t pt-2 mt-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="text-xs font-semibold text-gray-700 flex items-center gap-1"><Key size={12} /> Users</h4>
+                    <button onClick={() => setShowAddUser(true)} className="flex items-center gap-0.5 text-[10px] text-jewel-gold hover:underline">
+                      <UserPlus size={11} /> Add User
+                    </button>
+                  </div>
+                  {branchUsers.length === 0 ? (
+                    <p className="text-[10px] text-gray-400">No users assigned</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {branchUsers.map(u => (
+                        <div key={u.id} className="flex items-center justify-between text-[11px] py-0.5">
+                          <div>
+                            <span className="font-medium">{u.fullName}</span>
+                            <span className="text-gray-400 ml-1">({u.username})</span>
+                            {!u.isActive && <span className="ml-1 text-red-400 text-[9px]">(disabled)</span>}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className={`px-1 py-0.5 rounded text-[9px] font-medium ${u.role === 'ADMIN' ? 'bg-red-100 text-red-700' : u.role === 'MANAGER' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{u.role}</span>
+                            <button
+                              onClick={() => {
+                                setShowEditUser(u);
+                                setEditUserForm({ username: u.username, password: '', fullName: u.fullName, role: u.role, isActive: u.isActive });
+                              }}
+                              className="p-0.5 text-gray-400 hover:text-jewel-gold"
+                              title="Edit user"
+                            >
+                              <Pencil size={10} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="text-xs text-gray-400 text-center py-8">
@@ -472,6 +594,21 @@ export default function BranchManagement() {
                 <label className="block text-gray-500 mb-0.5">GSTIN</label>
                 <input className="w-full border rounded px-2 py-1" value={createForm.gstin} onChange={e => setCreateForm({...createForm, gstin: e.target.value.toUpperCase()})} />
               </div>
+              <div className="col-span-2 border-t pt-2 mt-1">
+                <p className="text-gray-600 font-medium mb-1 flex items-center gap-1"><Key size={12} /> Branch Login Credentials (optional)</p>
+              </div>
+              <div>
+                <label className="block text-gray-500 mb-0.5">Username</label>
+                <input className="w-full border rounded px-2 py-1" placeholder="e.g. branch1" value={createForm.username} onChange={e => setCreateForm({...createForm, username: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-gray-500 mb-0.5">Password</label>
+                <input type="password" className="w-full border rounded px-2 py-1" placeholder="Min 6 chars" value={createForm.password} onChange={e => setCreateForm({...createForm, password: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-gray-500 mb-0.5">Full Name</label>
+                <input className="w-full border rounded px-2 py-1" placeholder="Display name" value={createForm.userFullName} onChange={e => setCreateForm({...createForm, userFullName: e.target.value})} />
+              </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 border rounded text-xs">Cancel</button>
@@ -508,6 +645,51 @@ export default function BranchManagement() {
                 <input className="w-full border rounded px-2 py-1" value={editForm.gstin} onChange={e => setEditForm({...editForm, gstin: e.target.value.toUpperCase()})} />
               </div>
             </div>
+            {/* Users & Password Reset */}
+            <div className="border-t pt-2 mt-1">
+              <h4 className="text-xs font-semibold text-gray-600 flex items-center gap-1 mb-1.5"><Key size={12} /> Users & Password Reset</h4>
+              {editBranchUsers.length === 0 ? (
+                <p className="text-xs text-gray-400 italic">No users assigned to this branch</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {editBranchUsers.map(u => (
+                    <div key={u.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{u.fullName || u.username}</span>
+                        <span className={`px-1 py-0.5 rounded text-[9px] font-medium ${u.role === 'ADMIN' ? 'bg-red-100 text-red-700' : u.role === 'MANAGER' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{u.role}</span>
+                      </div>
+                      {resetPasswordId === u.id ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="password"
+                            className="border rounded px-2 py-0.5 w-32 text-xs"
+                            placeholder="New password (6+)"
+                            value={resetPasswordValue}
+                            onChange={e => setResetPasswordValue(e.target.value)}
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleResetPassword(u.id)}
+                            disabled={resetPasswordValue.length < 6}
+                            className="px-2 py-0.5 bg-blue-600 text-white rounded text-[10px] disabled:opacity-50"
+                          >Save</button>
+                          <button
+                            onClick={() => { setResetPasswordId(null); setResetPasswordValue(''); }}
+                            className="px-1.5 py-0.5 border rounded text-[10px]"
+                          >&times;</button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setResetPasswordId(u.id); setResetPasswordValue(''); }}
+                          className="flex items-center gap-0.5 text-blue-600 hover:text-blue-800 text-[10px]"
+                        ><Key size={10} /> Reset Password</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowEdit(null)} className="px-3 py-1.5 border rounded text-xs">Cancel</button>
               <button onClick={handleEdit} className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs">Save Changes</button>
@@ -528,6 +710,81 @@ export default function BranchManagement() {
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowDisable(null)} className="px-3 py-1.5 border rounded text-xs">Cancel</button>
               <button onClick={() => handleDisable(showDisable)} className="px-3 py-1.5 bg-orange-500 text-white rounded text-xs">Disable Branch</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add User Dialog */}
+      {showAddUser && selectedBranch && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-4 w-96 space-y-3">
+            <h3 className="font-semibold text-sm flex items-center gap-1"><UserPlus size={14} /> Add User to {selectedBranch.name}</h3>
+            <div className="space-y-2 text-xs">
+              <div>
+                <label className="block text-gray-500 mb-0.5">Username *</label>
+                <input className="w-full border rounded px-2 py-1" value={userForm.username} onChange={e => setUserForm({...userForm, username: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-gray-500 mb-0.5">Password *</label>
+                <input type="password" className="w-full border rounded px-2 py-1" placeholder="Min 6 chars" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-gray-500 mb-0.5">Full Name</label>
+                <input className="w-full border rounded px-2 py-1" value={userForm.fullName} onChange={e => setUserForm({...userForm, fullName: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-gray-500 mb-0.5">Role</label>
+                <select className="w-full border rounded px-2 py-1" value={userForm.role} onChange={e => setUserForm({...userForm, role: e.target.value})}>
+                  <option value="USER">User</option>
+                  <option value="MANAGER">Manager</option>
+                  <option value="CASHIER">Cashier</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setShowAddUser(false)} className="px-3 py-1.5 border rounded text-xs">Cancel</button>
+              <button onClick={handleAddUser} disabled={!userForm.username || !userForm.password || userForm.password.length < 6} className="px-3 py-1.5 bg-jewel-gold text-white rounded text-xs disabled:opacity-50">Create User</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Dialog */}
+      {showEditUser && selectedBranch && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-4 w-96 space-y-3">
+            <h3 className="font-semibold text-sm flex items-center gap-1"><Pencil size={14} /> Edit User — {showEditUser.fullName}</h3>
+            <div className="space-y-2 text-xs">
+              <div>
+                <label className="block text-gray-500 mb-0.5">Username</label>
+                <input className="w-full border rounded px-2 py-1" value={editUserForm.username} onChange={e => setEditUserForm({...editUserForm, username: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-gray-500 mb-0.5">New Password <span className="text-gray-400">(leave blank to keep current)</span></label>
+                <input type="password" className="w-full border rounded px-2 py-1" placeholder="Min 6 chars" value={editUserForm.password} onChange={e => setEditUserForm({...editUserForm, password: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-gray-500 mb-0.5">Full Name</label>
+                <input className="w-full border rounded px-2 py-1" value={editUserForm.fullName} onChange={e => setEditUserForm({...editUserForm, fullName: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-gray-500 mb-0.5">Role</label>
+                <select className="w-full border rounded px-2 py-1" value={editUserForm.role} onChange={e => setEditUserForm({...editUserForm, role: e.target.value})}>
+                  <option value="USER">User</option>
+                  <option value="MANAGER">Manager</option>
+                  <option value="CASHIER">Cashier</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="editUserActive" checked={editUserForm.isActive} onChange={e => setEditUserForm({...editUserForm, isActive: e.target.checked})} />
+                <label htmlFor="editUserActive" className="text-gray-500">Active</label>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setShowEditUser(null)} className="px-3 py-1.5 border rounded text-xs">Cancel</button>
+              <button onClick={handleEditUser} disabled={!editUserForm.username || (editUserForm.password !== '' && editUserForm.password.length < 6)} className="px-3 py-1.5 bg-jewel-gold text-white rounded text-xs disabled:opacity-50">Save Changes</button>
             </div>
           </div>
         </div>

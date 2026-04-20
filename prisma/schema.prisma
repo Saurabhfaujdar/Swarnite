@@ -86,6 +86,7 @@ model Company {
   savingsSchemes   SavingsScheme[]
   auditLogs        AuditLog[]
   attachments      Attachment[]
+  stockRequests    StockRequest[]
 
   @@map("companies")
 }
@@ -129,6 +130,8 @@ model Branch {
   accounts           Account[]
   staff              BranchStaff[]
   auditLogs          AuditLog[]
+  stockRequestsMade  StockRequest[]  @relation("RequestingBranch")
+  stockRequestsFrom  StockRequest[]  @relation("SourceBranch")
 
   @@index([companyId])
   @@index([parentId])
@@ -268,6 +271,7 @@ model Label {
   purchaseItems PurchaseItem[]
   branchTransferItems BranchTransferItem[]
   layawayItems  LayawayItem[]
+  stockRequestItems StockRequestItem[]
 
   @@unique([prefixId, tagId]) // tagId must be unique within each prefix
   @@map("labels")
@@ -1048,6 +1052,63 @@ model AuditLog {
   @@index([branchId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ============================================================
+// INTER-BRANCH STOCK REQUESTS
+// ============================================================
+
+model StockRequest {
+  id                  Int               @id @default(autoincrement())
+  requestNo           String            @unique
+  requestDate         DateTime          @default(now())
+  requestingBranchId  Int
+  requestingBranch    Branch            @relation("RequestingBranch", fields: [requestingBranchId], references: [id])
+  sourceBranchId      Int
+  sourceBranch        Branch            @relation("SourceBranch", fields: [sourceBranchId], references: [id])
+  companyId           Int
+  company             Company           @relation(fields: [companyId], references: [id])
+  requestedById       Int
+  status              StockRequestStatus @default(PENDING)
+  approvedById        Int?
+  approvedAt          DateTime?
+  rejectedById        Int?
+  rejectedAt          DateTime?
+  rejectionReason     String?
+  narration           String?
+  totalPcs            Int               @default(0)
+  totalGrossWeight    Decimal           @default(0)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  items               StockRequestItem[]
+
+  @@index([companyId])
+  @@index([requestingBranchId])
+  @@index([sourceBranchId])
+  @@map("stock_requests")
+}
+
+model StockRequestItem {
+  id              Int           @id @default(autoincrement())
+  stockRequestId  Int
+  stockRequest    StockRequest  @relation(fields: [stockRequestId], references: [id], onDelete: Cascade)
+  labelId         Int
+  label           Label         @relation(fields: [labelId], references: [id])
+  labelNo         String
+  itemName        String
+  grossWeight     Decimal       @default(0)
+  netWeight       Decimal       @default(0)
+  pcs             Int           @default(1)
+  purityName      String?
+
+  @@map("stock_request_items")
+}
+
+enum StockRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 // ============================================================

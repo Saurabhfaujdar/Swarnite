@@ -70,7 +70,7 @@ router.get('/labels/search', async (req: Request, res: Response) => {
     if (!labelNo) return res.status(400).json({ error: 'labelNo query parameter is required' });
 
     const label = await prisma.label.findFirst({
-      where: { labelNo, ...labelScope(req) },
+      where: { labelNo: { equals: labelNo, mode: 'insensitive' }, ...labelScope(req) },
       include: {
         item: { include: { itemGroup: true, purity: true, metalType: true } },
         branch: true,
@@ -189,8 +189,8 @@ router.post('/labels/batch', async (req: Request, res: Response) => {
     const { labels: labelData, prefixId, branchId, counterId } = req.body;
     const createdLabels = [];
 
-    // Resolve branchId - use provided or fall back to first branch
-    let resolvedBranchId = branchId;
+    // Resolve branchId - use provided or fall back to user's own branch
+    let resolvedBranchId = branchId || req.branchId;
     if (!resolvedBranchId) {
       const branch = await prisma.branch.findFirst({ where: { isActive: true, companyId: req.companyId } });
       if (!branch) return res.status(400).json({ error: 'No active branch found' });

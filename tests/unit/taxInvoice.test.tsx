@@ -26,6 +26,7 @@ const SAMPLE_INVOICE: InvoiceData = {
       pcs: 1,
       grossWt: 10.5,
       netWt: 9.8,
+      metalRate: 6950,
       amount: 68110,
     },
     {
@@ -36,6 +37,7 @@ const SAMPLE_INVOICE: InvoiceData = {
       pcs: 1,
       grossWt: 5.2,
       netWt: 4.8,
+      metalRate: 5208,
       amount: 25000,
     },
   ],
@@ -156,6 +158,7 @@ describe('TaxInvoice', () => {
       pcs: 1,
       grossWt: 5,
       netWt: 4.5,
+      metalRate: 6950,
       amount: 10000,
     }));
     const { container } = renderInvoice({ items: fiveItems });

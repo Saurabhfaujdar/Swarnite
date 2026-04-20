@@ -50,9 +50,9 @@ export default function PurchaseURD() {
   const [adjustAmount, setAdjustAmount] = useState(0);
 
   const { data: suppliers } = useQuery({
-    queryKey: ['suppliers-search', supplierSearch],
-    queryFn: () => accountsAPI.list({ search: supplierSearch, type: 'SUPPLIER' }).then((r) => r.data.accounts),
-    enabled: supplierSearch.length >= 2,
+    queryKey: ['suppliers-search', supplierSearch, purchaseType],
+    queryFn: () => accountsAPI.list({ search: supplierSearch, type: purchaseType === 'OLD_GOLD' ? undefined : 'SUPPLIER' }).then((r) => r.data.accounts),
+    enabled: supplierSearch.length >= 2 && !supplierId,
   });
 
   const { data: purities } = useQuery({
@@ -134,16 +134,16 @@ export default function PurchaseURD() {
       voucherDate,
       purchaseType,
       accountId: supplierId,
-      branchId: 1,
-      userId: 1,
       financialYear: getFinancialYear(),
       totalGrossWeight: totalGrossWt,
       totalNetWeight: totalNetWt,
+      totalFineWeight: totalFineWt,
       totalPcs: items.reduce((s, i) => s + i.pcs, 0),
       metalAmount: totalMetalAmt,
       labourAmount: totalLabourAmt,
       otherCharge: totalOtherCharge,
       totalAmount: subTotal,
+      finalAmount: voucherAmount,
       cgstAmount: gst.cgst,
       sgstAmount: gst.sgst,
       igstAmount: 0,
@@ -187,13 +187,13 @@ export default function PurchaseURD() {
           <span>Purchase {purchaseType === 'OLD_GOLD' ? '(Old Gold)' : '(URD)'}</span>
           <div className="flex gap-2">
             <button
-              onClick={() => setPurchaseType('URD')}
+              onClick={() => { setPurchaseType('URD'); setSupplierId(null); setSupplierSearch(''); }}
               className={purchaseType === 'URD' ? 'btn-primary text-xs' : 'btn-outline text-xs'}
             >
               URD Purchase
             </button>
             <button
-              onClick={() => setPurchaseType('OLD_GOLD')}
+              onClick={() => { setPurchaseType('OLD_GOLD'); setSupplierId(null); setSupplierSearch(''); }}
               className={purchaseType === 'OLD_GOLD' ? 'btn-primary text-xs' : 'btn-outline text-xs'}
             >
               Old Gold Purchase
@@ -210,11 +210,14 @@ export default function PurchaseURD() {
             <input
               type="text"
               className="form-input w-64"
-              placeholder="Search supplier..."
+              placeholder={purchaseType === 'OLD_GOLD' ? 'Search customer...' : 'Search supplier...'}
               value={supplierSearch}
-              onChange={(e) => setSupplierSearch(e.target.value)}
+              onChange={(e) => {
+                setSupplierSearch(e.target.value);
+                if (supplierId) setSupplierId(null);
+              }}
             />
-            {suppliers && suppliers.length > 0 && (
+            {!supplierId && suppliers && suppliers.length > 0 && (
               <div className="absolute bg-white border shadow-lg z-10 max-h-40 overflow-auto w-64">
                 {suppliers.map((s: any) => (
                   <div

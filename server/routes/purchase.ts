@@ -66,9 +66,16 @@ router.get('/:id', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   try {
     const data = req.body;
-    const prefix = data.purchaseType === 'URD' ? 'URD' : 'PUR';
+    // Map OLD_GOLD to URD for the database enum, but keep prefix logic
+    const isOldGold = data.purchaseType === 'OLD_GOLD';
+    const dbPurchaseType = isOldGold ? 'URD' : (data.purchaseType || 'URD');
+    const prefix = (dbPurchaseType === 'URD' || isOldGold) ? 'URD' : 'PUR';
 
-    if (!canAccessBranch(req, data.branchId)) {
+    // Use authenticated user's branch/user if not provided
+    const branchId = data.branchId || req.branchId!;
+    const userId = data.userId || req.userId!;
+
+    if (!canAccessBranch(req, branchId)) {
       return res.status(403).json({ error: 'Access denied to target branch' });
     }
 
@@ -101,11 +108,11 @@ router.post('/', async (req: Request, res: Response) => {
           voucherPrefix: prefix,
           voucherNumber: sequence.lastNumber,
           voucherDate: new Date(data.voucherDate),
-          purchaseType: data.purchaseType || 'URD',
+          purchaseType: dbPurchaseType as any,
           accountId: data.accountId,
           companyId: req.companyId!,
-          branchId: data.branchId,
-          userId: data.userId,
+          branchId,
+          userId,
           description: data.description,
           variety: data.variety,
           group: data.group,
@@ -127,18 +134,18 @@ router.post('/', async (req: Request, res: Response) => {
         },
       });
 
-      // Create purchase items (less weight/style details)
+      // Create purchase items - map frontend fields to schema fields
       if (data.items && data.items.length > 0) {
         for (const item of data.items) {
           await tx.purchaseItem.create({
             data: {
               purchaseVoucherId: purchaseVoucher.id,
-              styleName: item.styleName,
-              weight: item.weight || 0,
+              styleName: item.styleName || item.itemName || '',
+              weight: item.weight || item.netWeight || 0,
               pcs: item.pcs || 0,
-              amtCalcOn: item.amtCalcOn,
-              rate: item.rate || 0,
-              amount: item.amount || 0,
+              amtCalcOn: item.amtCalcOn || 'Weight',
+              rate: item.rate || item.metalRate || 0,
+              amount: item.amount || item.totalAmount || 0,
             },
           });
         }

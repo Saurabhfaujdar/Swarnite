@@ -82,7 +82,7 @@ export const config = {
   rateLimitWindowMs: envInt('RATE_LIMIT_WINDOW_MS', 900_000),
   rateLimitMax: envInt('RATE_LIMIT_MAX', isProd ? 100 : 200),
   authRateLimitWindowMs: envInt('AUTH_RATE_LIMIT_WINDOW_MS', 900_000),
-  authRateLimitMax: envInt('AUTH_RATE_LIMIT_MAX', isProd ? 10 : 15),
+  authRateLimitMax: envInt('AUTH_RATE_LIMIT_MAX', isProd ? 10 : 100),
 
   // ─── Logging ─────────────────────────────────────────────
   logLevel: process.env.LOG_LEVEL || (isDev ? 'debug' : 'info'),

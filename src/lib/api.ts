@@ -167,6 +167,20 @@ export const branchManagementAPI = {
   transfer: (data: any) => api.post('/branches/transfer', data),
   transferHistory: (params?: any) => api.get('/branches/transfer/history', { params }),
   auditLog: (params?: any) => api.get('/branches/audit-log', { params }),
+  branchUsers: (id: number) => api.get(`/branches/${id}/users`),
+  createBranchUser: (id: number, data: any) => api.post(`/branches/${id}/user`, data),
+  updateBranchUser: (branchId: number, userId: number, data: any) => api.put(`/branches/${branchId}/user/${userId}`, data),
+};
+
+// Stock Requests
+export const stockRequestAPI = {
+  branches: () => api.get('/stock-requests/branches'),
+  browse: (params?: any) => api.get('/stock-requests/browse', { params }),
+  list: (params?: any) => api.get('/stock-requests', { params }),
+  get: (id: number) => api.get(`/stock-requests/${id}`),
+  create: (data: any) => api.post('/stock-requests', data),
+  approve: (id: number) => api.put(`/stock-requests/${id}/approve`),
+  reject: (id: number, reason?: string) => api.put(`/stock-requests/${id}/reject`, { reason }),
 };
 
 // Layaway

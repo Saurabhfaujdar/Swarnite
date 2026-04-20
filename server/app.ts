@@ -22,6 +22,7 @@ import layawayRoutes from './routes/layaway';
 import customerPaymentRoutes from './routes/customerPayments';
 import savingsSchemeRoutes from './routes/savingsScheme';
 import filesRoutes from './routes/files';
+import stockRequestRoutes from './routes/stockRequest';
 
 const app = express();
 
@@ -111,6 +112,7 @@ app.use('/api/layaway', layawayRoutes);
 app.use('/api/customer-payments', customerPaymentRoutes);
 app.use('/api/savings-scheme', savingsSchemeRoutes);
 app.use('/api/files', filesRoutes);
+app.use('/api/stock-requests', stockRequestRoutes);
 
 // ─── Static files + SPA fallback (production builds) ───────
 if (config.serveStatic) {

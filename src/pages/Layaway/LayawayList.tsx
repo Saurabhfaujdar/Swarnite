@@ -26,13 +26,6 @@ export default function LayawayList() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
-  // Add Payment modal state
-  const [showPayModal, setShowPayModal] = useState(false);
-  const [payAmount, setPayAmount] = useState('');
-  const [payMode, setPayMode] = useState('Cash');
-  const [payRef, setPayRef] = useState('');
-  const [payNarration, setPayNarration] = useState('');
-
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['layaways', customerFilter, salesmanFilter, dateFrom, dateTo, statusFilter],
     queryFn: () => layawayAPI.list({
@@ -60,17 +53,6 @@ export default function LayawayList() {
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to cancel'),
   });
 
-  const payMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => layawayAPI.addPayment(id, data),
-    onSuccess: (res) => {
-      toast.success('Payment recorded successfully');
-      queryClient.invalidateQueries({ queryKey: ['layaways'] });
-      setShowPayModal(false);
-      setPayAmount(''); setPayRef(''); setPayNarration('');
-    },
-    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to record payment'),
-  });
-
   const entries = data?.entries || [];
   const totalAmount = data?.totalAmount || 0;
 
@@ -83,23 +65,6 @@ export default function LayawayList() {
     cancelMutation.mutate(selectedId);
   };
 
-  const handleAddPayment = () => {
-    if (!selectedId) return toast.error('Select a layaway entry first');
-    if (!['ACTIVE', 'PARTIALLY_PAID', 'OVERDUE', 'READY_FOR_CONVERSION'].includes(selectedEntry?.status)) {
-      return toast.error('Cannot add payment to a ' + selectedEntry?.status + ' layaway');
-    }
-    setShowPayModal(true);
-  };
-
-  const submitPayment = () => {
-    const amount = Number(payAmount);
-    if (!amount || amount <= 0) return toast.error('Enter a valid payment amount');
-    payMutation.mutate({
-      id: selectedId!,
-      data: { amount, paymentMode: payMode, reference: payRef || null, narration: payNarration || null },
-    });
-  };
-
   return (
     <div className="flex flex-col gap-3 h-full">
       {/* Header & Filters */}
@@ -108,13 +73,6 @@ export default function LayawayList() {
           <span>Layaway Register</span>
           <div className="flex gap-2">
             <button onClick={() => navigate('/layaway')} className="btn-success text-xs">+ New Layaway</button>
-            <button
-              onClick={handleAddPayment}
-              className="btn-primary text-xs"
-              disabled={!selectedId}
-            >
-              + Add Payment
-            </button>
             <button
               onClick={() => selectedId && navigate(`/layaway/detail/${selectedId}`)}
               className="btn-secondary text-xs"
@@ -250,59 +208,6 @@ export default function LayawayList() {
         </div>
       </div>
 
-      {/* Add Payment Modal */}
-      {showPayModal && selectedEntry && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-96 p-5">
-            <div className="font-bold text-base mb-1">Add Payment</div>
-            <div className="text-xs text-gray-500 mb-3">
-              {selectedEntry.voucherNo} — {selectedEntry.account?.name} —
-              Balance: <strong className="text-red-600">₹{formatIndianNumber(Number(selectedEntry.voucherAmount) - Number(selectedEntry.paymentAmount))}</strong>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="form-label block text-xs">Amount *</label>
-                <input
-                  type="number"
-                  className="form-input w-full"
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value)}
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="form-label block text-xs">Payment Mode</label>
-                <select className="form-select w-full" value={payMode} onChange={(e) => setPayMode(e.target.value)}>
-                  <option value="Cash">Cash</option>
-                  <option value="UPI">UPI</option>
-                  <option value="Bank">Bank Transfer</option>
-                  <option value="Card">Card</option>
-                </select>
-              </div>
-              <div>
-                <label className="form-label block text-xs">Reference No</label>
-                <input className="form-input w-full" value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="UTR / Txn ID" />
-              </div>
-              <div>
-                <label className="form-label block text-xs">Narration</label>
-                <input className="form-input w-full" value={payNarration} onChange={(e) => setPayNarration(e.target.value)} />
-              </div>
-            </div>
-
-            <div className="flex gap-2 mt-4">
-              <button
-                onClick={submitPayment}
-                disabled={payMutation.isPending}
-                className="btn-success flex-1"
-              >
-                {payMutation.isPending ? 'Saving...' : 'Record Payment'}
-              </button>
-              <button onClick={() => setShowPayModal(false)} className="btn-secondary flex-1">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
