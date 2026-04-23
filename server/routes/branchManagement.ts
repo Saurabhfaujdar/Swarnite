@@ -246,8 +246,10 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'name, code, and companyId are required' });
     }
 
-    // Check for duplicate code
-    const existing = await prisma.branch.findUnique({ where: { code: data.code } });
+    // Check for duplicate code within the same company
+    const existing = await prisma.branch.findFirst({
+      where: { code: data.code, companyId: data.companyId },
+    });
     if (existing) {
       return res.status(409).json({ error: `Branch code '${data.code}' already exists` });
     }

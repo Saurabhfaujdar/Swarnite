@@ -862,7 +862,7 @@ CREATE UNIQUE INDEX "users_username_key" ON "users"("username");
 CREATE INDEX "users_companyId_idx" ON "users"("companyId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "branches_code_key" ON "branches"("code");
+CREATE UNIQUE INDEX "branches_companyId_code_key" ON "branches"("companyId", "code");
 
 -- CreateIndex
 CREATE INDEX "branches_companyId_idx" ON "branches"("companyId");

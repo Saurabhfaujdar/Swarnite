@@ -94,7 +94,7 @@ model Company {
 model Branch {
   id          Int         @id @default(autoincrement())
   name        String
-  code        String      @unique
+  code        String
   companyId   Int
   company     Company     @relation(fields: [companyId], references: [id])
   branchType  BranchType  @default(BRANCH)
@@ -133,6 +133,7 @@ model Branch {
   stockRequestsMade  StockRequest[]  @relation("RequestingBranch")
   stockRequestsFrom  StockRequest[]  @relation("SourceBranch")
 
+  @@unique([companyId, code])
   @@index([companyId])
   @@index([parentId])
   @@map("branches")

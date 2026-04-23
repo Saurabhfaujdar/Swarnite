@@ -253,8 +253,12 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Total payment cannot exceed voucher amount plus outstanding balance' });
     }
 
+    // Use authenticated user's branch/user if not provided
+    const branchId = data.branchId || req.branchId!;
+    const userId = data.userId || req.userId!;
+
     // Validate branch access for the write
-    if (!canAccessBranch(req, data.branchId)) {
+    if (!canAccessBranch(req, branchId)) {
       return res.status(403).json({ error: 'Access denied to target branch' });
     }
 
@@ -291,8 +295,8 @@ router.post('/', async (req: Request, res: Response) => {
           accountId: data.accountId,
           salesmanId: data.salesmanId || null,
           companyId: req.companyId!,
-          branchId: data.branchId,
-          userId: data.userId,
+          branchId,
+          userId,
           totalGrossWeight: data.totalGrossWeight || 0,
           totalNetWeight: data.totalNetWeight || 0,
           totalPcs: data.totalPcs || 0,

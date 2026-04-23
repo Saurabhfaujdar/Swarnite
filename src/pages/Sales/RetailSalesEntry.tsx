@@ -101,7 +101,7 @@ export default function RetailSalesEntry() {
       // Auto-open voucher print dialog after save
       setShowVoucherPrint(true);
     },
-    onError: () => toast.error('Failed to save sales voucher'),
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to save sales voucher'),
   });
 
   // Add item by label scan
@@ -197,8 +197,6 @@ export default function RetailSalesEntry() {
       voucherDate,
       accountId: customerId,
       salesmanId,
-      branchId: 1, // Would come from user context
-      userId: 1,
       financialYear: getFinancialYear(),
       totalGrossWeight,
       totalNetWeight,
