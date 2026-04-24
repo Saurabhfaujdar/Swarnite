@@ -25,6 +25,9 @@ vi.mock('../../src/lib/api', () => ({
     transfer: vi.fn(),
     transferHistory: vi.fn(),
     auditLog: vi.fn(),
+    branchUsers: vi.fn(),
+    createBranchUser: vi.fn(),
+    updateBranchUser: vi.fn(),
   },
 }));
 
@@ -379,5 +382,142 @@ describe('BranchManagement — Delete Branch', () => {
     const childRow = screen.getByText('Pune Branch').closest('[class*="cursor-pointer"]')!;
     const childBtns = within(childRow as HTMLElement).getAllByRole('button');
     expect(childBtns.length).toBeGreaterThanOrEqual(3); // Edit, Disable, Delete
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// STORE HIERARCHY — MASTER BRANCH RENDERING
+// ════════════════════════════════════════════════════════════
+describe('BranchManagement — Store Hierarchy', () => {
+  it('renders Store Hierarchy heading', async () => {
+    render(<BranchManagement />);
+    await waitFor(() => {
+      expect(screen.getByText('Store Hierarchy')).toBeInTheDocument();
+    });
+  });
+
+  it('shows nothing when no master branch exists (isMaster=false)', async () => {
+    // All branches have isMaster=false — simulates the deployment bug
+    mockList.mockResolvedValue({
+      data: {
+        branches: [
+          { ...MASTER, isMaster: false, branchType: 'BRANCH' },
+          CHILD1,
+        ],
+        total: 2,
+      },
+    });
+
+    render(<BranchManagement />);
+    await waitFor(() => {
+      expect(screen.getByText('Store Hierarchy')).toBeInTheDocument();
+    });
+
+    // Master badge should NOT appear since no branch has isMaster=true
+    expect(screen.queryByText('MASTER')).not.toBeInTheDocument();
+  });
+
+  it('renders master with MASTER badge when isMaster=true', async () => {
+    render(<BranchManagement />);
+    await waitFor(() => {
+      expect(screen.getByText('Main Store')).toBeInTheDocument();
+      expect(screen.getByText('MASTER')).toBeInTheDocument();
+      expect(screen.getByText('(MAIN)')).toBeInTheDocument();
+    });
+  });
+
+  it('shows children under master when expanded', async () => {
+    mockList.mockResolvedValue({
+      data: {
+        branches: [
+          MASTER,
+          CHILD1,
+          { ...DISABLED_CHILD },
+        ],
+        total: 3,
+      },
+    });
+
+    const user = userEvent.setup();
+    render(<BranchManagement />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Main Store')).toBeInTheDocument();
+    });
+
+    // Expand master
+    const masterRow = screen.getByText('Main Store').closest('[class*="cursor-pointer"]')!;
+    const expandBtn = within(masterRow as HTMLElement).getAllByRole('button')[0];
+    await user.click(expandBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Pune Branch')).toBeInTheDocument();
+      expect(screen.getByText('Closed Branch')).toBeInTheDocument();
+    });
+  });
+
+  it('shows Disabled badge for inactive branches', async () => {
+    mockList.mockResolvedValue({
+      data: { branches: [MASTER, DISABLED_CHILD], total: 2 },
+    });
+
+    const user = userEvent.setup();
+    render(<BranchManagement />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Main Store')).toBeInTheDocument();
+    });
+
+    // Expand master
+    const masterRow = screen.getByText('Main Store').closest('[class*="cursor-pointer"]')!;
+    const expandBtn = within(masterRow as HTMLElement).getAllByRole('button')[0];
+    await user.click(expandBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Disabled')).toBeInTheDocument();
+    });
+  });
+
+  it('shows "No branch stores yet" when no children exist', async () => {
+    mockList.mockResolvedValue({
+      data: { branches: [MASTER], total: 1 },
+    });
+
+    const user = userEvent.setup();
+    render(<BranchManagement />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Main Store')).toBeInTheDocument();
+    });
+
+    // Expand master
+    const masterRow = screen.getByText('Main Store').closest('[class*="cursor-pointer"]')!;
+    const expandBtn = within(masterRow as HTMLElement).getAllByRole('button')[0];
+    await user.click(expandBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('No branch stores yet')).toBeInTheDocument();
+    });
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// CREATE BRANCH WITH USER CREDENTIALS
+// ════════════════════════════════════════════════════════════
+describe('BranchManagement — Create Branch with User', () => {
+  it('shows optional user credentials section in create dialog', async () => {
+    const user = userEvent.setup();
+    render(<BranchManagement />);
+
+    await waitFor(() => {
+      expect(screen.getByText('New Branch')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('New Branch'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Branch Login Credentials (optional)')).toBeInTheDocument();
+      expect(screen.getByText('Username')).toBeInTheDocument();
+      expect(screen.getByText('Password')).toBeInTheDocument();
+    });
   });
 });

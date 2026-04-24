@@ -1,13 +1,27 @@
+import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { reportsAPI, mastersAPI } from '../lib/api';
 import { formatCurrency, formatWeight } from '../lib/utils';
+import { useKeyboardShortcuts } from '../lib/useKeyboardShortcuts';
 import { ShoppingCart, Package, Tag, Users, TrendingUp, TrendingDown, Scale } from 'lucide-react';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { data: dashboard } = useQuery({
     queryKey: ['dashboard'],
     queryFn: () => reportsAPI.dashboard().then((r) => r.data),
   });
+
+  const shortcuts = useMemo(() => ({
+    F1: () => navigate('/sales/retail'),
+    F2: () => navigate('/purchase/urd'),
+    F3: () => navigate('/cash-bank/cash'),
+    F4: () => navigate('/inventory/labels/new'),
+    F5: () => navigate('/reports/daily-sales'),
+    F6: () => navigate('/reports/stock'),
+  }), [navigate]);
+  useKeyboardShortcuts(shortcuts);
 
   const stats = [
     {
@@ -108,15 +122,18 @@ export default function Dashboard() {
           { label: 'Daily Report', icon: TrendingUp, to: '/reports/daily-sales', key: 'F5' },
           { label: 'Stock Report', icon: Scale, to: '/reports/stock', key: 'F6' },
         ].map((item) => (
-          <a
+          <div
             key={item.label}
-            href={item.to}
-            className="fn-key flex flex-col items-center gap-1 rounded hover:shadow-md transition-shadow"
+            className="fn-key flex flex-col items-center gap-1 rounded hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => navigate(item.to)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter') navigate(item.to); }}
           >
             <item.icon size={20} className="text-blue-600" />
             <span className="text-xs font-medium">{item.label}</span>
             <span className="fn-key-label">({item.key})</span>
-          </a>
+          </div>
         ))}
       </div>
     </div>

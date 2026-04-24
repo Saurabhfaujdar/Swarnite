@@ -1,0 +1,660 @@
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.250Z","level":"info","message":"request","requestId":"b2447aad-c3c7-464a-b88f-98a91367b7f9","method":"GET","path":"/api/sales","status":200,"duration":"14ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.288Z","level":"info","message":"request","requestId":"fe8d9b97-018a-48fe-bced-1831c84c7c7c","method":"GET","path":"/api/sales","status":200,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.299Z","level":"info","message":"request","requestId":"f3d0b8cf-72ef-4b60-b304-d0ba920f9347","method":"GET","path":"/api/sales?dateFrom=2026-03-01&dateTo=2026-03-31","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.306Z","level":"info","message":"request","requestId":"05a83a04-7022-4d93-8557-f683a408684f","method":"GET","path":"/api/sales?dateFrom=2026-03-01","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.312Z","level":"info","message":"request","requestId":"c960433c-c3a5-4af3-92f3-f895b87683e1","method":"GET","path":"/api/sales?dateTo=2026-03-31","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.319Z","level":"info","message":"request","requestId":"3c3b1eab-f4aa-49e8-a86b-2639450f5cfe","method":"GET","path":"/api/sales?customerId=10","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.324Z","level":"info","message":"request","requestId":"d7683b73-14b5-4941-a3c5-1c88fd271767","method":"GET","path":"/api/sales?salesmanId=1","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.330Z","level":"info","message":"request","requestId":"5d8b24f9-f379-4aa7-aac6-b4f5079a9861","method":"GET","path":"/api/sales?voucherNo=JGI/1","status":200,"duration":"0ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.336Z","level":"info","message":"request","requestId":"caa4a8b7-2347-4ca8-b7a2-26fe3ff92b9a","method":"GET","path":"/api/sales?status=ACTIVE","status":200,"duration":"0ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.343Z","level":"info","message":"request","requestId":"7e37d69c-f640-41a4-a24b-00baa5e72038","method":"GET","path":"/api/sales?status=CANCELLED","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.348Z","level":"info","message":"request","requestId":"2129420f-4c2a-4e81-b213-0d8342a73e59","method":"GET","path":"/api/sales?status=ALL","status":200,"duration":"0ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.353Z","level":"info","message":"request","requestId":"09e0ebfc-7339-484b-b748-37325d3adec1","method":"GET","path":"/api/sales?salesmanName=Amit","status":200,"duration":"0ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.358Z","level":"info","message":"request","requestId":"7a55d608-b6aa-4e3f-a945-c8ff52c6506f","method":"GET","path":"/api/sales?salesmanId=1&salesmanName=Amit","status":200,"duration":"0ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.363Z","level":"info","message":"request","requestId":"26459cb7-0342-41cc-b3e1-86d404c3125e","method":"GET","path":"/api/sales?narration=wedding","status":200,"duration":"0ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.368Z","level":"info","message":"request","requestId":"678618ca-7f02-4a13-96e9-2e5b64bba271","method":"GET","path":"/api/sales?reference=REF001","status":200,"duration":"0ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.374Z","level":"info","message":"request","requestId":"77357b69-d7e3-461a-9f72-c0df3cb5c716","method":"GET","path":"/api/sales?minAmount=50000","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.379Z","level":"info","message":"request","requestId":"352af3a4-d184-4401-a27d-504a78e747cd","method":"GET","path":"/api/sales?maxAmount=100000","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.384Z","level":"info","message":"request","requestId":"b90ab772-06a8-4c9f-8dc8-41909c42d40e","method":"GET","path":"/api/sales?minAmount=50000&maxAmount=100000","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.389Z","level":"info","message":"request","requestId":"dfd40821-9504-4763-8885-cf1326b12e32","method":"GET","path":"/api/sales?minDue=1000&maxDue=10000","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.394Z","level":"info","message":"request","requestId":"2895d383-0fa8-4d8d-868b-9f069dbf17c0","method":"GET","path":"/api/sales?minGrossWeight=5&maxGrossWeight=15","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.399Z","level":"info","message":"request","requestId":"4fc4da46-2223-466f-ab94-83b65c2d2377","method":"GET","path":"/api/sales?minNetWeight=4&maxNetWeight=10","status":200,"duration":"0ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.404Z","level":"info","message":"request","requestId":"769d5740-73a8-4107-a873-0cea69d28c95","method":"GET","path":"/api/sales?paymentMode=CASH","status":200,"duration":"0ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.410Z","level":"info","message":"request","requestId":"4503f2ef-f5ad-4e52-a287-727e4a317c31","method":"GET","path":"/api/sales?paymentMode=BANK","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.415Z","level":"info","message":"request","requestId":"d0cea544-2340-43c6-b76e-4c989213e773","method":"GET","path":"/api/sales?paymentMode=CARD","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.420Z","level":"info","message":"request","requestId":"97ffda02-844d-43be-8692-ca1ac8d60285","method":"GET","path":"/api/sales?paymentMode=OLD_GOLD","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.425Z","level":"info","message":"request","requestId":"e26b8bc3-6cae-4a64-8cf1-7506c5138400","method":"GET","path":"/api/sales?paymentMode=UPI","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.430Z","level":"info","message":"request","requestId":"0abacac4-27ae-4b7f-9588-58d7e31812f7","method":"GET","path":"/api/sales?paymentMode=DUE","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.434Z","level":"info","message":"request","requestId":"6a1a245c-3bb0-4ad2-812f-15145fab8ac7","method":"GET","path":"/api/sales?labelNo=GN/51","status":200,"duration":"0ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.439Z","level":"info","message":"request","requestId":"55356eb7-02f3-435a-9feb-da7c255bb9f2","method":"GET","path":"/api/sales?itemName=Necklace","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.444Z","level":"info","message":"request","requestId":"c66930b1-15ee-41cb-8da0-6ed71108f612","method":"GET","path":"/api/sales?labelNo=GN&itemName=Gold","status":200,"duration":"0ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.450Z","level":"info","message":"request","requestId":"fe852659-0c48-4ca4-a3c0-687b8dd27316","method":"GET","path":"/api/sales?search=wedding","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.456Z","level":"info","message":"request","requestId":"068a77fe-4b52-425e-a15b-2acaf440bef0","method":"GET","path":"/api/sales","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.462Z","level":"info","message":"request","requestId":"86652dcc-1beb-438d-88dc-b55df0429cb0","method":"GET","path":"/api/sales?sortBy=voucherAmount&sortOrder=asc","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.467Z","level":"info","message":"request","requestId":"3cf1947f-76ad-4589-9916-f6707a58ec8f","method":"GET","path":"/api/sales?sortBy=dueAmount&sortOrder=desc","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.472Z","level":"info","message":"request","requestId":"9d8dfd65-42ca-4987-91f9-be3db87958ae","method":"GET","path":"/api/sales?sortBy=totalGrossWeight&sortOrder=asc","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.477Z","level":"info","message":"request","requestId":"9398bb89-5230-4164-b449-e7885883d085","method":"GET","path":"/api/sales?sortBy=INVALID_FIELD","status":200,"duration":"0ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.483Z","level":"info","message":"request","requestId":"de9acdc4-ce58-447d-b43b-d48532bd38b7","method":"GET","path":"/api/sales?sortOrder=INVALID","status":200,"duration":"0ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.488Z","level":"info","message":"request","requestId":"2db0cb8f-d32d-41b2-af29-10fbf964fdb3","method":"GET","path":"/api/sales?page=3&limit=20","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.493Z","level":"info","message":"request","requestId":"a74d957d-ec97-4d2b-bbd4-6a0a189cfe9e","method":"GET","path":"/api/sales?dateFrom=2026-03-01&dateTo=2026-03-31&status=ACTIVE&salesmanName=Amit&minAmount=50000&paymentMode=CASH&sortBy=voucherAmount&sortOrder=desc","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.error
+    Error fetching sales: Error: DB error
+        at Object.<anonymous> (C:\Swarnite\tests\integration\sales.test.ts:554:60)
+        at Promise.finally.completed (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:1557:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:1497:10)
+        at _callCircusTest (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:1007:40)
+        at processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at _runTest (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:947:3)
+        at C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:849:7
+        at _runTestsForDescribeBlock (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:862:11)
+        at _runTestsForDescribeBlock (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:857:11)
+        at run (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:761:3)
+        at runAndTransformResultsToJestFormat (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:1918:21)
+        at jestAdapter (C:\Swarnite\node_modules\jest-circus\build\runner.js:101:19)
+        at runTestInternal (C:\Swarnite\node_modules\jest-runner\build\index.js:275:16)
+        at runTest (C:\Swarnite\node_modules\jest-runner\build\index.js:343:7)
+
+    [0m [90m 196 |[39m     res[33m.[39mjson({ vouchers[33m,[39m total[33m,[39m page[33m:[39m [33mNumber[39m(page)[33m,[39m limit[33m:[39m [33mNumber[39m(limit) })[33m;[39m
+     [90m 197 |[39m   } [36mcatch[39m (error) {
+    [31m[1m>[22m[39m[90m 198 |[39m     console[33m.[39merror([32m'Error fetching sales:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 199 |[39m     res[33m.[39mstatus([35m500[39m)[33m.[39mjson({ error[33m:[39m [32m'Failed to fetch sales vouchers'[39m })[33m;[39m
+     [90m 200 |[39m   }
+     [90m 201 |[39m })[33m;[39m[0m
+
+      at server/routes/sales.ts:198:13
+
+  console.error
+    {"timestamp":"2026-04-23T23:01:36.519Z","level":"error","message":"request","requestId":"54d83fa5-6878-4709-8c22-530b97db2ef6","method":"GET","path":"/api/sales","status":500,"duration":"21ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                     [31m[1m^[22m[39m
+     [90m 52 |[39m   }[33m,[39m
+     [90m 53 |[39m }[33m;[39m
+     [90m 54 |[39m[0m
+
+      at Object.error (server/logger.ts:51:37)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:45:14)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.529Z","level":"info","message":"request","requestId":"b82be7f4-671a-43c0-9e17-ca20e5265e50","method":"GET","path":"/api/sales/1","status":200,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.warn
+    {"timestamp":"2026-04-23T23:01:36.534Z","level":"warn","message":"request","requestId":"41b16d4e-2192-42cd-934c-2916fe4b00bd","method":"GET","path":"/api/sales/999","status":404,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.error
+    {"timestamp":"2026-04-23T23:01:36.542Z","level":"error","message":"request","requestId":"734175c5-4da3-44c0-85cc-6b523af4b1ac","method":"GET","path":"/api/sales/1","status":500,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                     [31m[1m^[22m[39m
+     [90m 52 |[39m   }[33m,[39m
+     [90m 53 |[39m }[33m;[39m
+     [90m 54 |[39m[0m
+
+      at Object.error (server/logger.ts:51:37)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:45:14)
+
+  console.log
+    Payment validation: {
+      totalPaid: 70000,
+      previousOs: 0,
+      voucherAmt: 77722,
+      maxAllowed: 77722,
+      passes: true
+    }
+
+      at server/routes/sales.ts:250:13
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.600Z","level":"info","message":"request","requestId":"7fbf11cf-3c3e-49f8-a748-5021d5bf8dc7","method":"POST","path":"/api/sales","status":201,"duration":"50ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.log
+    Payment validation: {
+      totalPaid: 70000,
+      previousOs: 0,
+      voucherAmt: 77722,
+      maxAllowed: 77722,
+      passes: true
+    }
+
+      at server/routes/sales.ts:250:13
+
+  console.error
+    Error creating sales voucher: Error: Label GB/13 is not available for sale (status: SOLD)
+        at C:\Swarnite\server\routes\sales.ts:368:21
+        at processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at C:\Swarnite\server\routes\sales.ts:265:21
+
+    [0m [90m 461 |[39m     res[33m.[39mstatus([35m201[39m)[33m.[39mjson(fullVoucher)[33m;[39m
+     [90m 462 |[39m   } [36mcatch[39m (error[33m:[39m any) {
+    [31m[1m>[22m[39m[90m 463 |[39m     console[33m.[39merror([32m'Error creating sales voucher:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 464 |[39m     [90m// Provide more specific error messages[39m
+     [90m 465 |[39m     [36mif[39m (error[33m.[39mcode [33m===[39m [32m'P2002'[39m [33m&&[39m error[33m.[39mmeta[33m?[39m[33m.[39mtarget[33m?[39m[33m.[39mincludes([32m'voucherNo'[39m)) {
+     [90m 466 |[39m       [36mreturn[39m res[33m.[39mstatus([35m409[39m)[33m.[39mjson({ error[33m:[39m [32m'Voucher number conflict. Please try again.'[39m })[33m;[39m[0m
+
+      at server/routes/sales.ts:463:13
+
+  console.warn
+    {"timestamp":"2026-04-23T23:01:36.622Z","level":"warn","message":"request","requestId":"ec879f36-7d91-4039-bf1c-af061a5ac67b","method":"POST","path":"/api/sales","status":400,"duration":"16ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.log
+    Payment validation: {
+      totalPaid: 70000,
+      previousOs: 0,
+      voucherAmt: 77722,
+      maxAllowed: 77722,
+      passes: true
+    }
+
+      at server/routes/sales.ts:250:13
+
+  console.error
+    Error creating sales voucher: Error: DB error
+        at Object.<anonymous> (C:\Swarnite\tests\integration\sales.test.ts:668:61)
+        at Promise.finally.completed (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:1557:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:1497:10)
+        at _callCircusTest (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:1007:40)
+        at processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at _runTest (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:947:3)
+        at C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:849:7
+        at _runTestsForDescribeBlock (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:862:11)
+        at _runTestsForDescribeBlock (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:857:11)
+        at run (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:761:3)
+        at runAndTransformResultsToJestFormat (C:\Swarnite\node_modules\jest-circus\build\jestAdapterInit.js:1918:21)
+        at jestAdapter (C:\Swarnite\node_modules\jest-circus\build\runner.js:101:19)
+        at runTestInternal (C:\Swarnite\node_modules\jest-runner\build\index.js:275:16)
+        at runTest (C:\Swarnite\node_modules\jest-runner\build\index.js:343:7)
+
+    [0m [90m 461 |[39m     res[33m.[39mstatus([35m201[39m)[33m.[39mjson(fullVoucher)[33m;[39m
+     [90m 462 |[39m   } [36mcatch[39m (error[33m:[39m any) {
+    [31m[1m>[22m[39m[90m 463 |[39m     console[33m.[39merror([32m'Error creating sales voucher:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 464 |[39m     [90m// Provide more specific error messages[39m
+     [90m 465 |[39m     [36mif[39m (error[33m.[39mcode [33m===[39m [32m'P2002'[39m [33m&&[39m error[33m.[39mmeta[33m?[39m[33m.[39mtarget[33m?[39m[33m.[39mincludes([32m'voucherNo'[39m)) {
+     [90m 466 |[39m       [36mreturn[39m res[33m.[39mstatus([35m409[39m)[33m.[39mjson({ error[33m:[39m [32m'Voucher number conflict. Please try again.'[39m })[33m;[39m[0m
+
+      at server/routes/sales.ts:463:13
+
+  console.warn
+    {"timestamp":"2026-04-23T23:01:36.645Z","level":"warn","message":"request","requestId":"a20ebaba-0ca5-4a2b-bc2a-6570097737b2","method":"POST","path":"/api/sales","status":400,"duration":"16ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.665Z","level":"info","message":"request","requestId":"bdcb65a9-3f59-4827-bf46-60da0f87cab4","method":"DELETE","path":"/api/sales/1","status":200,"duration":"3ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.error
+    {"timestamp":"2026-04-23T23:01:36.676Z","level":"error","message":"request","requestId":"0ff2ee8c-b15d-4439-ac7a-7e833922e75b","method":"DELETE","path":"/api/sales/1","status":500,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                     [31m[1m^[22m[39m
+     [90m 52 |[39m   }[33m,[39m
+     [90m 53 |[39m }[33m;[39m
+     [90m 54 |[39m[0m
+
+      at Object.error (server/logger.ts:51:37)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:45:14)
+
+  console.log
+    Payment validation: {
+      totalPaid: 100000,
+      previousOs: 0,
+      voucherAmt: 77722,
+      maxAllowed: 77722,
+      passes: false
+    }
+
+      at server/routes/sales.ts:250:13
+
+  console.warn
+    {"timestamp":"2026-04-23T23:01:36.691Z","level":"warn","message":"request","requestId":"772bbf8e-67d4-4ac6-9cf7-5197a90703c1","method":"POST","path":"/api/sales","status":400,"duration":"3ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.log
+    Payment validation: {
+      totalPaid: 77722,
+      previousOs: 0,
+      voucherAmt: 77722,
+      maxAllowed: 77722,
+      passes: true
+    }
+
+      at server/routes/sales.ts:250:13
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.730Z","level":"info","message":"request","requestId":"f9e8151b-53bf-418a-ba7a-9c0a37bb8e94","method":"POST","path":"/api/sales","status":201,"duration":"6ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.error
+    Error updating sales voucher: Error: Total payment cannot exceed voucher amount
+        at C:\Swarnite\server\routes\sales.ts:498:15
+        at processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+    [0m [90m 548 |[39m     res[33m.[39mjson(fullVoucher)[33m;[39m
+     [90m 549 |[39m   } [36mcatch[39m (error[33m:[39m any) {
+    [31m[1m>[22m[39m[90m 550 |[39m     console[33m.[39merror([32m'Error updating sales voucher:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 551 |[39m     res[33m.[39mstatus(error[33m.[39mmessage [33m===[39m [32m'Voucher not found'[39m [33m?[39m [35m404[39m [33m:[39m error[33m.[39mmessage[33m?[39m[33m.[39mincludes([32m'Cannot edit'[39m) [33m||[39m error[33m.[39mmessage[33m?[39m[33m.[39mincludes([32m'cannot exceed'[39m) [33m?[39m [35m400[39m [33m:[39m [35m500[39m)
+     [90m 552 |[39m       [33m.[39mjson({ error[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to update voucher'[39m })[33m;[39m
+     [90m 553 |[39m   }[0m
+
+      at server/routes/sales.ts:550:13
+
+  console.warn
+    {"timestamp":"2026-04-23T23:01:36.759Z","level":"warn","message":"request","requestId":"3b665209-8c79-4935-bd67-2b679d4de516","method":"PUT","path":"/api/sales/1","status":400,"duration":"14ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.log
+    Payment validation: {
+      totalPaid: 30000,
+      previousOs: 0,
+      voucherAmt: 77722,
+      maxAllowed: 77722,
+      passes: true
+    }
+
+      at server/routes/sales.ts:250:13
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.781Z","level":"info","message":"request","requestId":"a1fbe76c-e592-4784-aa22-4e8fa6588962","method":"POST","path":"/api/sales","status":201,"duration":"8ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.799Z","level":"info","message":"request","requestId":"178b7f1b-4d1b-44a1-beee-0669155572bb","method":"GET","path":"/api/sales/4","status":200,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.error
+    Error updating sales voucher: Error: Cannot edit a closed voucher. Vouchers are automatically closed after 20 days.
+        at C:\Swarnite\server\routes\sales.ts:491:47
+        at processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+    [0m [90m 548 |[39m     res[33m.[39mjson(fullVoucher)[33m;[39m
+     [90m 549 |[39m   } [36mcatch[39m (error[33m:[39m any) {
+    [31m[1m>[22m[39m[90m 550 |[39m     console[33m.[39merror([32m'Error updating sales voucher:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 551 |[39m     res[33m.[39mstatus(error[33m.[39mmessage [33m===[39m [32m'Voucher not found'[39m [33m?[39m [35m404[39m [33m:[39m error[33m.[39mmessage[33m?[39m[33m.[39mincludes([32m'Cannot edit'[39m) [33m||[39m error[33m.[39mmessage[33m?[39m[33m.[39mincludes([32m'cannot exceed'[39m) [33m?[39m [35m400[39m [33m:[39m [35m500[39m)
+     [90m 552 |[39m       [33m.[39mjson({ error[33m:[39m error[33m.[39mmessage [33m||[39m [32m'Failed to update voucher'[39m })[33m;[39m
+     [90m 553 |[39m   }[0m
+
+      at server/routes/sales.ts:550:13
+
+  console.warn
+    {"timestamp":"2026-04-23T23:01:36.830Z","level":"warn","message":"request","requestId":"32466058-f010-49ba-a687-2e3827f30680","method":"PUT","path":"/api/sales/5","status":400,"duration":"17ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.849Z","level":"info","message":"request","requestId":"90f1750c-49af-4671-85b2-59dcc751f190","method":"GET","path":"/api/sales/1","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-23T23:01:36.857Z","level":"info","message":"request","requestId":"77a44c47-28db-470f-b9f6-47de40e6b06c","method":"GET","path":"/api/sales","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+FAIL tests/integration/sales.test.ts (5.111 s)
+  GET /api/sales
+    ΓêÜ returns all sales vouchers with default pagination (76 ms)
+    ΓêÜ returns empty array when no vouchers exist (10 ms)
+    ΓêÜ filters by dateFrom and dateTo (9 ms)
+    ΓêÜ filters by dateFrom only (6 ms)
+    ΓêÜ filters by dateTo only (6 ms)
+    ΓêÜ filters by customerId (6 ms)
+    ΓêÜ filters by salesmanId (5 ms)
+    ΓêÜ filters by voucherNo partial match (6 ms)
+    ΓêÜ filters by status=ACTIVE (6 ms)
+    ΓêÜ filters by status=CANCELLED (6 ms)
+    ΓêÜ status=ALL does not add status filter (5 ms)
+    ΓêÜ filters by salesmanName partial match (5 ms)
+    ΓêÜ salesmanName is ignored when salesmanId is present (5 ms)
+    ΓêÜ filters by narration partial match (5 ms)
+    ΓêÜ filters by reference partial match (5 ms)
+    ΓêÜ filters by minAmount (5 ms)
+    ΓêÜ filters by maxAmount (5 ms)
+    ΓêÜ filters by amount range (min + max) (5 ms)
+    ΓêÜ filters by due amount range (5 ms)
+    ΓêÜ filters by gross weight range (5 ms)
+    ΓêÜ filters by net weight range (5 ms)
+    ΓêÜ filters by paymentMode=CASH (cashAmount > 0) (5 ms)
+    ΓêÜ filters by paymentMode=BANK (6 ms)
+    ΓêÜ filters by paymentMode=CARD (4 ms)
+    ΓêÜ filters by paymentMode=OLD_GOLD (5 ms)
+    ΓêÜ filters by paymentMode=UPI (4 ms)
+    ΓêÜ filters by paymentMode=DUE (4 ms)
+    ΓêÜ filters by labelNo (item-level search) (5 ms)
+    ΓêÜ filters by itemName (item-level search) (5 ms)
+    ΓêÜ combines label and item name filter (5 ms)
+    ΓêÜ search queries across voucherNo, customer, narration, reference, salesman (6 ms)
+    ΓêÜ sorts by voucherDate desc by default (6 ms)
+    ΓêÜ sorts by voucherAmount asc when requested (5 ms)
+    ΓêÜ sorts by dueAmount desc (5 ms)
+    ΓêÜ sorts by totalGrossWeight (5 ms)
+    ΓêÜ rejects invalid sort field and defaults to voucherDate (5 ms)
+    ΓêÜ rejects invalid sort order and defaults to desc (5 ms)
+    ΓêÜ paginates with page and limit params (5 ms)
+    ΓêÜ combines multiple filters together (5 ms)
+    ΓêÜ handles server error gracefully (27 ms)
+  GET /api/sales/:id
+    ΓêÜ returns a single sales voucher with all relations (7 ms)
+    ΓêÜ returns 404 for non-existent voucher (7 ms)
+    ΓêÜ handles server error (7 ms)
+  POST /api/sales
+    ΓêÜ creates a sales voucher and updates label to SOLD (57 ms)
+    ΓêÜ rejects sale when label is already SOLD (23 ms)
+    ΓêÜ handles server error during creation (28 ms)
+  DELETE /api/sales/:id
+    ΓêÜ cancels voucher, restores labels and customer balance (17 ms)
+    ΓêÜ handles server error during cancellation (12 ms)
+  Payment overpayment validation
+    ΓêÜ POST rejects when total payment exceeds voucher amount (33 ms)
+    ΓêÜ POST allows payment equal to voucher amount (19 ms)
+    ΓêÜ PUT rejects when total payment exceeds voucher amount (30 ms)
+    ΓêÜ POST allows partial payment (due > 0) (20 ms)
+  CLOSED voucher handling
+    ΓêÜ GET detail auto-closes a stale ACTIVE voucher (>20 days) (17 ms)
+    ΓêÜ PUT rejects editing a CLOSED voucher (36 ms)
+    ΓêÜ GET detail does NOT close a recent ACTIVE voucher (10 ms)
+    ΓêÜ GET list calls auto-close for stale vouchers (9 ms)
+  Label pcs handling
+    ├ù POST decrements label pcsCount and keeps IN_STOCK when pcs remain (1 ms)
+    ├ù POST sets label status to SOLD when all pcs are sold (2 ms)
+    ├ù POST rejects when selling more pcs than available (1 ms)
+    ├ù POST rejects when pcs is less than 1 (1 ms)
+
+  ΓùÅ Label pcs handling ΓÇ║ POST decrements label pcsCount and keeps IN_STOCK when pcs remain
+
+    ReferenceError: makeSalesPayload is not defined
+
+      878 |     mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce(FULL_VOUCHER);
+      879 |
+    > 880 |     const res = await request(app).post('/api/sales').send(makeSalesPayload({
+          |                                                      ^
+      881 |       items: [{
+      882 |         ...ITEM_1,
+      883 |         pcs: 2, // selling 2 of 5 pcs
+
+      at Object.<anonymous> (tests/integration/sales.test.ts:880:54)
+
+  ΓùÅ Label pcs handling ΓÇ║ POST sets label status to SOLD when all pcs are sold
+
+    ReferenceError: makeSalesPayload is not defined
+
+      908 |     mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce(FULL_VOUCHER);
+      909 |
+    > 910 |     const res = await request(app).post('/api/sales').send(makeSalesPayload({
+          |                                                      ^
+      911 |       items: [{
+      912 |         ...ITEM_1,
+      913 |         pcs: 3, // selling all 3 pcs
+
+      at Object.<anonymous> (tests/integration/sales.test.ts:910:54)
+
+  ΓùÅ Label pcs handling ΓÇ║ POST rejects when selling more pcs than available
+
+    ReferenceError: makeSalesPayload is not defined
+
+      935 |     mockPrisma.label.findUnique.mockResolvedValueOnce({ branchId: 1, status: 'IN_STOCK', labelNo: 'GN/51', pcsCount: 2 });
+      936 |
+    > 937 |     const res = await request(app).post('/api/sales').send(makeSalesPayload({
+          |                                                      ^
+      938 |       items: [{
+      939 |         ...ITEM_1,
+      940 |         pcs: 5, // trying to sell 5 when only 2 available
+
+      at Object.<anonymous> (tests/integration/sales.test.ts:937:54)
+
+  ΓùÅ Label pcs handling ΓÇ║ POST rejects when pcs is less than 1
+
+    ReferenceError: makeSalesPayload is not defined
+
+      952 |     mockPrisma.label.findUnique.mockResolvedValueOnce({ branchId: 1, status: 'IN_STOCK', labelNo: 'GN/51', pcsCount: 5 });
+      953 |
+    > 954 |     const res = await request(app).post('/api/sales').send(makeSalesPayload({
+          |                                                      ^
+      955 |       items: [{
+      956 |         ...ITEM_1,
+      957 |         pcs: 0, // invalid: must sell at least 1
+
+      at Object.<anonymous> (tests/integration/sales.test.ts:954:54)
+
+Test Suites: 1 failed, 1 total
+Tests:       4 failed, 56 passed, 60 total
+Snapshots:   0 total
+Time:        5.669 s
+Ran all test suites matching tests/integration/sales.test.ts.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?

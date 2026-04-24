@@ -125,6 +125,7 @@ export const accountsAPI = {
   list: (params?: any) => api.get('/accounts', { params }),
   get: (id: number) => api.get(`/accounts/${id}`),
   ledger: (id: number, params?: any) => api.get(`/accounts/${id}/ledger`, { params }),
+  history: (id: number, params?: any) => api.get(`/accounts/${id}/history`, { params }),
   create: (data: any) => api.post('/accounts', data),
   update: (id: number, data: any) => api.put(`/accounts/${id}`, data),
   outstanding: (id: number) => api.get(`/accounts/${id}/outstanding`),

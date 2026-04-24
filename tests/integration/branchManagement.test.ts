@@ -198,7 +198,7 @@ describe('GET /api/branches/:id/stats', () => {
 // ════════════════════════════════════════════════════════════
 describe('POST /api/branches', () => {
   it('creates the first branch as master automatically', async () => {
-    mockPrisma.branch.findUnique.mockResolvedValueOnce(null); // no duplicate code
+    mockPrisma.branch.findFirst.mockResolvedValueOnce(null);  // no duplicate code (findFirst)
     mockPrisma.branch.count.mockResolvedValueOnce(0);          // no existing branches = auto master
     mockPrisma.branch.create.mockResolvedValueOnce({
       ...MASTER_BRANCH,
@@ -222,9 +222,10 @@ describe('POST /api/branches', () => {
   });
 
   it('creates a child branch under the master', async () => {
-    mockPrisma.branch.findUnique.mockResolvedValueOnce(null); // no duplicate code
+    mockPrisma.branch.findFirst
+      .mockResolvedValueOnce(null)     // no duplicate code (findFirst)
+      .mockResolvedValueOnce({ id: 1, isMaster: true }); // auto-find master
     mockPrisma.branch.count.mockResolvedValueOnce(1);          // existing branches = child
-    mockPrisma.branch.findFirst.mockResolvedValueOnce({ id: 1 }); // auto-find master
     mockPrisma.branch.create.mockResolvedValueOnce(CHILD_BRANCH);
     mockPrisma.auditLog.create.mockResolvedValueOnce({});
 
@@ -244,7 +245,7 @@ describe('POST /api/branches', () => {
   });
 
   it('rejects duplicate branch code', async () => {
-    mockPrisma.branch.findUnique.mockResolvedValueOnce(CHILD_BRANCH); // code exists
+    mockPrisma.branch.findFirst.mockResolvedValueOnce(CHILD_BRANCH); // code exists (findFirst)
 
     const res = await request(app)
       .post('/api/branches')
@@ -264,10 +265,9 @@ describe('POST /api/branches', () => {
   });
 
   it('validates parentId must be a master branch', async () => {
-    mockPrisma.branch.findUnique
-      .mockResolvedValueOnce(null)           // no duplicate code
-      .mockResolvedValueOnce(CHILD_BRANCH);  // parentId points to a child branch
+    mockPrisma.branch.findFirst.mockResolvedValueOnce(null); // no duplicate code (findFirst)
     mockPrisma.branch.count.mockResolvedValueOnce(2); // existing branches
+    mockPrisma.branch.findUnique.mockResolvedValueOnce(CHILD_BRANCH); // parentId points to a child branch
 
     const res = await request(app)
       .post('/api/branches')
@@ -512,9 +512,9 @@ describe('POST /api/branches/transfer', () => {
     mockPrisma.branch.findUnique
       .mockResolvedValueOnce({ id: 1, name: 'Main Store', isActive: true, isDeleted: false })
       .mockResolvedValueOnce({ id: 2, name: 'Branch Store 1', isActive: true, isDeleted: false });
-    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 1 });
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => {
       const tx = {
+        voucherSequence: { upsert: jest.fn().mockResolvedValue({ lastNumber: 1 }) },
         label: {
           findMany: jest.fn().mockResolvedValue([LABEL_1, LABEL_2]),
           update: jest.fn().mockResolvedValue({}),
@@ -598,9 +598,9 @@ describe('POST /api/branches/transfer', () => {
     mockPrisma.branch.findUnique
       .mockResolvedValueOnce({ id: 1, name: 'Main', isActive: true, isDeleted: false })
       .mockResolvedValueOnce({ id: 2, name: 'Branch', isActive: true, isDeleted: false });
-    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 2 });
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => {
       const tx = {
+        voucherSequence: { upsert: jest.fn().mockResolvedValue({ lastNumber: 2 }) },
         label: {
           findMany: jest.fn().mockResolvedValue([
             { id: 1, labelNo: 'GN/001', branchId: 2, status: 'IN_STOCK' }, // wrong branch!
@@ -625,9 +625,9 @@ describe('POST /api/branches/transfer', () => {
     mockPrisma.branch.findUnique
       .mockResolvedValueOnce({ id: 1, name: 'Main', isActive: true, isDeleted: false })
       .mockResolvedValueOnce({ id: 2, name: 'Branch', isActive: true, isDeleted: false });
-    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 3 });
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => {
       const tx = {
+        voucherSequence: { upsert: jest.fn().mockResolvedValue({ lastNumber: 3 }) },
         label: {
           findMany: jest.fn().mockResolvedValue([
             { id: 3, labelNo: 'GN/003', branchId: 1, status: 'SOLD' },
@@ -767,5 +767,353 @@ describe('GET /api/branches/audit-log', () => {
         skip: 10,
       })
     );
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// BRANCH CODE COMPOUND UNIQUENESS (companyId + code)
+// ════════════════════════════════════════════════════════════
+describe('POST /api/branches — compound unique constraint', () => {
+  it('allows same branch code in different companies', async () => {
+    // No duplicate for companyId=2
+    mockPrisma.branch.findFirst.mockResolvedValueOnce(null);
+    mockPrisma.branch.count.mockResolvedValueOnce(1);
+    mockPrisma.branch.findFirst.mockResolvedValueOnce({ id: 10, isMaster: true }); // master of company 2
+    mockPrisma.branch.create.mockResolvedValueOnce({
+      id: 20, name: 'Branch Store', code: 'BR01', companyId: 2,
+      branchType: 'BRANCH', isMaster: false, parentId: 10,
+      company: { id: 2, name: 'Other Company' },
+    });
+    mockPrisma.auditLog.create.mockResolvedValueOnce({});
+
+    const res = await request(app)
+      .post('/api/branches')
+      .send({ name: 'Branch Store', code: 'BR01', companyId: 2 });
+
+    expect(res.status).toBe(201);
+    // findFirst should check code + companyId together
+    expect(mockPrisma.branch.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          code: 'BR01',
+          companyId: 2,
+        }),
+      })
+    );
+  });
+
+  it('rejects duplicate branch code within the same company', async () => {
+    // Duplicate exists in same company
+    mockPrisma.branch.findFirst.mockResolvedValueOnce({ id: 2, code: 'BR01', companyId: 1 });
+
+    const res = await request(app)
+      .post('/api/branches')
+      .send({ name: 'Duplicate', code: 'BR01', companyId: 1 });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain("'BR01'");
+    expect(res.body.error).toContain('already exists');
+  });
+
+  it('handles P2002 unique constraint error from database', async () => {
+    mockPrisma.branch.findFirst.mockResolvedValueOnce(null); // passes app-level check
+    mockPrisma.branch.count.mockResolvedValueOnce(1);
+    mockPrisma.branch.findFirst.mockResolvedValueOnce({ id: 1, isMaster: true });
+    // Simulate DB-level unique constraint violation (race condition)
+    mockPrisma.branch.create.mockRejectedValueOnce({ code: 'P2002' });
+
+    const res = await request(app)
+      .post('/api/branches')
+      .send({ name: 'Race Condition', code: 'BR01', companyId: 1 });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('already exists');
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// BRANCH USERS — GET /api/branches/:id/users
+// ════════════════════════════════════════════════════════════
+describe('GET /api/branches/:id/users', () => {
+  it('returns users of a branch', async () => {
+    const mockUsers = [
+      { id: 10, username: 'cashier1', fullName: 'Cashier One', role: 'CASHIER', isActive: true, createdAt: new Date() },
+      { id: 11, username: 'sales1', fullName: 'Sales One', role: 'USER', isActive: true, createdAt: new Date() },
+    ];
+    mockPrisma.user.findMany.mockResolvedValueOnce(mockUsers);
+
+    const res = await request(app).get('/api/branches/2/users');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(2);
+    expect(res.body[0].username).toBe('cashier1');
+    expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { branchId: 2, companyId: 1 },
+      })
+    );
+  });
+
+  it('returns empty array when branch has no users', async () => {
+    mockPrisma.user.findMany.mockResolvedValueOnce([]);
+
+    const res = await request(app).get('/api/branches/3/users');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// CREATE BRANCH USER — POST /api/branches/:id/user
+// ════════════════════════════════════════════════════════════
+describe('POST /api/branches/:id/user', () => {
+  it('creates a user for a branch', async () => {
+    mockPrisma.branch.findUnique.mockResolvedValueOnce(CHILD_BRANCH);
+    mockPrisma.user.create.mockResolvedValueOnce({
+      id: 20, username: 'newuser', fullName: 'New User', role: 'USER', isActive: true, createdAt: new Date(),
+    });
+    mockPrisma.auditLog.create.mockResolvedValueOnce({});
+
+    const res = await request(app)
+      .post('/api/branches/2/user')
+      .send({ username: 'newuser', password: 'pass123', fullName: 'New User' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.username).toBe('newuser');
+    expect(res.body.role).toBe('USER');
+    expect(mockPrisma.auditLog.create).toHaveBeenCalled();
+  });
+
+  it('uses username as fullName when not provided', async () => {
+    mockPrisma.branch.findUnique.mockResolvedValueOnce(CHILD_BRANCH);
+    mockPrisma.user.create.mockResolvedValueOnce({
+      id: 21, username: 'branchuser', fullName: 'branchuser', role: 'USER', isActive: true, createdAt: new Date(),
+    });
+    mockPrisma.auditLog.create.mockResolvedValueOnce({});
+
+    const res = await request(app)
+      .post('/api/branches/2/user')
+      .send({ username: 'branchuser', password: 'pass123' });
+
+    expect(res.status).toBe(201);
+    expect(mockPrisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          fullName: 'branchuser',
+        }),
+      })
+    );
+  });
+
+  it('rejects missing username', async () => {
+    const res = await request(app)
+      .post('/api/branches/2/user')
+      .send({ password: 'pass123' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('Username and password');
+  });
+
+  it('rejects missing password', async () => {
+    const res = await request(app)
+      .post('/api/branches/2/user')
+      .send({ username: 'testuser' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('Username and password');
+  });
+
+  it('rejects short password', async () => {
+    const res = await request(app)
+      .post('/api/branches/2/user')
+      .send({ username: 'testuser', password: '12345' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('6 characters');
+  });
+
+  it('returns 404 for non-existent branch', async () => {
+    mockPrisma.branch.findUnique.mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .post('/api/branches/999/user')
+      .send({ username: 'testuser', password: 'pass123' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toContain('Branch not found');
+  });
+
+  it('returns 404 for deleted branch', async () => {
+    mockPrisma.branch.findUnique.mockResolvedValueOnce(DELETED_BRANCH);
+
+    const res = await request(app)
+      .post('/api/branches/5/user')
+      .send({ username: 'testuser', password: 'pass123' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toContain('Branch not found');
+  });
+
+  it('rejects duplicate username with P2002', async () => {
+    mockPrisma.branch.findUnique.mockResolvedValueOnce(CHILD_BRANCH);
+    mockPrisma.user.create.mockRejectedValueOnce({ code: 'P2002' });
+
+    const res = await request(app)
+      .post('/api/branches/2/user')
+      .send({ username: 'admin', password: 'pass123' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('Username already exists');
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// UPDATE BRANCH USER — PUT /api/branches/:id/user/:userId
+// ════════════════════════════════════════════════════════════
+describe('PUT /api/branches/:id/user/:userId', () => {
+  const BRANCH_USER = {
+    id: 10, username: 'cashier1', fullName: 'Cashier One', role: 'CASHIER',
+    branchId: 2, companyId: 1, isActive: true, password: '$2a$12$hash',
+  };
+
+  it('updates user details', async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(BRANCH_USER);
+    mockPrisma.user.update.mockResolvedValueOnce({
+      id: 10, username: 'cashier1_new', fullName: 'Updated Cashier', role: 'CASHIER', isActive: true, createdAt: new Date(),
+    });
+    mockPrisma.auditLog.create.mockResolvedValueOnce({});
+
+    const res = await request(app)
+      .put('/api/branches/2/user/10')
+      .send({ username: 'cashier1_new', fullName: 'Updated Cashier' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.username).toBe('cashier1_new');
+    expect(mockPrisma.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: 'UPDATE',
+          entityType: 'User',
+          entityId: 10,
+        }),
+      })
+    );
+  });
+
+  it('updates password with hashing', async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(BRANCH_USER);
+    mockPrisma.user.update.mockResolvedValueOnce({
+      id: 10, username: 'cashier1', fullName: 'Cashier One', role: 'CASHIER', isActive: true, createdAt: new Date(),
+    });
+    mockPrisma.auditLog.create.mockResolvedValueOnce({});
+
+    const res = await request(app)
+      .put('/api/branches/2/user/10')
+      .send({ password: 'newpass123' });
+
+    expect(res.status).toBe(200);
+    // Verify password was hashed (not sent as plaintext)
+    const updateCall = mockPrisma.user.update.mock.calls[0][0];
+    expect(updateCall.data.password).toBeDefined();
+    expect(updateCall.data.password).not.toBe('newpass123');
+    // Audit log should record passwordChanged flag
+    const auditCall = mockPrisma.auditLog.create.mock.calls[0][0];
+    expect(auditCall.data.newData.passwordChanged).toBe(true);
+  });
+
+  it('rejects short password', async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(BRANCH_USER);
+
+    const res = await request(app)
+      .put('/api/branches/2/user/10')
+      .send({ password: '12345' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('6 characters');
+  });
+
+  it('returns 404 when user not found', async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .put('/api/branches/2/user/999')
+      .send({ fullName: 'Ghost User' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toContain('User not found');
+  });
+
+  it('returns 404 when user belongs to different branch', async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ ...BRANCH_USER, branchId: 3 });
+
+    const res = await request(app)
+      .put('/api/branches/2/user/10')
+      .send({ fullName: 'Wrong Branch' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toContain('User not found');
+  });
+
+  it('returns 404 when user belongs to different company', async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ ...BRANCH_USER, companyId: 99 });
+
+    const res = await request(app)
+      .put('/api/branches/2/user/10')
+      .send({ fullName: 'Wrong Company' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toContain('User not found');
+  });
+
+  it('can disable a user', async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(BRANCH_USER);
+    mockPrisma.user.update.mockResolvedValueOnce({
+      id: 10, username: 'cashier1', fullName: 'Cashier One', role: 'CASHIER', isActive: false, createdAt: new Date(),
+    });
+    mockPrisma.auditLog.create.mockResolvedValueOnce({});
+
+    const res = await request(app)
+      .put('/api/branches/2/user/10')
+      .send({ isActive: false });
+
+    expect(res.status).toBe(200);
+    expect(res.body.isActive).toBe(false);
+  });
+
+  it('can change user role', async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(BRANCH_USER);
+    mockPrisma.user.update.mockResolvedValueOnce({
+      id: 10, username: 'cashier1', fullName: 'Cashier One', role: 'MANAGER', isActive: true, createdAt: new Date(),
+    });
+    mockPrisma.auditLog.create.mockResolvedValueOnce({});
+
+    const res = await request(app)
+      .put('/api/branches/2/user/10')
+      .send({ role: 'MANAGER' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.role).toBe('MANAGER');
+  });
+
+  it('rejects duplicate username on update', async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(BRANCH_USER);
+    mockPrisma.user.update.mockRejectedValueOnce({ code: 'P2002' });
+
+    const res = await request(app)
+      .put('/api/branches/2/user/10')
+      .send({ username: 'admin' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('Username already exists');
+  });
+
+  it('returns 400 for invalid IDs', async () => {
+    const res = await request(app)
+      .put('/api/branches/abc/user/xyz')
+      .send({ fullName: 'Invalid' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('Invalid');
   });
 });

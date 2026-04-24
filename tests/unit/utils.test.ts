@@ -132,7 +132,8 @@ describe('getToday', () => {
 
   it('returns today\'s date', () => {
     const today = getToday();
-    const now = new Date().toISOString().split('T')[0];
+    const d = new Date();
+    const now = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     expect(today).toBe(now);
   });
 });

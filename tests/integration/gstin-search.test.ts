@@ -222,7 +222,7 @@ describe('POST /api/accounts/gstin-search', () => {
         .post('/api/accounts/gstin-search')
         .send({ gstin: VALID_GSTIN_UP });
 
-      expect(res.body.status).toContain('enter details manually');
+      expect(res.body.status).toBe('');
       expect(res.body.tradeName).toBe('');
       expect(res.body.legalName).toBe('');
     });
@@ -254,26 +254,24 @@ describe('POST /api/accounts/gstin-search', () => {
     it('populates firm details from gstincheck API', async () => {
       mockPrisma.account.findFirst.mockResolvedValueOnce(null);
 
-      // Mock primary API response
+      // Mock primary API response (flat structure, route checks data.gstin)
       mockFetchImpl.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          flag: true,
-          data: {
-            tradeNam: 'JAIGURU JEWELS LLP',
-            lgnm: 'JAIGURU JEWELS LLP',
-            sts: 'Active',
-            dty: 'Regular',
-            pradr: {
-              addr: {
-                bno: 'A-101',
-                bnm: 'Trade Tower',
-                st: 'MG Road',
-                loc: 'Indirapuram',
-                dst: 'Ghaziabad',
-                stcd: 'Uttar Pradesh',
-                pncd: '201014',
-              },
+          gstin: '09AAACH7409R1ZZ',
+          tradeNam: 'JAIGURU JEWELS LLP',
+          lgnm: 'JAIGURU JEWELS LLP',
+          sts: 'Active',
+          dty: 'Regular',
+          pradr: {
+            addr: {
+              bno: 'A-101',
+              bnm: 'Trade Tower',
+              st: 'MG Road',
+              loc: 'Indirapuram',
+              dst: 'Ghaziabad',
+              stcd: 'Uttar Pradesh',
+              pncd: '201014',
             },
           },
         }),
@@ -303,22 +301,20 @@ describe('POST /api/accounts/gstin-search', () => {
       mockFetchImpl.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          flag: true,
-          data: {
-            tradeNam: 'Test Co',
-            lgnm: 'Test Co Legal',
-            sts: 'Active',
-            dty: 'Regular',
-            pradr: {
-              addr: {
-                bno: '5',
-                bnm: 'Pearl Plaza',
-                st: 'Ring Road',
-                loc: 'Sector 12',
-                dst: 'Noida',
-                stcd: 'Uttar Pradesh',
-                pncd: '201301',
-              },
+          gstin: '09AAACH7409R1ZZ',
+          tradeNam: 'Test Co',
+          lgnm: 'Test Co Legal',
+          sts: 'Active',
+          dty: 'Regular',
+          pradr: {
+            addr: {
+              bno: '5',
+              bnm: 'Pearl Plaza',
+              st: 'Ring Road',
+              loc: 'Sector 12',
+              dst: 'Noida',
+              stcd: 'Uttar Pradesh',
+              pncd: '201301',
             },
           },
         }),
@@ -340,13 +336,11 @@ describe('POST /api/accounts/gstin-search', () => {
       mockFetchImpl.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          flag: true,
-          data: {
-            tradeNam: 'NoAddr Co',
-            lgnm: 'NoAddr Legal',
-            sts: 'Active',
-            dty: 'Composition',
-          },
+          gstin: '09AAACH7409R1ZZ',
+          tradeNam: 'NoAddr Co',
+          lgnm: 'NoAddr Legal',
+          sts: 'Active',
+          dty: 'Composition',
         }),
       });
 
@@ -360,57 +354,13 @@ describe('POST /api/accounts/gstin-search', () => {
     });
   });
 
-  // ─── External API fallback (secondary - appyflow) ────────
-  describe('external API fallback (secondary)', () => {
-    it('uses secondary API when primary fails', async () => {
+  // ─── External API fallback ────────────────────────────────
+  describe('external API fallback', () => {
+    it('falls back to format-based when primary API fails', async () => {
       mockPrisma.account.findFirst.mockResolvedValueOnce(null);
 
-      // Primary fails
-      mockFetchImpl
-        .mockRejectedValueOnce(new Error('Primary API down'))
-        // Secondary succeeds
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            taxpayerInfo: {
-              tradeNam: 'SecondaryTrade',
-              lgnm: 'SecondaryLegal',
-              sts: 'Active',
-              dty: 'Regular',
-              pradr: {
-                adr: 'Full address string from secondary',
-                addr: {
-                  bno: 'B-2',
-                  bnm: 'Silver Tower',
-                  st: 'Station Road',
-                  loc: 'Civil Lines',
-                  dst: 'Allahabad',
-                  stcd: 'Uttar Pradesh',
-                  pncd: '211001',
-                },
-              },
-            },
-          }),
-        });
-
-      const res = await request(app)
-        .post('/api/accounts/gstin-search')
-        .send({ gstin: VALID_GSTIN_UP });
-
-      expect(res.status).toBe(200);
-      expect(res.body.tradeName).toBe('SecondaryTrade');
-      expect(res.body.legalName).toBe('SecondaryLegal');
-      expect(res.body.city).toBe('Allahabad');
-      expect(res.body.pincode).toBe('211001');
-    });
-
-    it('falls back to format-based when both APIs fail', async () => {
-      mockPrisma.account.findFirst.mockResolvedValueOnce(null);
-
-      // Both fail
-      mockFetchImpl
-        .mockRejectedValueOnce(new Error('Primary down'))
-        .mockRejectedValueOnce(new Error('Secondary down'));
+      // Single API call fails
+      mockFetchImpl.mockRejectedValueOnce(new Error('Primary API down'));
 
       const res = await request(app)
         .post('/api/accounts/gstin-search')
@@ -419,7 +369,8 @@ describe('POST /api/accounts/gstin-search', () => {
       expect(res.status).toBe(200);
       expect(res.body.valid).toBe(true);
       expect(res.body.tradeName).toBe('');
-      expect(res.body.status).toContain('enter details manually');
+      expect(res.body.legalName).toBe('');
+      expect(res.body.status).toBe('');
     });
 
     it('falls back when primary returns non-ok status', async () => {
@@ -430,8 +381,6 @@ describe('POST /api/accounts/gstin-search', () => {
         ok: false,
         status: 500,
       });
-      // Secondary also fails
-      mockFetchImpl.mockRejectedValueOnce(new Error('Secondary down'));
 
       const res = await request(app)
         .post('/api/accounts/gstin-search')
@@ -442,14 +391,13 @@ describe('POST /api/accounts/gstin-search', () => {
       expect(res.body.tradeName).toBe('');
     });
 
-    it('falls back when primary returns flag=false', async () => {
+    it('falls back when primary returns no gstin field', async () => {
       mockPrisma.account.findFirst.mockResolvedValueOnce(null);
 
       mockFetchImpl.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ flag: false, message: 'Invalid GSTIN' }),
+        json: async () => ({ error: 'Invalid GSTIN' }),
       });
-      mockFetchImpl.mockRejectedValueOnce(new Error('Secondary down'));
 
       const res = await request(app)
         .post('/api/accounts/gstin-search')

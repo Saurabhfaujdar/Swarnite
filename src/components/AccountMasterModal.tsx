@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { accountsAPI } from '../lib/api';
+import { formatIndianNumber } from '../lib/utils';
 import toast from 'react-hot-toast';
 import { Search, X, Shield, Building2, Save, ChevronDown } from 'lucide-react';
 
@@ -132,7 +133,7 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
   const [showGSTSearch, setShowGSTSearch] = useState(false);
   const [gstSearchInput, setGstSearchInput] = useState('');
   const [gstResult, setGstResult] = useState<GSTSearchResult | null>(null);
-  const [activeTab, setActiveTab] = useState<'address' | 'tds' | 'metal' | 'bill' | 'bank'>('address');
+  const [activeTab, setActiveTab] = useState<'address' | 'tds' | 'metal' | 'bill' | 'bank' | 'history'>('address');
 
   // Reset form when modal opens
   useEffect(() => {
@@ -172,6 +173,13 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
     setShowGSTSearch(true);
     setTimeout(() => gstinInputRef.current?.focus(), 100);
   }, []);
+
+  const accountId = editData?.id as number | undefined;
+  const historyQuery = useQuery({
+    queryKey: ['account-history', accountId],
+    queryFn: () => accountsAPI.history(accountId!).then(r => r.data),
+    enabled: activeTab === 'history' && !!accountId,
+  });
 
   const gstSearchMutation = useMutation({
     mutationFn: (gstin: string) => accountsAPI.gstSearch(gstin),
@@ -432,6 +440,7 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                 { key: 'metal', label: 'Metal Outstanding' },
                 { key: 'bill', label: 'Bill To Bill' },
                 { key: 'bank', label: 'Party Bank Detail' },
+                ...(editData?.id ? [{ key: 'history' as const, label: 'Sales & OG History' }] : []),
               ] as const).map((tab) => (
                 <button
                   key={tab.key}
@@ -574,6 +583,144 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
               {activeTab === 'bank' && (
                 <div className="text-center text-gray-400 py-8 text-sm">
                   Party Bank Detail — Coming Soon
+                </div>
+              )}
+
+              {activeTab === 'history' && (
+                <div className="space-y-4 max-h-[400px] overflow-y-auto">
+                  {historyQuery.isLoading && (
+                    <div className="text-center py-8 text-gray-400 text-sm">Loading history...</div>
+                  )}
+                  {historyQuery.isError && (
+                    <div className="text-center py-8 text-red-400 text-sm">Failed to load history</div>
+                  )}
+                  {historyQuery.data && (
+                    <>
+                      {/* Summary Cards */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
+                          <div className="text-lg font-bold text-blue-700">{historyQuery.data.summary.totalSalesCount}</div>
+                          <div className="text-xs text-blue-600">Total Sales</div>
+                          <div className="text-sm font-semibold text-blue-800 mt-1">₹{formatIndianNumber(historyQuery.data.summary.totalSalesAmount)}</div>
+                        </div>
+                        <div className="bg-amber-50 border border-amber-200 rounded p-3 text-center">
+                          <div className="text-lg font-bold text-amber-700">{historyQuery.data.summary.totalOGPurchaseCount}</div>
+                          <div className="text-xs text-amber-600">Old Gold Purchases</div>
+                          <div className="text-sm font-semibold text-amber-800 mt-1">₹{formatIndianNumber(historyQuery.data.summary.totalOGPurchaseAmount)}</div>
+                        </div>
+                        <div className="bg-purple-50 border border-purple-200 rounded p-3 text-center">
+                          <div className="text-lg font-bold text-purple-700">{historyQuery.data.summary.totalLayawayCount}</div>
+                          <div className="text-xs text-purple-600">Layaways</div>
+                          <div className="text-sm font-semibold text-purple-800 mt-1">OG in Sales: ₹{formatIndianNumber(historyQuery.data.summary.totalOldGoldInSales)}</div>
+                        </div>
+                      </div>
+
+                      {/* Sales Table */}
+                      {historyQuery.data.sales.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-bold text-gray-700 mb-1">Sales Vouchers</h4>
+                          <table className="w-full text-xs border border-gray-200">
+                            <thead className="bg-gray-100">
+                              <tr>
+                                <th className="border px-2 py-1 text-left">Voucher#</th>
+                                <th className="border px-2 py-1 text-left">Date</th>
+                                <th className="border px-2 py-1 text-right">Items</th>
+                                <th className="border px-2 py-1 text-right">Amount</th>
+                                <th className="border px-2 py-1 text-right">Old Gold</th>
+                                <th className="border px-2 py-1 text-right">Paid</th>
+                                <th className="border px-2 py-1 text-right">Due</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {historyQuery.data.sales.map((s: any) => (
+                                <tr key={s.id} className="hover:bg-gray-50">
+                                  <td className="border px-2 py-1 font-mono">{s.voucherNo}</td>
+                                  <td className="border px-2 py-1">{new Date(s.voucherDate).toLocaleDateString('en-IN')}</td>
+                                  <td className="border px-2 py-1 text-right">{s.items?.length ?? 0}</td>
+                                  <td className="border px-2 py-1 text-right">₹{formatIndianNumber(s.voucherAmount)}</td>
+                                  <td className="border px-2 py-1 text-right text-amber-700">{Number(s.oldGoldAmount) > 0 ? `₹${formatIndianNumber(s.oldGoldAmount)}` : '-'}</td>
+                                  <td className="border px-2 py-1 text-right text-green-700">₹{formatIndianNumber(s.paymentAmount)}</td>
+                                  <td className="border px-2 py-1 text-right text-red-600">{Number(s.dueAmount) > 0 ? `₹${formatIndianNumber(s.dueAmount)}` : '-'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* Old Gold Purchases Table */}
+                      {historyQuery.data.oldGoldPurchases.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-bold text-gray-700 mb-1">Old Gold Purchases</h4>
+                          <table className="w-full text-xs border border-gray-200">
+                            <thead className="bg-gray-100">
+                              <tr>
+                                <th className="border px-2 py-1 text-left">Voucher#</th>
+                                <th className="border px-2 py-1 text-left">Date</th>
+                                <th className="border px-2 py-1 text-right">Gross Wt</th>
+                                <th className="border px-2 py-1 text-right">Fine Wt</th>
+                                <th className="border px-2 py-1 text-right">Rate</th>
+                                <th className="border px-2 py-1 text-right">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {historyQuery.data.oldGoldPurchases.map((p: any) => (
+                                <tr key={p.id} className="hover:bg-gray-50">
+                                  <td className="border px-2 py-1 font-mono">{p.voucherNo}</td>
+                                  <td className="border px-2 py-1">{new Date(p.voucherDate).toLocaleDateString('en-IN')}</td>
+                                  <td className="border px-2 py-1 text-right">{Number(p.totalGrossWeight).toFixed(3)}g</td>
+                                  <td className="border px-2 py-1 text-right">{Number(p.totalFineWeight).toFixed(3)}g</td>
+                                  <td className="border px-2 py-1 text-right">₹{formatIndianNumber(p.metalRate)}</td>
+                                  <td className="border px-2 py-1 text-right">₹{formatIndianNumber(p.finalAmount || p.totalAmount)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* Layaways Table */}
+                      {historyQuery.data.layaways.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-bold text-gray-700 mb-1">Layaways</h4>
+                          <table className="w-full text-xs border border-gray-200">
+                            <thead className="bg-gray-100">
+                              <tr>
+                                <th className="border px-2 py-1 text-left">Voucher#</th>
+                                <th className="border px-2 py-1 text-left">Date</th>
+                                <th className="border px-2 py-1 text-right">Pcs</th>
+                                <th className="border px-2 py-1 text-right">Amount</th>
+                                <th className="border px-2 py-1 text-right">Paid</th>
+                                <th className="border px-2 py-1 text-center">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {historyQuery.data.layaways.map((l: any) => (
+                                <tr key={l.id} className="hover:bg-gray-50">
+                                  <td className="border px-2 py-1 font-mono">{l.voucherNo}</td>
+                                  <td className="border px-2 py-1">{new Date(l.voucherDate).toLocaleDateString('en-IN')}</td>
+                                  <td className="border px-2 py-1 text-right">{l.totalPcs}</td>
+                                  <td className="border px-2 py-1 text-right">₹{formatIndianNumber(l.voucherAmount)}</td>
+                                  <td className="border px-2 py-1 text-right text-green-700">₹{formatIndianNumber(l.paymentAmount)}</td>
+                                  <td className="border px-2 py-1 text-center">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      l.status === 'DELIVERED' ? 'bg-green-100 text-green-700' :
+                                      l.status === 'ACTIVE' ? 'bg-blue-100 text-blue-700' :
+                                      'bg-gray-100 text-gray-600'
+                                    }`}>{l.status}</span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {historyQuery.data.sales.length === 0 && historyQuery.data.oldGoldPurchases.length === 0 && historyQuery.data.layaways.length === 0 && (
+                        <div className="text-center text-gray-400 py-8 text-sm">No transaction history found</div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </div>

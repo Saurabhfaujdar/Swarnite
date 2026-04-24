@@ -278,6 +278,7 @@ describe('GET /api/inventory/labels/:id', () => {
 // ════════════════════════════════════════════════════════════
 describe('POST /api/inventory/labels', () => {
   it('creates a label and increments prefix lastNumber', async () => {
+    mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 1, itemGroup: { requiresTagId: false, name: 'Necklace' } });
     mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GN, lastNumber: 51 });
     const createdLabel = { id: 100, labelNo: 'GN/51', prefixId: 1, itemId: 1, grossWeight: 12.5, netWeight: 11.8, status: 'IN_STOCK', item: ITEM_GOLD_NECKLACE, branch: DUMMY_BRANCH };
     mockPrisma.label.create.mockResolvedValueOnce(createdLabel);
@@ -311,6 +312,7 @@ describe('POST /api/inventory/labels/batch', () => {
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
       mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 7 }); // Pendant group
       mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_GP); // GP prefix exists
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 7, itemGroup: { requiresTagId: false, name: 'Pendant' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GP, lastNumber: 1 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 200, labelNo: 'GP/1', status: 'IN_STOCK' });
 
@@ -351,6 +353,7 @@ describe('POST /api/inventory/labels/batch', () => {
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
       mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 8 });
       mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_GM);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 8, itemGroup: { requiresTagId: false, name: 'Mangalsutra' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GM, lastNumber: 1 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 201, labelNo: 'GM/1', status: 'IN_STOCK' });
 
@@ -386,6 +389,7 @@ describe('POST /api/inventory/labels/batch', () => {
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
       mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 10 });
       mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_GK);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 9, itemGroup: { requiresTagId: false, name: 'Coin' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GK, lastNumber: 1 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 202, labelNo: 'GK/1', status: 'IN_STOCK' });
 
@@ -405,6 +409,7 @@ describe('POST /api/inventory/labels/batch', () => {
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
       mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 4 });
       mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_GT);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 4, itemGroup: { requiresTagId: false, name: 'Bracelet' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GT, lastNumber: 1 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 203, labelNo: 'GT/1', status: 'IN_STOCK' });
 
@@ -424,6 +429,7 @@ describe('POST /api/inventory/labels/batch', () => {
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
       mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 9 });
       mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_GN2);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 10, itemGroup: { requiresTagId: false, name: 'Nose Pin' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GN2, lastNumber: 1 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 204, labelNo: 'GN2/1', status: 'IN_STOCK' });
 
@@ -443,6 +449,7 @@ describe('POST /api/inventory/labels/batch', () => {
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
       mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 12 });
       mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_SC);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 11, itemGroup: { requiresTagId: false, name: 'Silver Coin' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_SC, lastNumber: 1 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 205, labelNo: 'SC/1', status: 'IN_STOCK' });
 
@@ -465,6 +472,7 @@ describe('POST /api/inventory/labels/batch', () => {
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
       mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 1 });
       mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_GN);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 1, itemGroup: { requiresTagId: false, name: 'Necklace' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GN, lastNumber: 51 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 300, labelNo: 'GN/51', status: 'IN_STOCK' });
 
@@ -486,6 +494,7 @@ describe('POST /api/inventory/labels/batch', () => {
     it('uses top-level prefixId when provided', async () => {
       // When prefixId is given at the top level, skip all auto-detection
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 1, itemGroup: { requiresTagId: false, name: 'Necklace' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GN, lastNumber: 52 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 301, labelNo: 'GN/52', status: 'IN_STOCK' });
 
@@ -497,13 +506,13 @@ describe('POST /api/inventory/labels/batch', () => {
         });
 
       expect(res.status).toBe(201);
-      // Should NOT call item.findUnique or labelPrefix.findFirst (auto-detection bypassed)
-      expect(mockPrisma.item.findUnique).not.toHaveBeenCalled();
+      // item.findUnique is called for tagId validation (not for auto-detection)
       expect(mockPrisma.labelPrefix.findFirst).not.toHaveBeenCalled();
     });
 
     it('uses per-item prefixId when provided', async () => {
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 7, itemGroup: { requiresTagId: false, name: 'Pendant' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GP, lastNumber: 2 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 302, labelNo: 'GP/2', status: 'IN_STOCK' });
 
@@ -514,12 +523,14 @@ describe('POST /api/inventory/labels/batch', () => {
         });
 
       expect(res.status).toBe(201);
-      expect(mockPrisma.item.findUnique).not.toHaveBeenCalled();
+      // item.findUnique is called for tagId validation (not for auto-detection)
+      expect(mockPrisma.labelPrefix.findFirst).not.toHaveBeenCalled();
     });
 
     it('resolves prefix by prefix string', async () => {
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
       mockPrisma.labelPrefix.findUnique.mockResolvedValueOnce(PREFIX_GP); // looked up by string
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 7, itemGroup: { requiresTagId: false, name: 'Pendant' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GP, lastNumber: 3 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 303, labelNo: 'GP/3', status: 'IN_STOCK' });
 
@@ -538,6 +549,7 @@ describe('POST /api/inventory/labels/batch', () => {
       // No prefixId or prefix string → must auto-detect
       mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 7 });
       mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_GP);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 7, itemGroup: { requiresTagId: false, name: 'Pendant' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GP, lastNumber: 4 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 304, labelNo: 'GP/4', status: 'IN_STOCK' });
 
@@ -559,6 +571,7 @@ describe('POST /api/inventory/labels/batch', () => {
   describe('counter resolution', () => {
     it('resolves counter by counterCode', async () => {
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 1, itemGroup: { requiresTagId: false, name: 'Necklace' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GN, lastNumber: 53 });
       mockPrisma.counter.findUnique.mockResolvedValueOnce(DUMMY_COUNTER);
       mockPrisma.label.create.mockResolvedValueOnce({ id: 305, labelNo: 'GN/53', status: 'IN_STOCK' });
@@ -576,6 +589,7 @@ describe('POST /api/inventory/labels/batch', () => {
 
     it('uses top-level counterId', async () => {
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 1, itemGroup: { requiresTagId: false, name: 'Necklace' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GN, lastNumber: 54 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 306, labelNo: 'GN/54', status: 'IN_STOCK' });
 
@@ -599,6 +613,7 @@ describe('POST /api/inventory/labels/batch', () => {
   // ──────────────────────────────────────────────────────────
   describe('branch resolution', () => {
     it('uses provided branchId', async () => {
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 1, itemGroup: { requiresTagId: false, name: 'Necklace' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GN, lastNumber: 55 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 307, labelNo: 'GN/55', status: 'IN_STOCK' });
 
@@ -615,8 +630,9 @@ describe('POST /api/inventory/labels/batch', () => {
       expect(mockPrisma.branch.findFirst).not.toHaveBeenCalled();
     });
 
-    it('auto-resolves branch when not provided', async () => {
-      mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
+    it('uses req.branchId when body branchId is not provided', async () => {
+      // Auth mock sets req.branchId = 1, so branch.findFirst should NOT be called
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 1, itemGroup: { requiresTagId: false, name: 'Necklace' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GN, lastNumber: 56 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 308, labelNo: 'GN/56', status: 'IN_STOCK' });
 
@@ -624,26 +640,12 @@ describe('POST /api/inventory/labels/batch', () => {
         .post('/api/inventory/labels/batch')
         .send({
           prefixId: 1,
-          // no branchId
+          // no branchId in body → falls back to req.branchId (1)
           labels: [{ itemId: 1, grossWeight: 10.0, netWeight: 9.5 }],
         });
 
       expect(res.status).toBe(201);
-      expect(mockPrisma.branch.findFirst).toHaveBeenCalledWith({ where: { isActive: true, companyId: 1 } });
-    });
-
-    it('returns 400 when no active branch exists', async () => {
-      mockPrisma.branch.findFirst.mockResolvedValueOnce(null);
-
-      const res = await request(app)
-        .post('/api/inventory/labels/batch')
-        .send({
-          prefixId: 1,
-          labels: [{ itemId: 1, grossWeight: 10.0, netWeight: 9.5 }],
-        });
-
-      expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/No active branch/);
+      expect(mockPrisma.branch.findFirst).not.toHaveBeenCalled();
     });
   });
 
@@ -657,18 +659,21 @@ describe('POST /api/inventory/labels/batch', () => {
       // Label 1: Gold Pendant (auto-detect prefix)
       mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 7 });
       mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_GP);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 7, itemGroup: { requiresTagId: false, name: 'Pendant' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GP, lastNumber: 5 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 400, labelNo: 'GP/5', status: 'IN_STOCK' });
 
       // Label 2: Gold Necklace (auto-detect prefix)
       mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 1 });
       mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_GN);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 1, itemGroup: { requiresTagId: false, name: 'Necklace' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GN, lastNumber: 57 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 401, labelNo: 'GN/57', status: 'IN_STOCK' });
 
       // Label 3: Gold Mangalsutra (auto-detect prefix)
       mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 8 });
       mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_GM);
+      mockPrisma.item.findUnique.mockResolvedValueOnce({ id: 8, itemGroup: { requiresTagId: false, name: 'Mangalsutra' } });
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GM, lastNumber: 1 });
       mockPrisma.label.create.mockResolvedValueOnce({ id: 402, labelNo: 'GM/1', status: 'IN_STOCK' });
 
@@ -733,10 +738,11 @@ describe('POST /api/inventory/labels/batch', () => {
 
     test.each(groupPrefixPairs)(
       'creates label for $groupName (groupId=$groupId, prefix=$prefix.prefix)',
-      async ({ groupId, prefix }) => {
+      async ({ groupId, prefix, groupName }) => {
         mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
         mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: groupId });
         mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(prefix);
+        mockPrisma.item.findUnique.mockResolvedValueOnce({ id: groupId, itemGroup: { requiresTagId: false, name: groupName } });
         mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...prefix, lastNumber: prefix.lastNumber + 1 });
         const expectedLabelNo = `${prefix.prefix}/${prefix.lastNumber + 1}`;
         mockPrisma.label.create.mockResolvedValueOnce({ id: 500 + groupId, labelNo: expectedLabelNo, status: 'IN_STOCK' });
@@ -930,7 +936,11 @@ describe('Tag ID feature for label creation', () => {
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
 
       // Label 1: Gold Necklace with tagId (requires tagId)
+      // First findUnique: resolve prefix string → PREFIX_GN
+      mockPrisma.labelPrefix.findUnique.mockResolvedValueOnce(PREFIX_GN);
+      // Second findUnique: item for tagId validation
       mockPrisma.item.findUnique.mockResolvedValueOnce(ITEM_GOLD_NECKLACE);
+      // Third findUnique: get prefix record for tagId label number
       mockPrisma.labelPrefix.findUnique.mockResolvedValueOnce(PREFIX_GN);
       mockPrisma.label.findFirst.mockResolvedValueOnce(null);
       mockPrisma.label.create.mockResolvedValueOnce({
@@ -979,9 +989,12 @@ describe('Tag ID feature for label creation', () => {
       mockPrisma.branch.findFirst.mockResolvedValueOnce(DUMMY_BRANCH);
 
       // Label 1: Nose Pin (no tagId required, auto-sequence)
+      // First: auto-detect prefix via item.findUnique
       mockPrisma.item.findUnique.mockResolvedValueOnce({ itemGroupId: 9 });
       mockPrisma.labelPrefix.findFirst.mockResolvedValueOnce(PREFIX_GN2);
+      // Second: item.findUnique for tagId validation
       mockPrisma.item.findUnique.mockResolvedValueOnce(ITEM_GOLD_NOSEPIN);
+      // Auto-sequence path (no tagId)
       mockPrisma.labelPrefix.update.mockResolvedValueOnce({ ...PREFIX_GN2, lastNumber: 2 });
       mockPrisma.label.create.mockResolvedValueOnce({
         id: 800,

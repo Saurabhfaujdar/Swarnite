@@ -28,7 +28,7 @@ async function main() {
   // 2. Create Branches
   const mainBranch = await prisma.branch.upsert({
     where: { id: 1 },
-    update: {},
+    update: { isMaster: true, branchType: 'MASTER' },
     create: {
       name: process.env.DEFAULT_BRANCH_NAME || 'Main Branch',
       code: 'HQ',
@@ -37,6 +37,8 @@ async function main() {
       state: 'Maharashtra',
       phone: '9999999999',
       companyId: company.id,
+      branchType: 'MASTER',
+      isMaster: true,
       isActive: true,
     },
   });

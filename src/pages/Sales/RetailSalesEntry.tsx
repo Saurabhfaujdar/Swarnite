@@ -1,10 +1,13 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLocation } from 'react-router-dom';
 import { salesAPI, inventoryAPI, accountsAPI, mastersAPI } from '../../lib/api';
 import { formatCurrency, formatWeight, formatIndianNumber, getToday, calculateGST, getDayName, getFinancialYear } from '../../lib/utils';
+import { useKeyboardShortcuts } from '../../lib/useKeyboardShortcuts';
 import toast from 'react-hot-toast';
 import AccountMasterModal from '../../components/AccountMasterModal';
 import VoucherPrintDialog from '../../components/VoucherPrintDialog';
+import OldGoldPurchaseModal from '../../components/OldGoldPurchaseModal';
 
 interface SalesItem {
   labelNo: string;
@@ -32,6 +35,11 @@ interface SalesItem {
 export default function RetailSalesEntry() {
   const queryClient = useQueryClient();
   const labelInputRef = useRef<HTMLInputElement>(null);
+  const cashInputRef = useRef<HTMLInputElement>(null);
+  const bankInputRef = useRef<HTMLInputElement>(null);
+  const cardInputRef = useRef<HTMLInputElement>(null);
+  const location = useLocation();
+  const [isCartLoaded, setIsCartLoaded] = useState(false);
 
   // Form state
   const [voucherDate, setVoucherDate] = useState(getToday());
@@ -42,6 +50,7 @@ export default function RetailSalesEntry() {
   const [editItemIndex, setEditItemIndex] = useState<number | null>(null);
   const [savedVoucherId, setSavedVoucherId] = useState<number | null>(null);
   const [showVoucherPrint, setShowVoucherPrint] = useState(false);
+  const [showOldGoldModal, setShowOldGoldModal] = useState(false);
   const [salesmanId, setSalesmanId] = useState<number | null>(null);
   const [labelNo, setLabelNo] = useState('');
   const [items, setItems] = useState<SalesItem[]>([]);
@@ -103,6 +112,65 @@ export default function RetailSalesEntry() {
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to save sales voucher'),
   });
+
+  // Load cart items from navigation state (from CartDrawer)
+  useEffect(() => {
+    const cartItems = (location.state as any)?.cartItems;
+    if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0 || isCartLoaded) return;
+    setIsCartLoaded(true);
+
+    (async () => {
+      try {
+        const ratesRes = await mastersAPI.latestRates();
+        const rates = ratesRes.data;
+
+        const newItems: SalesItem[] = cartItems.map((ci: any) => {
+          const metalRate = rates.find(
+            (r: any) => r.metalType?.name === ci.metalType && r.purityCode === ci.purityCode
+          );
+          const rate = metalRate ? Number(metalRate.rate) : 0;
+          const totalPcsAvail = ci.pcsCount || 1;
+          const defaultPcs = 1;
+          const pcsRatio = defaultPcs / totalPcsAvail;
+          const grossWt = Number(ci.grossWeight) * pcsRatio;
+          const netWt = Number(ci.netWeight) * pcsRatio;
+          const purity = Number(ci.purityPercentage || 0);
+          const fineWt = (netWt * purity) / 100;
+          const metalAmt = fineWt * rate;
+          const labRate = Number(ci.labourRate || 0) || 2014;
+          const labAmt = netWt * labRate;
+          const taxable = metalAmt + labAmt;
+
+          return {
+            labelNo: ci.labelNo,
+            itemName: ci.itemName,
+            itemId: ci.itemId,
+            labelId: ci.id,
+            grossWeight: grossWt,
+            netWeight: netWt,
+            fineWeight: fineWt,
+            pcs: defaultPcs,
+            totalPcsAvailable: totalPcsAvail,
+            originalGrossWeight: Number(ci.grossWeight),
+            originalNetWeight: Number(ci.netWeight),
+            metalRate: rate,
+            metalAmount: metalAmt,
+            diamondWeight: 0,
+            labourRate: labRate,
+            labourAmount: labAmt,
+            otherCharge: 0,
+            discountStAmt: 0,
+            totalAmount: taxable,
+            taxableAmount: taxable,
+          };
+        });
+        setItems(newItems);
+        toast.success(`${newItems.length} item(s) loaded from cart`);
+      } catch {
+        toast.error('Failed to load cart items');
+      }
+    })();
+  }, [location.state, isCartLoaded]);
 
   // Add item by label scan
   const handleLabelScan = async () => {
@@ -264,19 +332,18 @@ export default function RetailSalesEntry() {
     setRoundingDiscount(0);
   };
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'F2') { e.preventDefault(); setShowCustomerModal(true); }
-      if (e.key === 'F5') { e.preventDefault(); /* Focus cash */ }
-      if (e.key === 'F12') {
-        e.preventDefault();
-        handleSave();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [items, customerId]);
+  // Keyboard shortcuts – use ref to avoid stale closure on handleSave
+  const handleSaveRef = useRef(handleSave);
+  handleSaveRef.current = handleSave;
+  const shortcuts = useMemo(() => ({
+    F2: () => setShowCustomerModal(true),
+    F5: () => cashInputRef.current?.focus(),
+    F6: () => bankInputRef.current?.focus(),
+    F7: () => cardInputRef.current?.focus(),
+    F10: () => { setCashAmount(voucherAmount); cashInputRef.current?.focus(); },
+    F12: () => handleSaveRef.current(),
+  }), [voucherAmount]);
+  useKeyboardShortcuts(shortcuts);
 
   return (
     <div className="flex gap-2 h-[calc(100vh-80px)]">
@@ -505,24 +572,24 @@ export default function RetailSalesEntry() {
             { label: 'Customer', key: 'F2', action: () => setShowCustomerModal(true) },
             { label: 'Voucher No', key: 'F3' },
             { label: 'Salesman', key: '' },
-            { label: 'Cash', key: 'F5' },
-            { label: 'Bank', key: 'F6' },
-            { label: 'Card', key: 'F7' },
+            { label: 'Cash', key: 'F5', action: () => cashInputRef.current?.focus() },
+            { label: 'Bank', key: 'F6', action: () => bankInputRef.current?.focus() },
+            { label: 'Card', key: 'F7', action: () => cardInputRef.current?.focus() },
             { label: 'Narration', key: '' },
             { label: 'Quotation', key: 'F8' },
             { label: 'Quotation Print', key: 'F9' },
-            { label: 'Cash Effect', key: 'F10' },
+            { label: 'Cash Effect', key: 'F10', action: () => { setCashAmount(voucherAmount); cashInputRef.current?.focus(); } },
             { label: 'Extra Charge', key: '' },
             { label: 'Void Line', key: '' },
             { label: 'Discount', key: '' },
             { label: 'Metal Details', key: '' },
             { label: 'Rate Diff.', key: '' },
-            { label: 'Old Purchase', key: '' },
+            { label: 'Old Purchase', key: '', action: () => setShowOldGoldModal(true) },
             { label: 'Sales Return', key: '' },
             { label: 'Add/Less', key: '' },
             { label: 'Loyalty Card', key: '' },
             { label: 'Gift Voucher', key: '' },
-            { label: 'AP', key: 'F12' },
+            { label: 'AP', key: 'F12', action: () => handleSave() },
             { label: 'Metal Settlement', key: '' },
           ].map((btn) => (
             <div
@@ -591,6 +658,7 @@ export default function RetailSalesEntry() {
           <div className="voucher-detail-row">
             <span className="voucher-detail-label">Cash Amt</span>
             <input
+              ref={cashInputRef}
               type="number"
               className="form-input w-20 text-right text-xs"
               value={cashAmount || ''}
@@ -600,6 +668,7 @@ export default function RetailSalesEntry() {
           <div className="voucher-detail-row">
             <span className="voucher-detail-label">Bank Amt</span>
             <input
+              ref={bankInputRef}
               type="number"
               className="form-input w-20 text-right text-xs"
               value={bankAmount || ''}
@@ -609,6 +678,7 @@ export default function RetailSalesEntry() {
           <div className="voucher-detail-row">
             <span className="voucher-detail-label">Card Amt</span>
             <input
+              ref={cardInputRef}
               type="number"
               className="form-input w-20 text-right text-xs"
               value={cardAmount || ''}
@@ -731,6 +801,19 @@ export default function RetailSalesEntry() {
             setEditItemIndex(null);
           }}
           onClose={() => setEditItemIndex(null)}
+        />
+      )}
+
+      {/* Old Gold Purchase Modal */}
+      {showOldGoldModal && (
+        <OldGoldPurchaseModal
+          currentAmount={oldGoldAmount}
+          onConfirm={(amount) => {
+            setOldGoldAmount(amount);
+            setShowOldGoldModal(false);
+            if (amount > 0) toast.success(`Old gold ₹${formatIndianNumber(amount)} applied to bill`);
+          }}
+          onClose={() => setShowOldGoldModal(false)}
         />
       )}
     </div>

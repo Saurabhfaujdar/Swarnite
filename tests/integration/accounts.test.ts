@@ -250,3 +250,128 @@ describe('GET /api/accounts/:id/outstanding', () => {
     expect(res.body).toMatchObject({ closingBalance: 15000, balanceType: 'DR' });
   });
 });
+
+// ════════════════════════════════════════════════════════════
+// GET /api/accounts/:id/history – Customer Transaction History
+// ════════════════════════════════════════════════════════════
+const HISTORY_SALES = [
+  {
+    id: 1, voucherNo: 'JGI/1001', voucherDate: '2025-01-15',
+    totalGrossWeight: 25.5, totalNetWeight: 24, totalPcs: 3,
+    metalAmount: 150000, labourAmount: 5000, voucherAmount: 165000,
+    paymentAmount: 100000, dueAmount: 65000, oldGoldAmount: 20000,
+    cashAmount: 50000, bankAmount: 50000, cardAmount: 0, upiAmount: 0,
+    status: 'ACTIVE',
+    salesman: { name: 'Ramesh' },
+    items: [
+      { id: 1, labelNo: 'LBL001', itemName: 'Gold Necklace', grossWeight: 15, netWeight: 14.5, pcs: 1, metalRate: 6950, metalAmount: 100750, labourAmount: 3000, totalAmount: 103750 },
+    ],
+  },
+];
+
+const HISTORY_OG_PURCHASES = [
+  {
+    id: 10, voucherNo: 'OG/501', voucherDate: '2025-01-15',
+    totalGrossWeight: 8, totalNetWeight: 7.5, totalFineWeight: 6.87,
+    totalPcs: 2, metalRate: 6800, metalAmount: 46716,
+    totalAmount: 46716, finalAmount: 46716,
+    items: [{ id: 20, styleName: 'Old Chain', weight: 5, pcs: 1, rate: 6800, amount: 30940 }],
+  },
+];
+
+const HISTORY_LAYAWAYS = [
+  {
+    id: 100, voucherNo: 'LY/201', voucherDate: '2025-03-01',
+    totalGrossWeight: 12, totalNetWeight: 11.5, totalPcs: 2,
+    metalAmount: 79925, labourAmount: 3000, voucherAmount: 88000,
+    paymentAmount: 30000, dueAmount: 58000, status: 'ACTIVE',
+  },
+];
+
+describe('GET /api/accounts/:id/history', () => {
+  it('returns sales, old gold purchases, layaways, and summary', async () => {
+    mockPrisma.salesVoucher.findMany.mockResolvedValueOnce(HISTORY_SALES);
+    mockPrisma.purchaseVoucher.findMany.mockResolvedValueOnce(HISTORY_OG_PURCHASES);
+    mockPrisma.layawayEntry.findMany.mockResolvedValueOnce(HISTORY_LAYAWAYS);
+
+    const res = await request(app).get('/api/accounts/1/history');
+    expect(res.status).toBe(200);
+    expect(res.body.sales).toHaveLength(1);
+    expect(res.body.oldGoldPurchases).toHaveLength(1);
+    expect(res.body.layaways).toHaveLength(1);
+    expect(res.body.summary).toMatchObject({
+      totalSalesCount: 1,
+      totalSalesAmount: 165000,
+      totalOldGoldInSales: 20000,
+      totalOGPurchaseCount: 1,
+      totalOGPurchaseAmount: 46716,
+      totalLayawayCount: 1,
+    });
+  });
+
+  it('returns empty arrays and zero summary when no history', async () => {
+    mockPrisma.salesVoucher.findMany.mockResolvedValueOnce([]);
+    mockPrisma.purchaseVoucher.findMany.mockResolvedValueOnce([]);
+    mockPrisma.layawayEntry.findMany.mockResolvedValueOnce([]);
+
+    const res = await request(app).get('/api/accounts/1/history');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      sales: [],
+      oldGoldPurchases: [],
+      layaways: [],
+      summary: {
+        totalSalesCount: 0,
+        totalSalesAmount: 0,
+        totalOldGoldInSales: 0,
+        totalOGPurchaseCount: 0,
+        totalOGPurchaseAmount: 0,
+        totalLayawayCount: 0,
+      },
+    });
+  });
+
+  it('includes old gold amount in sales data', async () => {
+    mockPrisma.salesVoucher.findMany.mockResolvedValueOnce(HISTORY_SALES);
+    mockPrisma.purchaseVoucher.findMany.mockResolvedValueOnce([]);
+    mockPrisma.layawayEntry.findMany.mockResolvedValueOnce([]);
+
+    const res = await request(app).get('/api/accounts/1/history');
+    expect(res.body.sales[0]).toHaveProperty('oldGoldAmount', 20000);
+    expect(res.body.sales[0].items).toHaveLength(1);
+  });
+
+  it('includes salesman and items in sales', async () => {
+    mockPrisma.salesVoucher.findMany.mockResolvedValueOnce(HISTORY_SALES);
+    mockPrisma.purchaseVoucher.findMany.mockResolvedValueOnce([]);
+    mockPrisma.layawayEntry.findMany.mockResolvedValueOnce([]);
+
+    const res = await request(app).get('/api/accounts/1/history');
+    expect(res.body.sales[0].salesman).toMatchObject({ name: 'Ramesh' });
+    expect(res.body.sales[0].items[0]).toMatchObject({ labelNo: 'LBL001', itemName: 'Gold Necklace' });
+  });
+
+  it('accepts date filter params', async () => {
+    mockPrisma.salesVoucher.findMany.mockResolvedValueOnce([]);
+    mockPrisma.purchaseVoucher.findMany.mockResolvedValueOnce([]);
+    mockPrisma.layawayEntry.findMany.mockResolvedValueOnce([]);
+
+    const res = await request(app)
+      .get('/api/accounts/1/history?dateFrom=2025-01-01&dateTo=2025-12-31');
+    expect(res.status).toBe(200);
+
+    // Check that findMany was called with date filters
+    const salesCall = mockPrisma.salesVoucher.findMany.mock.calls[0][0];
+    expect(salesCall.where.voucherDate).toBeDefined();
+    expect(salesCall.where.voucherDate.gte).toBeInstanceOf(Date);
+    expect(salesCall.where.voucherDate.lte).toBeInstanceOf(Date);
+  });
+
+  it('returns 500 when DB fails', async () => {
+    mockPrisma.salesVoucher.findMany.mockRejectedValueOnce(new Error('DB down'));
+
+    const res = await request(app).get('/api/accounts/1/history');
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('Failed to fetch customer history');
+  });
+});

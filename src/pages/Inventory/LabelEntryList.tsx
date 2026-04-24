@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { inventoryAPI } from '../../lib/api';
 import { formatWeight, getToday } from '../../lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { useCartStore, CartLabel } from '../../lib/cartStore';
+import CartDrawer from '../../components/CartDrawer';
 
 export default function LabelEntryList() {
   const navigate = useNavigate();
@@ -10,6 +12,11 @@ export default function LabelEntryList() {
   const [dateTo, setDateTo] = useState(getToday());
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [showCart, setShowCart] = useState(false);
+
+  const cartItems = useCartStore((s) => s.items);
+  const toggleItem = useCartStore((s) => s.toggleItem);
+  const isInCart = useCartStore((s) => s.isInCart);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['labels-list', dateFrom, dateTo, search, statusFilter],
@@ -20,6 +27,24 @@ export default function LabelEntryList() {
   const labels = data?.labels || [];
   const totalGrossWt = labels.reduce((s: number, l: any) => s + Number(l.grossWeight || 0), 0);
   const totalNetWt = labels.reduce((s: number, l: any) => s + Number(l.netWeight || 0), 0);
+
+  const toCartLabel = (l: any): CartLabel => ({
+    id: l.id,
+    labelNo: l.labelNo,
+    itemId: l.itemId,
+    itemName: l.item?.name || '',
+    grossWeight: Number(l.grossWeight || 0),
+    netWeight: Number(l.netWeight || 0),
+    pcsCount: l.pcsCount ?? 1,
+    status: l.status,
+    huid: l.huid || undefined,
+    size: l.size || undefined,
+    counterCode: l.counterCode || undefined,
+    metalType: l.item?.metalType?.name || undefined,
+    purityCode: l.item?.purity?.code || undefined,
+    purityPercentage: Number(l.item?.purity?.percentage || 0) || undefined,
+    labourRate: Number(l.item?.labourRate || 0) || undefined,
+  });
 
   return (
     <div className="flex flex-col gap-3 h-full">
@@ -50,6 +75,11 @@ export default function LabelEntryList() {
           </div>
           <button onClick={() => refetch()} className="btn-primary">🔍 Search</button>
           <button onClick={() => navigate('/inventory/labels/new')} className="btn-success">+ New Label</button>
+          {cartItems.length > 0 && (
+            <button onClick={() => setShowCart(true)} className="btn-primary relative" data-testid="cart-badge">
+              🛒 Cart ({cartItems.length})
+            </button>
+          )}
         </div>
       </div>
 
@@ -57,6 +87,7 @@ export default function LabelEntryList() {
         <table className="data-table">
           <thead>
             <tr>
+              <th className="w-8"></th>
               <th>Sr.</th>
               <th>Label No</th>
               <th>Item Name</th>
@@ -75,13 +106,24 @@ export default function LabelEntryList() {
           </thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={14} className="text-center py-8">Loading...</td></tr>
+              <tr><td colSpan={15} className="text-center py-8">Loading...</td></tr>
             )}
             {!isLoading && labels.length === 0 && (
-              <tr><td colSpan={14} className="text-center py-8 text-gray-400">No labels found</td></tr>
+              <tr><td colSpan={15} className="text-center py-8 text-gray-400">No labels found</td></tr>
             )}
             {labels.map((l: any, idx: number) => (
-              <tr key={l.id}>
+              <tr key={l.id} className={isInCart(l.id) ? 'bg-blue-50' : ''}>
+                <td className="text-center">
+                  {l.status === 'IN_STOCK' && (
+                    <input
+                      type="checkbox"
+                      checked={isInCart(l.id)}
+                      onChange={() => toggleItem(toCartLabel(l))}
+                      className="cursor-pointer"
+                      data-testid={`cart-checkbox-${l.id}`}
+                    />
+                  )}
+                </td>
                 <td>{idx + 1}</td>
                 <td className="font-medium text-blue-600">{l.labelNo}</td>
                 <td>{l.item?.name || '-'}</td>
@@ -111,6 +153,7 @@ export default function LabelEntryList() {
           {labels.length > 0 && (
             <tfoot>
               <tr className="font-bold bg-gray-50">
+                <td></td>
                 <td colSpan={5}>Total ({labels.length} labels)</td>
                 <td className="text-right">{formatWeight(totalGrossWt)}</td>
                 <td className="text-right">{formatWeight(totalNetWt)}</td>
@@ -131,6 +174,9 @@ export default function LabelEntryList() {
           <button className="btn-outline text-xs" onClick={() => window.print()}>🖨️ Print</button>
         </div>
       </div>
+
+      {/* Cart Drawer */}
+      {showCart && <CartDrawer onClose={() => setShowCart(false)} />}
     </div>
   );
 }

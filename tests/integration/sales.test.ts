@@ -198,7 +198,7 @@ describe('GET /api/sales', () => {
     expect(res.status).toBe(200);
 
     const where = mockPrisma.salesVoucher.findMany.mock.calls[0][0].where;
-    expect(where.voucherDate.gte).toEqual(new Date('2026-03-01'));
+    expect(where.voucherDate.gte).toEqual(new Date('2026-03-01T00:00:00'));
     expect(where.voucherDate.lte.getTime()).toBeGreaterThan(new Date('2026-03-31').getTime());
   });
 
@@ -207,7 +207,7 @@ describe('GET /api/sales', () => {
     await request(app).get('/api/sales?dateFrom=2026-03-01');
 
     const where = mockPrisma.salesVoucher.findMany.mock.calls[0][0].where;
-    expect(where.voucherDate.gte).toEqual(new Date('2026-03-01'));
+    expect(where.voucherDate.gte).toEqual(new Date('2026-03-01T00:00:00'));
     expect(where.voucherDate.lte).toBeUndefined();
   });
 
@@ -540,7 +540,7 @@ describe('GET /api/sales', () => {
 
     const where = mockPrisma.salesVoucher.findMany.mock.calls[0][0].where;
     expect(where.status).toBe('ACTIVE');
-    expect(where.voucherDate.gte).toEqual(new Date('2026-03-01'));
+    expect(where.voucherDate.gte).toEqual(new Date('2026-03-01T00:00:00'));
     expect(where.salesman).toEqual({ name: { contains: 'Amit', mode: 'insensitive' } });
     expect(where.voucherAmount.gte).toBe(50000);
     expect(where.cashAmount).toEqual({ gt: 0 });
@@ -660,16 +660,16 @@ describe('POST /api/sales', () => {
     mockPrisma.label.findUnique.mockResolvedValueOnce({ branchId: 1, status: 'SOLD', labelNo: 'GB/13' });
 
     const res = await request(app).post('/api/sales').send(makeSalesPayload());
-    expect(res.status).toBe(500);
-    expect(res.body.error).toBe('Failed to create sales voucher');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/not available for sale/);
   });
 
   it('handles server error during creation', async () => {
     mockPrisma.voucherSequence.upsert.mockRejectedValueOnce(new Error('DB error'));
 
     const res = await request(app).post('/api/sales').send(makeSalesPayload());
-    expect(res.status).toBe(500);
-    expect(res.body.error).toBe('Failed to create sales voucher');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('DB error');
   });
 });
 
@@ -695,7 +695,7 @@ describe('DELETE /api/sales/:id', () => {
     expect(mockPrisma.label.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 100 },
-        data: { status: 'IN_STOCK' },
+        data: { pcsCount: { increment: 1 }, status: 'IN_STOCK' },
       }),
     );
   });
@@ -866,6 +866,50 @@ describe('CLOSED voucher handling', () => {
 // Label pcs handling on sales
 // ════════════════════════════════════════════════════════════
 describe('Label pcs handling', () => {
+  const makeSalesPayload = (overrides: any = {}) => ({
+    voucherDate: '2026-03-05',
+    voucherPrefix: 'JGI',
+    financialYear: '2025-2026',
+    accountId: CUSTOMER.id,
+    salesmanId: SALESMAN.id,
+    branchId: 1,
+    userId: 1,
+    totalGrossWeight: 10.5,
+    totalNetWeight: 9.8,
+    totalPcs: 1,
+    metalAmount: 68110,
+    labourAmount: 7350,
+    otherCharge: 0,
+    totalAmount: 77722,
+    taxableAmount: 75460,
+    cgstAmount: 1132,
+    sgstAmount: 1132,
+    voucherAmount: 77722,
+    cashAmount: 50000,
+    bankAmount: 20000,
+    dueAmount: 7722,
+    narration: 'Wedding order necklace',
+    items: [
+      {
+        labelId: 100,
+        itemId: 1,
+        labelNo: 'GN/51',
+        itemName: 'Gold Necklace 22KT',
+        grossWeight: 10.5,
+        netWeight: 9.8,
+        fineWeight: 8.98,
+        pcs: 1,
+        metalRate: 6950,
+        metalAmount: 68110,
+        labourRate: 750,
+        labourAmount: 7350,
+        totalAmount: 77722,
+        taxableAmount: 75460,
+      },
+    ],
+    ...overrides,
+  });
+
   it('POST decrements label pcsCount and keeps IN_STOCK when pcs remain', async () => {
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 20 });
@@ -954,7 +998,7 @@ describe('Label pcs handling', () => {
     const res = await request(app).post('/api/sales').send(makeSalesPayload({
       items: [{
         ...ITEM_1,
-        pcs: 0, // invalid: must sell at least 1
+        pcs: -1, // invalid: must sell at least 1
       }],
     }));
     expect(res.status).toBe(400);

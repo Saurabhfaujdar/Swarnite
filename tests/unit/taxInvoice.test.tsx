@@ -196,7 +196,7 @@ describe('TaxInvoice', () => {
   it('renders payment details section', () => {
     renderInvoice();
     expect(screen.getByText('PAYMENT DETAILS :-')).toBeInTheDocument();
-    expect(screen.getByText('RATE')).toBeInTheDocument();
+    expect(screen.getAllByText('RATE').length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders old purchase section', () => {

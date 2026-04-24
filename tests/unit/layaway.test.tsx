@@ -151,7 +151,9 @@ describe('LayawayEntry', () => {
 
     it('renders voucher date input', () => {
       renderLayawayEntry();
-      const dateInput = screen.getByDisplayValue(new Date().toISOString().split('T')[0]);
+      const d = new Date();
+      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const dateInput = screen.getByDisplayValue(today);
       expect(dateInput).toBeDefined();
     });
 
@@ -482,11 +484,11 @@ describe('LayawayEntry', () => {
 // ════════════════════════════════════════════════════════════
 describe('LayawayList', () => {
   describe('rendering', () => {
-    it('renders LayAway Entry List header', async () => {
+    it('renders Layaway Register header', async () => {
       renderLayawayList();
 
       await waitFor(() => {
-        expect(screen.getByText('LayAway Entry List')).toBeDefined();
+        expect(screen.getByText('Layaway Register')).toBeDefined();
       });
     });
 
@@ -494,8 +496,8 @@ describe('LayawayList', () => {
       renderLayawayList();
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('All')).toBeDefined(); // Customer filter
-        expect(screen.getByText('Salesman')).toBeDefined();
+        expect(screen.getByPlaceholderText('Search...')).toBeDefined(); // Customer filter
+        expect(screen.getAllByText('Salesman').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText('Date From')).toBeDefined();
         expect(screen.getByText('Date To')).toBeDefined();
         expect(screen.getAllByText('Status').length).toBeGreaterThanOrEqual(1);
@@ -506,8 +508,8 @@ describe('LayawayList', () => {
       renderLayawayList();
 
       await waitFor(() => {
-        expect(screen.getByText('+ Add')).toBeDefined();
-        expect(screen.getByText('Delete Layaway Item')).toBeDefined();
+        expect(screen.getByText('+ New Layaway')).toBeDefined();
+        expect(screen.getByText('Cancel Layaway')).toBeDefined();
         expect(screen.getByText('Search')).toBeDefined();
       });
     });
@@ -517,13 +519,13 @@ describe('LayawayList', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Voucher No')).toBeDefined();
-        expect(screen.getByText('Voucher Date')).toBeDefined();
-        expect(screen.getByText('Account Name')).toBeDefined();
-        expect(screen.getByText('Total Voucher Amt.')).toBeDefined();
-        expect(screen.getByText('Sales-Man Name')).toBeDefined();
-        expect(screen.getByText('Reference')).toBeDefined();
-        expect(screen.getByText('DueDate')).toBeDefined();
-        expect(screen.getByText('Book Name')).toBeDefined();
+        expect(screen.getByText('Date')).toBeDefined();
+        expect(screen.getByText('Customer')).toBeDefined();
+        expect(screen.getByText('Booking Amt')).toBeDefined();
+        expect(screen.getByText('Paid')).toBeDefined();
+        expect(screen.getByText('Balance')).toBeDefined();
+        expect(screen.getByText('Expiry')).toBeDefined();
+        expect(screen.getAllByText('Salesman').length).toBeGreaterThanOrEqual(1);
       });
     });
 
@@ -593,20 +595,20 @@ describe('LayawayList', () => {
       renderLayawayList();
 
       await waitFor(() => {
-        expect(screen.getByText('+ Add')).toBeDefined();
+        expect(screen.getByText('+ New Layaway')).toBeDefined();
       });
 
-      await userEvent.click(screen.getByText('+ Add'));
+      await userEvent.click(screen.getByText('+ New Layaway'));
       expect(mockNavigate).toHaveBeenCalledWith('/layaway');
     });
 
-    it('disables Delete button when no entry is selected', async () => {
+    it('disables Cancel button when no entry is selected', async () => {
       renderLayawayList();
 
       await waitFor(() => {
-        const deleteBtn = screen.getByText('Delete Layaway Item');
-        expect(deleteBtn).toBeDefined();
-        expect((deleteBtn as HTMLButtonElement).disabled).toBe(true);
+        const cancelBtn = screen.getByText('Cancel Layaway');
+        expect(cancelBtn).toBeDefined();
+        expect((cancelBtn as HTMLButtonElement).disabled).toBe(true);
       });
     });
 
@@ -626,7 +628,7 @@ describe('LayawayList', () => {
       const values = Array.from(options).map(o => o.getAttribute('value'));
       expect(values).toContain('ALL');
       expect(values).toContain('ACTIVE');
-      expect(values).toContain('COMPLETED');
+      expect(values).toContain('CONVERTED');
       expect(values).toContain('CANCELLED');
     });
   });

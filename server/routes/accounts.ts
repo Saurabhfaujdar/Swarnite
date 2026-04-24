@@ -266,6 +266,106 @@ router.get('/:id/ledger', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/accounts/:id/history - Sales & Old Gold Purchase history for a customer
+router.get('/:id/history', async (req: Request, res: Response) => {
+  try {
+    const accountId = Number(req.params.id);
+    if (isNaN(accountId)) return res.status(400).json({ error: 'Invalid account ID' });
+    const { dateFrom, dateTo } = req.query;
+
+    const dateFilter = dateFrom && dateTo ? {
+      gte: new Date(dateFrom as string + 'T00:00:00'),
+      lte: new Date(dateTo as string + 'T23:59:59.999'),
+    } : undefined;
+
+    const [sales, oldGoldPurchases, layaways] = await Promise.all([
+      prisma.salesVoucher.findMany({
+        where: {
+          accountId,
+          status: 'ACTIVE',
+          companyId: req.companyId,
+          ...(dateFilter ? { voucherDate: dateFilter } : {}),
+        },
+        select: {
+          id: true, voucherNo: true, voucherDate: true,
+          totalGrossWeight: true, totalNetWeight: true, totalPcs: true,
+          metalAmount: true, labourAmount: true, voucherAmount: true,
+          paymentAmount: true, dueAmount: true, oldGoldAmount: true,
+          cashAmount: true, bankAmount: true, cardAmount: true,
+          upiAmount: true, status: true,
+          salesman: { select: { name: true } },
+          items: {
+            select: {
+              id: true, labelNo: true, itemName: true,
+              grossWeight: true, netWeight: true, pcs: true,
+              metalRate: true, metalAmount: true, labourAmount: true,
+              totalAmount: true,
+            },
+          },
+        },
+        orderBy: { voucherDate: 'desc' },
+      }),
+      prisma.purchaseVoucher.findMany({
+        where: {
+          accountId,
+          status: 'ACTIVE',
+          description: { contains: 'OLD GOLD', mode: 'insensitive' },
+          companyId: req.companyId,
+          ...(dateFilter ? { voucherDate: dateFilter } : {}),
+        },
+        select: {
+          id: true, voucherNo: true, voucherDate: true,
+          totalGrossWeight: true, totalNetWeight: true, totalFineWeight: true,
+          totalPcs: true, metalRate: true, metalAmount: true,
+          totalAmount: true, finalAmount: true,
+          items: {
+            select: {
+              id: true, styleName: true, weight: true, pcs: true,
+              rate: true, amount: true,
+            },
+          },
+        },
+        orderBy: { voucherDate: 'desc' },
+      }),
+      prisma.layawayEntry.findMany({
+        where: {
+          accountId,
+          status: { not: 'CANCELLED' },
+          companyId: req.companyId,
+          ...(dateFilter ? { voucherDate: dateFilter } : {}),
+        },
+        select: {
+          id: true, voucherNo: true, voucherDate: true,
+          totalGrossWeight: true, totalNetWeight: true, totalPcs: true,
+          metalAmount: true, labourAmount: true, voucherAmount: true,
+          paymentAmount: true, dueAmount: true, status: true,
+        },
+        orderBy: { voucherDate: 'desc' },
+      }),
+    ]);
+
+    const totalSalesAmount = sales.reduce((s, v) => s + Number(v.voucherAmount), 0);
+    const totalOldGoldAmount = sales.reduce((s, v) => s + Number(v.oldGoldAmount), 0);
+    const totalOGPurchaseAmount = oldGoldPurchases.reduce((s, v) => s + Number(v.finalAmount || v.totalAmount), 0);
+
+    res.json({
+      sales,
+      oldGoldPurchases,
+      layaways,
+      summary: {
+        totalSalesCount: sales.length,
+        totalSalesAmount,
+        totalOldGoldInSales: totalOldGoldAmount,
+        totalOGPurchaseCount: oldGoldPurchases.length,
+        totalOGPurchaseAmount,
+        totalLayawayCount: layaways.length,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch customer history' });
+  }
+});
+
 // Allowed fields for Account create/update
 const ACCOUNT_FIELDS = [
   'name', 'type', 'groupHead', 'customerCategory',

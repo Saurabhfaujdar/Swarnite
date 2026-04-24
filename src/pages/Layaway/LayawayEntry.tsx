@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import { layawayAPI, inventoryAPI, accountsAPI, mastersAPI } from '../../lib/api';
 import { formatIndianNumber, formatWeight, getToday, calculateGST, getDayName, getFinancialYear } from '../../lib/utils';
+import { useKeyboardShortcuts } from '../../lib/useKeyboardShortcuts';
 import toast from 'react-hot-toast';
 import AccountMasterModal from '../../components/AccountMasterModal';
 
@@ -29,9 +30,13 @@ interface LayawayItem {
 export default function LayawayEntry() {
   const queryClient = useQueryClient();
   const labelInputRef = useRef<HTMLInputElement>(null);
+  const cashInputRef = useRef<HTMLInputElement>(null);
+  const bankInputRef = useRef<HTMLInputElement>(null);
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const editId = searchParams.get('id') ? Number(searchParams.get('id')) : null;
   const [isEditLoaded, setIsEditLoaded] = useState(false);
+  const [isCartLoaded, setIsCartLoaded] = useState(false);
 
   // Pcs prompt modal state
   const [pendingLabel, setPendingLabel] = useState<any>(null);
@@ -112,6 +117,59 @@ export default function LayawayEntry() {
       toast.error('Failed to load layaway entry');
     });
   }, [editId, isEditLoaded]);
+
+  // Load cart items from navigation state (from CartDrawer)
+  useEffect(() => {
+    const cartItems = (location.state as any)?.cartItems;
+    if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0 || isCartLoaded) return;
+    setIsCartLoaded(true);
+
+    (async () => {
+      try {
+        const ratesRes = await mastersAPI.latestRates();
+        const rates = ratesRes.data;
+
+        const newItems: LayawayItem[] = cartItems.map((ci: any) => {
+          const metalRate = rates.find(
+            (r: any) => r.metalType?.name === ci.metalType && r.purityCode === ci.purityCode
+          );
+          const rate = metalRate ? Number(metalRate.rate) : 0;
+          const grossWt = Number(ci.grossWeight);
+          const netWt = Number(ci.netWeight);
+          const purity = Number(ci.purityPercentage || 0);
+          const fineWt = (netWt * purity) / 100;
+          const metalAmt = fineWt * rate;
+          const labRate = Number(ci.labourRate || 0);
+          const labAmt = netWt * labRate;
+          const taxable = metalAmt + labAmt;
+
+          return {
+            labelNo: ci.labelNo,
+            itemName: ci.itemName,
+            itemId: ci.itemId,
+            labelId: ci.id,
+            grossWeight: grossWt,
+            netWeight: netWt,
+            fineWeight: fineWt,
+            pcs: ci.pcsCount || 1,
+            metalRate: rate,
+            metalAmount: metalAmt,
+            diamondWeight: 0,
+            labourRate: labRate,
+            labourAmount: labAmt,
+            otherCharge: 0,
+            discountAmt: 0,
+            totalAmount: taxable,
+            taxableAmount: taxable,
+          };
+        });
+        setItems(newItems);
+        toast.success(`${newItems.length} item(s) loaded from cart`);
+      } catch {
+        toast.error('Failed to load cart items');
+      }
+    })();
+  }, [location.state, isCartLoaded]);
 
   // Calculated totals
   const totalGrossWeight = items.reduce((sum, i) => sum + i.grossWeight, 0);
@@ -337,19 +395,16 @@ export default function LayawayEntry() {
     setRoundingDiscount(0);
   };
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'F2') { e.preventDefault(); setShowCustomerModal(true); }
-      if (e.key === 'F5') { e.preventDefault(); /* focus cash */ }
-      if (e.key === 'F12' || (e.ctrlKey && e.key === 's')) {
-        e.preventDefault();
-        handleSave();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [items, customerId, narration]);
+  // Keyboard shortcuts – use ref to avoid stale closure on handleSave
+  const handleSaveRef = useRef(handleSave);
+  handleSaveRef.current = handleSave;
+  const shortcuts = useMemo(() => ({
+    F2: () => setShowCustomerModal(true),
+    F5: () => cashInputRef.current?.focus(),
+    F6: () => bankInputRef.current?.focus(),
+    F12: () => handleSaveRef.current(),
+  }), []);
+  useKeyboardShortcuts(shortcuts);
 
   return (
     <div className="flex gap-2 h-[calc(100vh-80px)]">
@@ -567,8 +622,8 @@ export default function LayawayEntry() {
             { label: 'Customer', key: 'F2', action: () => setShowCustomerModal(true) },
             { label: 'Voucher No', key: 'F3' },
             { label: 'Salesman', key: '' },
-            { label: 'Cash', key: 'F5' },
-            { label: 'Bank', key: 'F6' },
+            { label: 'Cash', key: 'F5', action: () => cashInputRef.current?.focus() },
+            { label: 'Bank', key: 'F6', action: () => bankInputRef.current?.focus() },
             { label: 'Narration', key: '', action: () => setShowNarrationModal(true) },
             { label: 'Void Line', key: '' },
             { label: 'Discount', key: '' },
@@ -647,6 +702,7 @@ export default function LayawayEntry() {
           <div className="voucher-detail-row">
             <span className="voucher-detail-label">Cash Amt</span>
             <input
+              ref={cashInputRef}
               type="number"
               className="form-input w-20 text-right text-xs"
               value={cashAmount || ''}
@@ -656,6 +712,7 @@ export default function LayawayEntry() {
           <div className="voucher-detail-row">
             <span className="voucher-detail-label">Bank Amt</span>
             <input
+              ref={bankInputRef}
               type="number"
               className="form-input w-20 text-right text-xs"
               value={bankAmount || ''}

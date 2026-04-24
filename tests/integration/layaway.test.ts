@@ -585,7 +585,7 @@ describe('POST /api/layaway', () => {
 
     const res = await request(app).post('/api/layaway').send(makeLayawayPayload());
     expect(res.status).toBe(500);
-    expect(res.body.error).toBe('Failed to create layaway entry');
+    expect(res.body.error).toBe('Transaction failed');
   });
 
   // ── pcsCount-specific tests ──────────────────────────────
@@ -661,7 +661,7 @@ describe('POST /api/layaway', () => {
 
     const res = await request(app).post('/api/layaway').send(payload);
     expect(res.status).toBe(500);
-    expect(res.body.error).toBe('Failed to create layaway entry');
+    expect(res.body.error).toMatch(/has only \d+ pcs in stock/);
   });
 });
 
@@ -858,7 +858,7 @@ describe('PUT /api/layaway/:id', () => {
 
     const res = await request(app).put('/api/layaway/1').send(makeLayawayPayload());
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Cannot modify a cancelled layaway');
+    expect(res.body.error).toBe('Cannot modify a CANCELLED layaway');
   });
 
   it('handles server error', async () => {
@@ -876,6 +876,7 @@ describe('PUT /api/layaway/:id', () => {
 describe('POST /api/layaway/:id/payment', () => {
   it('adds payment and updates layaway balances', async () => {
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(CREATED_ENTRY);
     const payment = { id: 1, layawayId: 1, amount: 5000, paymentMode: 'Cash' };
     mockPrisma.layawayPayment.create.mockResolvedValueOnce(payment);
     mockPrisma.layawayEntry.update.mockResolvedValueOnce({
@@ -883,8 +884,10 @@ describe('POST /api/layaway/:id/payment', () => {
       paymentAmount: 5000,
       dueAmount: 6796,
       finalDue: 6796,
+      status: 'PARTIALLY_PAID',
       accountId: CUSTOMER.id,
     });
+    mockPrisma.layawayStatusHistory.create.mockResolvedValueOnce({});
     mockPrisma.account.update.mockResolvedValue({});
 
     const res = await request(app)
@@ -897,9 +900,9 @@ describe('POST /api/layaway/:id/payment', () => {
       expect.objectContaining({
         where: { id: 1 },
         data: expect.objectContaining({
-          paymentAmount: { increment: 5000 },
-          dueAmount: { decrement: 5000 },
-          finalDue: { decrement: 5000 },
+          paymentAmount: 5000,
+          dueAmount: 6796,
+          finalDue: 6796,
         }),
       }),
     );
@@ -910,18 +913,19 @@ describe('POST /api/layaway/:id/payment', () => {
     );
   });
 
-  it('marks layaway as COMPLETED when fully paid', async () => {
+  it('marks layaway as READY_FOR_CONVERSION when fully paid', async () => {
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(CREATED_ENTRY);
     mockPrisma.layawayPayment.create.mockResolvedValueOnce({});
-    // dueAmount becomes 0 after update
-    mockPrisma.layawayEntry.update
-      .mockResolvedValueOnce({
-        ...CREATED_ENTRY,
-        paymentAmount: 11796,
-        dueAmount: 0,
-        accountId: CUSTOMER.id,
-      })
-      .mockResolvedValueOnce({ ...CREATED_ENTRY, status: 'COMPLETED' });
+    mockPrisma.layawayEntry.update.mockResolvedValueOnce({
+      ...CREATED_ENTRY,
+      paymentAmount: 11796,
+      dueAmount: 0,
+      finalDue: 0,
+      status: 'READY_FOR_CONVERSION',
+      accountId: CUSTOMER.id,
+    });
+    mockPrisma.layawayStatusHistory.create.mockResolvedValueOnce({});
     mockPrisma.account.update.mockResolvedValue({});
 
     const res = await request(app)
@@ -929,11 +933,13 @@ describe('POST /api/layaway/:id/payment', () => {
       .send({ amount: 11796, paymentMode: 'Cash' });
 
     expect(res.status).toBe(201);
-    // Second update should set status to COMPLETED
+    // Update should set status to READY_FOR_CONVERSION
     expect(mockPrisma.layawayEntry.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 1 },
-        data: { status: 'COMPLETED' },
+        data: expect.objectContaining({
+          status: 'READY_FOR_CONVERSION',
+        }),
       }),
     );
   });
@@ -944,7 +950,7 @@ describe('POST /api/layaway/:id/payment', () => {
       .send({ amount: 0 });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Payment amount is required');
+    expect(res.body.error).toBe('Payment amount must be greater than zero');
   });
 
   it('rejects payment with negative amount', async () => {
@@ -961,7 +967,7 @@ describe('POST /api/layaway/:id/payment', () => {
       .send({ paymentMode: 'Cash' });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Payment amount is required');
+    expect(res.body.error).toBe('Payment amount must be greater than zero');
   });
 
   it('handles server error during payment', async () => {
@@ -972,6 +978,6 @@ describe('POST /api/layaway/:id/payment', () => {
       .send({ amount: 5000 });
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toBe('Failed to add payment');
+    expect(res.body.error).toBe('Payment error');
   });
 });

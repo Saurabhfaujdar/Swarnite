@@ -11,6 +11,20 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
 }));
 
+// ── Mock cart store ────────────────────────────────────────
+vi.mock('../../src/lib/cartStore', () => ({
+  useCartStore: (selector: any) => {
+    const state = { items: [], toggleItem: vi.fn(), isInCart: () => false };
+    return selector(state);
+  },
+  CartLabel: {},
+}));
+
+// ── Mock CartDrawer ────────────────────────────────────────
+vi.mock('../../src/components/CartDrawer', () => ({
+  default: () => null,
+}));
+
 // ── Mock api module ────────────────────────────────────────
 vi.mock('../../src/lib/api', () => ({
   inventoryAPI: {
@@ -110,7 +124,8 @@ describe('LabelEntryList date filter defaults', () => {
     });
 
     const params = mockLabels.mock.calls[0][0];
-    const today = new Date().toISOString().split('T')[0];
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     expect(params.dateTo).toBe(today);
   });
 
