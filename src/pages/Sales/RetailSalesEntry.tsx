@@ -7,7 +7,7 @@ import { useKeyboardShortcuts } from '../../lib/useKeyboardShortcuts';
 import toast from 'react-hot-toast';
 import AccountMasterModal from '../../components/AccountMasterModal';
 import VoucherPrintDialog from '../../components/VoucherPrintDialog';
-import OldGoldPurchaseModal from '../../components/OldGoldPurchaseModal';
+import OldGoldPurchaseModal, { OldGoldData } from '../../components/OldGoldPurchaseModal';
 
 interface SalesItem {
   labelNo: string;
@@ -61,6 +61,7 @@ export default function RetailSalesEntry() {
   const [cardAmount, setCardAmount] = useState(0);
   const [upiAmount, setUpiAmount] = useState(0);
   const [oldGoldAmount, setOldGoldAmount] = useState(0);
+  const [oldGoldData, setOldGoldData] = useState<OldGoldData | null>(null);
   const [advanceAmount, setAdvanceAmount] = useState(0);
   const [discountScheme, setDiscountScheme] = useState('DISCOUNT');
   const [discountPercent, setDiscountPercent] = useState(0);
@@ -287,6 +288,7 @@ export default function RetailSalesEntry() {
       cardAmount,
       upiAmount,
       oldGoldAmount,
+      oldGoldDetails: oldGoldData || undefined,
       advanceAmount,
       paymentAmount,
       dueAmount,
@@ -327,6 +329,7 @@ export default function RetailSalesEntry() {
     setCardAmount(0);
     setUpiAmount(0);
     setOldGoldAmount(0);
+    setOldGoldData(null);
     setAdvanceAmount(0);
     setDiscountAmount(0);
     setRoundingDiscount(0);
@@ -808,10 +811,11 @@ export default function RetailSalesEntry() {
       {showOldGoldModal && (
         <OldGoldPurchaseModal
           currentAmount={oldGoldAmount}
-          onConfirm={(amount) => {
-            setOldGoldAmount(amount);
+          onConfirm={(data) => {
+            setOldGoldAmount(data.amount);
+            setOldGoldData(data);
             setShowOldGoldModal(false);
-            if (amount > 0) toast.success(`Old gold ₹${formatIndianNumber(amount)} applied to bill`);
+            if (data.amount > 0) toast.success(`Old gold ₹${formatIndianNumber(data.amount)} applied to bill`);
           }}
           onClose={() => setShowOldGoldModal(false)}
         />

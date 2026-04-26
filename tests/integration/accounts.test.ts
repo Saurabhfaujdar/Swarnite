@@ -259,7 +259,7 @@ const HISTORY_SALES = [
     id: 1, voucherNo: 'JGI/1001', voucherDate: '2025-01-15',
     totalGrossWeight: 25.5, totalNetWeight: 24, totalPcs: 3,
     metalAmount: 150000, labourAmount: 5000, voucherAmount: 165000,
-    paymentAmount: 100000, dueAmount: 65000, oldGoldAmount: 20000,
+    paymentAmount: 100000, dueAmount: 65000,
     cashAmount: 50000, bankAmount: 50000, cardAmount: 0, upiAmount: 0,
     status: 'ACTIVE',
     salesman: { name: 'Ramesh' },
@@ -302,7 +302,6 @@ describe('GET /api/accounts/:id/history', () => {
     expect(res.body.summary).toMatchObject({
       totalSalesCount: 1,
       totalSalesAmount: 165000,
-      totalOldGoldInSales: 20000,
       totalOGPurchaseCount: 1,
       totalOGPurchaseAmount: 46716,
       totalLayawayCount: 1,
@@ -323,22 +322,11 @@ describe('GET /api/accounts/:id/history', () => {
       summary: {
         totalSalesCount: 0,
         totalSalesAmount: 0,
-        totalOldGoldInSales: 0,
         totalOGPurchaseCount: 0,
         totalOGPurchaseAmount: 0,
         totalLayawayCount: 0,
       },
     });
-  });
-
-  it('includes old gold amount in sales data', async () => {
-    mockPrisma.salesVoucher.findMany.mockResolvedValueOnce(HISTORY_SALES);
-    mockPrisma.purchaseVoucher.findMany.mockResolvedValueOnce([]);
-    mockPrisma.layawayEntry.findMany.mockResolvedValueOnce([]);
-
-    const res = await request(app).get('/api/accounts/1/history');
-    expect(res.body.sales[0]).toHaveProperty('oldGoldAmount', 20000);
-    expect(res.body.sales[0].items).toHaveLength(1);
   });
 
   it('includes salesman and items in sales', async () => {

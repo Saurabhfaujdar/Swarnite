@@ -671,6 +671,74 @@ describe('POST /api/sales', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('DB error');
   });
+
+  it('creates a PurchaseVoucher when oldGoldDetails is provided', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.voucherSequence.upsert.mockResolvedValue({ lastNumber: 1 });
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce(VOUCHER_1);
+    mockPrisma.salesItem.create.mockResolvedValueOnce(ITEM_1);
+    mockPrisma.label.findUnique.mockResolvedValue({ branchId: 1, status: 'IN_STOCK', labelNo: 'GB/13', pcsCount: 1 });
+    mockPrisma.label.update.mockResolvedValue({});
+    mockPrisma.account.update.mockResolvedValue({});
+    mockPrisma.purchaseVoucher.create.mockResolvedValueOnce({ id: 10, voucherNo: 'URD/1' });
+    mockPrisma.purchaseVoucher.findUnique.mockResolvedValueOnce({ id: 10 });
+    mockPrisma.purchaseItem.create.mockResolvedValueOnce({});
+    mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce(FULL_VOUCHER);
+
+    const res = await request(app).post('/api/sales').send(makeSalesPayload({
+      oldGoldAmount: 64120,
+      cashAmount: 0,
+      bankAmount: 0,
+      paymentAmount: 64120,
+      dueAmount: 77722 - 64120,
+      oldGoldDetails: {
+        grossWeight: 10,
+        lessWeight: 0,
+        netWeight: 10,
+        purityCode: '916',
+        purityPercent: 91.6,
+        fineWeight: 9.16,
+        metalRate: 7000,
+        amount: 64120,
+      },
+    }));
+
+    expect(res.status).toBe(201);
+    // Verify PurchaseVoucher was created with OLD GOLD description
+    expect(mockPrisma.purchaseVoucher.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          description: 'OLD GOLD',
+          group: 'OGN',
+          totalGrossWeight: 10,
+          totalNetWeight: 10,
+          totalFineWeight: 9.16,
+          metalRate: 7000,
+          finalAmount: 64120,
+        }),
+      }),
+    );
+    // Verify PurchaseItem was created
+    expect(mockPrisma.purchaseItem.create).toHaveBeenCalled();
+  });
+
+  it('does not create PurchaseVoucher when oldGoldAmount is 0', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.voucherSequence.upsert.mockResolvedValue({ lastNumber: 1 });
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce(VOUCHER_1);
+    mockPrisma.salesItem.create.mockResolvedValueOnce(ITEM_1);
+    mockPrisma.label.findUnique.mockResolvedValue({ branchId: 1, status: 'IN_STOCK', labelNo: 'GB/13', pcsCount: 1 });
+    mockPrisma.label.update.mockResolvedValue({});
+    mockPrisma.account.update.mockResolvedValue({});
+    mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce(FULL_VOUCHER);
+
+    const res = await request(app).post('/api/sales').send(makeSalesPayload({
+      oldGoldAmount: 0,
+    }));
+
+    expect(res.status).toBe(201);
+    expect(mockPrisma.purchaseVoucher.create).not.toHaveBeenCalled();
+  });
 });
 
 // ════════════════════════════════════════════════════════════

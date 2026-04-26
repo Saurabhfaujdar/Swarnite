@@ -3,15 +3,18 @@ import { useQuery } from '@tanstack/react-query';
 import { reportsAPI } from '../../lib/api';
 import { formatIndianNumber, formatWeight } from '../../lib/utils';
 import { exportToExcel, exportToPDF } from '../../lib/export';
+import BranchFilter from '../../components/BranchFilter';
+import ReportTabs from '../../components/ReportTabs';
 
 export default function StockReport() {
   const [groupBy, setGroupBy] = useState('item');
   const [metalFilter, setMetalFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('IN_STOCK');
+  const [branchId, setBranchId] = useState('');
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['report-stock', groupBy, metalFilter, statusFilter],
-    queryFn: () => reportsAPI.stock({ groupBy, metal: metalFilter !== 'ALL' ? metalFilter : undefined, status: statusFilter !== 'ALL' ? statusFilter : undefined }).then((r) => r.data),
+    queryKey: ['report-stock', groupBy, metalFilter, statusFilter, branchId],
+    queryFn: () => reportsAPI.stock({ groupBy, metal: metalFilter !== 'ALL' ? metalFilter : undefined, status: statusFilter !== 'ALL' ? statusFilter : undefined, ...(branchId ? { branchId } : {}) }).then((r) => r.data),
   });
 
   const report = data || {};
@@ -34,6 +37,7 @@ export default function StockReport() {
 
   return (
     <div className="flex flex-col gap-3 h-full">
+      <ReportTabs />
       <div className="panel">
         <div className="panel-header">Stock Summary Report</div>
         <div className="panel-body flex gap-4 items-end flex-wrap">
@@ -66,6 +70,7 @@ export default function StockReport() {
               <option value="ON_APPROVAL">On Approval</option>
             </select>
           </div>
+          <BranchFilter value={branchId} onChange={setBranchId} />
           <button onClick={() => refetch()} className="btn-primary">🔍 Generate</button>
           <div className="ml-auto flex gap-2">
             <button onClick={handleExportExcel} className="btn-outline text-xs">📊 Excel</button>

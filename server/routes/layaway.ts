@@ -453,6 +453,15 @@ router.post('/:id/payment', async (req: Request, res: Response) => {
       const newDue = voucherAmount - newPaymentTotal;
       const newStatus = deriveStatus(voucherAmount, newPaymentTotal, layaway.status);
 
+      // Build payment mode increment
+      const mode = (data.paymentMode || 'Cash') as string;
+      const modeIncrement: Record<string, any> = {};
+      if (mode === 'Cash') modeIncrement.cashAmount = { increment: Number(data.amount) };
+      else if (mode === 'Bank') modeIncrement.bankAmount = { increment: Number(data.amount) };
+      else if (mode === 'Card') modeIncrement.cardAmount = { increment: Number(data.amount) };
+      else if (mode === 'UPI') modeIncrement.upiAmount = { increment: Number(data.amount) };
+      else modeIncrement.cashAmount = { increment: Number(data.amount) };
+
       const updated = await tx.layawayEntry.update({
         where: { id: layawayId },
         data: {
@@ -460,6 +469,7 @@ router.post('/:id/payment', async (req: Request, res: Response) => {
           dueAmount: newDue,
           finalDue: newDue,
           status: newStatus as any,
+          ...modeIncrement,
         },
       });
 
@@ -541,31 +551,10 @@ router.post('/:id/convert', async (req: Request, res: Response) => {
         }
       }
 
-      // Generate a SalesVoucher number
-      const voucherPrefix = data.voucherPrefix || 'JGI';
-      const now = new Date();
-      const fy = now.getMonth() + 1 >= 4
-        ? `${now.getFullYear()}-${now.getFullYear() + 1}`
-        : `${now.getFullYear() - 1}-${now.getFullYear()}`;
-      const sequence = await tx.voucherSequence.upsert({
-        where: {
-          companyId_prefix_entityType_financialYear: {
-            companyId: req.companyId!,
-            prefix: voucherPrefix,
-            entityType: 'SALES',
-            financialYear: fy,
-          },
-        },
-        update: { lastNumber: { increment: 1 } },
-        create: {
-          companyId: req.companyId!,
-          prefix: voucherPrefix,
-          entityType: 'SALES',
-          financialYear: fy,
-          lastNumber: 1,
-        },
-      });
-      const saleVoucherNo = `${voucherPrefix}/${sequence.lastNumber}`;
+      // Reuse the layaway voucher number for consistency across payments
+      const saleVoucherNo = layaway.voucherNo;
+      const voucherPrefix = layaway.voucherPrefix;
+      const voucherNumber = layaway.voucherNumber;
 
       // Calculate total payment amount including final payment
       const finalAmt = Number(data.finalPaymentAmount) || 0;
@@ -584,8 +573,8 @@ router.post('/:id/convert', async (req: Request, res: Response) => {
         data: {
           voucherNo: saleVoucherNo,
           voucherPrefix,
-          voucherNumber: sequence.lastNumber,
-          voucherDate: now,
+          voucherNumber: voucherNumber,
+          voucherDate: new Date(),
           accountId: layaway.accountId,
           salesmanId: null,
           companyId: req.companyId!,

@@ -3,9 +3,20 @@ import { useQuery } from '@tanstack/react-query';
 import { mastersAPI } from '../lib/api';
 import { formatWeight, formatIndianNumber } from '../lib/utils';
 
+export interface OldGoldData {
+  grossWeight: number;
+  lessWeight: number;
+  netWeight: number;
+  purityCode: string;
+  purityPercent: number;
+  fineWeight: number;
+  metalRate: number;
+  amount: number;
+}
+
 interface OldGoldPurchaseModalProps {
   currentAmount: number;
-  onConfirm: (amount: number) => void;
+  onConfirm: (data: OldGoldData) => void;
   onClose: () => void;
 }
 
@@ -42,7 +53,16 @@ export default function OldGoldPurchaseModal({ currentAmount, onConfirm, onClose
   const amount = Math.round(fineWeight * metalRate);
 
   const handleConfirm = () => {
-    onConfirm(amount);
+    onConfirm({
+      grossWeight,
+      lessWeight,
+      netWeight,
+      purityCode,
+      purityPercent,
+      fineWeight,
+      metalRate,
+      amount,
+    });
   };
 
   return (
@@ -164,7 +184,7 @@ export default function OldGoldPurchaseModal({ currentAmount, onConfirm, onClose
           </button>
           {currentAmount > 0 && (
             <button
-              onClick={() => onConfirm(0)}
+              onClick={() => onConfirm({ grossWeight: 0, lessWeight: 0, netWeight: 0, purityCode: '', purityPercent: 0, fineWeight: 0, metalRate: 0, amount: 0 })}
               className="btn-outline text-xs"
               data-testid="og-clear"
             >

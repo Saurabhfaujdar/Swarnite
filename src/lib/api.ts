@@ -225,6 +225,8 @@ export const reportsAPI = {
   gst: (params?: any) => api.get('/reports/gst', { params }),
   outstanding: (params?: any) => api.get('/reports/outstanding', { params }),
   dashboard: () => api.get('/reports/dashboard'),
+  branches: () => api.get('/reports/branches'),
+  itemWiseSales: (params?: any) => api.get('/reports/item-wise-sales', { params }),
 };
 
 // Customer Payments

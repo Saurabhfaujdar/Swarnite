@@ -27,6 +27,7 @@ import CustomerList from './pages/CRM/CustomerList';
 import DailySalesReport from './pages/Reports/DailySalesReport';
 import StockReport from './pages/Reports/StockReport';
 import CounterWiseReport from './pages/Reports/CounterWiseReport';
+import ItemWiseSalesReport from './pages/Reports/ItemWiseSalesReport';
 import MasterData from './pages/Masters/MasterData';
 import Login from './pages/Login';
 
@@ -84,6 +85,7 @@ function App() {
         <Route path="reports/daily-sales" element={<DailySalesReport />} />
         <Route path="reports/stock" element={<StockReport />} />
         <Route path="reports/counter-wise" element={<CounterWiseReport />} />
+        <Route path="reports/item-wise-sales" element={<ItemWiseSalesReport />} />
         {/* Masters */}
         <Route path="masters" element={<MasterData />} />
       </Route>

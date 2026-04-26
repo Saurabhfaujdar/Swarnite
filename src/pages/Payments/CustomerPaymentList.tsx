@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { customerPaymentsAPI, accountsAPI, mastersAPI } from '../../lib/api';
+import { customerPaymentsAPI, accountsAPI } from '../../lib/api';
 import { formatIndianNumber, getToday, getFinancialYear } from '../../lib/utils';
 import toast from 'react-hot-toast';
 import AccountMasterModal from '../../components/AccountMasterModal';
@@ -31,18 +31,13 @@ export default function CustomerPaymentList() {
   const [bankAmount, setBankAmount] = useState(0);
   const [cardAmount, setCardAmount] = useState(0);
   const [upiAmount, setUpiAmount] = useState(0);
-  const [oldGoldGross, setOldGoldGross] = useState(0);
-  const [oldGoldLess, setOldGoldLess] = useState(0);
-  const [oldGoldRate, setOldGoldRate] = useState(0);
   const [bankName, setBankName] = useState('');
   const [chequeNo, setChequeNo] = useState('');
   const [narration, setNarration] = useState('');
   const [reference, setReference] = useState('');
   const [savedPaymentId, setSavedPaymentId] = useState<number | null>(null);
 
-  const oldGoldNet = Math.max(0, oldGoldGross - oldGoldLess);
-  const oldGoldAmount = oldGoldNet > 0 && oldGoldRate > 0 ? Math.round(oldGoldNet * oldGoldRate * 100) / 100 : 0;
-  const totalAmount = cashAmount + bankAmount + cardAmount + upiAmount + oldGoldAmount;
+  const totalAmount = cashAmount + bankAmount + cardAmount + upiAmount;
   const currentBalance = customerData ? Number(customerData.closingBalance || 0) : 0;
   const balanceAfter = currentBalance - totalAmount;
 
@@ -68,22 +63,6 @@ export default function CustomerPaymentList() {
     enabled: customerSearch.length >= 2 && showForm,
     select: (res: any) => res.data?.accounts || [],
   });
-
-  // Fetch latest gold rate for old gold valuation
-  const { data: latestRates } = useQuery({
-    queryKey: ['metal-rates-latest'],
-    queryFn: () => mastersAPI.latestRates(),
-    select: (res: any) => res.data,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // Auto-set gold rate when latest rates are available and old gold rate is 0
-  useEffect(() => {
-    if (latestRates && oldGoldRate === 0) {
-      const goldRate = latestRates.find((r: any) => r.purityCode === '999' || r.purityCode === '24KT' || r.purityCode === '24K');
-      if (goldRate) setOldGoldRate(Number(goldRate.rate));
-    }
-  }, [latestRates]);
 
   useEffect(() => {
     if (customerId) {
@@ -141,10 +120,6 @@ export default function CustomerPaymentList() {
       bankAmount,
       cardAmount,
       upiAmount,
-      oldGoldGross: oldGoldGross || undefined,
-      oldGoldNet: oldGoldNet || undefined,
-      oldGoldRate: oldGoldRate || undefined,
-      oldGoldAmount: oldGoldAmount || undefined,
       bankName: bankName || undefined,
       chequeNo: chequeNo || undefined,
       narration: narration || undefined,
@@ -161,9 +136,6 @@ export default function CustomerPaymentList() {
     setBankAmount(0);
     setCardAmount(0);
     setUpiAmount(0);
-    setOldGoldGross(0);
-    setOldGoldLess(0);
-    setOldGoldRate(0);
     setBankName('');
     setChequeNo('');
     setNarration('');
@@ -377,85 +349,6 @@ export default function CustomerPaymentList() {
                   </div>
                 )}
 
-                {/* Old Gold Section */}
-                <div className="mt-2 border-t pt-2">
-                  <div className="flex items-center gap-2 mb-2">
-                    <label className="text-xs font-semibold text-amber-700 cursor-pointer flex items-center gap-1">
-                      <input
-                        type="checkbox"
-                        checked={oldGoldGross > 0 || oldGoldLess > 0 || oldGoldRate > 0}
-                        onChange={(e) => {
-                          if (!e.target.checked) { setOldGoldGross(0); setOldGoldLess(0); }
-                        }}
-                        className="rounded border-amber-400 text-amber-600 focus:ring-amber-500"
-                      />
-                      Old Gold
-                    </label>
-                    {oldGoldAmount > 0 && (
-                      <span className="text-xs font-bold text-amber-700">= ₹{formatIndianNumber(oldGoldAmount)}</span>
-                    )}
-                  </div>
-                  {(oldGoldGross > 0 || oldGoldLess > 0 || oldGoldRate > 0) ? (
-                    <div className="grid grid-cols-4 gap-3">
-                      <div>
-                        <label className="text-xs text-gray-600">Gross Wt (g)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="form-input w-full text-xs text-right"
-                          value={oldGoldGross || ''}
-                          onChange={(e) => setOldGoldGross(Number(e.target.value))}
-                          placeholder="0.00"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-600">Less Wt (g)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="form-input w-full text-xs text-right"
-                          value={oldGoldLess || ''}
-                          onChange={(e) => setOldGoldLess(Number(e.target.value))}
-                          placeholder="0.00"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-600">Net Wt (g)</label>
-                        <input
-                          type="number"
-                          className="form-input w-full text-xs text-right bg-gray-50"
-                          value={oldGoldNet || ''}
-                          readOnly
-                          tabIndex={-1}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-600">Rate/g (₹)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="form-input w-full text-xs text-right"
-                          value={oldGoldRate || ''}
-                          onChange={(e) => setOldGoldRate(Number(e.target.value))}
-                          placeholder="0.00"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="text-xs text-amber-600 hover:text-amber-800 underline"
-                      onClick={() => {
-                        setOldGoldGross(0.01);
-                        const goldRate = latestRates?.find((r: any) => r.purityCode === '999' || r.purityCode === '24KT' || r.purityCode === '24K');
-                        if (goldRate && oldGoldRate === 0) setOldGoldRate(Number(goldRate.rate));
-                      }}
-                    >
-                      + Add Old Gold
-                    </button>
-                  )}
-                </div>
-
                 <div className="mt-3 pt-2 border-t flex justify-between items-center">
                   <div className="text-xs text-gray-500">
                     <input
@@ -572,17 +465,6 @@ export default function CustomerPaymentList() {
                       <span className="text-green-700">₹{formatIndianNumber(upiAmount)}</span>
                     </div>
                   )}
-                  {oldGoldAmount > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-amber-700">Old Gold:</span>
-                      <span className="text-amber-700">₹{formatIndianNumber(oldGoldAmount)}</span>
-                    </div>
-                  )}
-                  {oldGoldNet > 0 && (
-                    <div className="flex justify-between text-[10px] text-gray-400">
-                      <span>{oldGoldNet}g @ ₹{formatIndianNumber(oldGoldRate)}/g</span>
-                    </div>
-                  )}
                 </div>
                 <div className="border-t pt-2">
                   <div className="flex justify-between text-sm font-bold">
@@ -646,6 +528,9 @@ export default function CustomerPaymentList() {
             <option value="ALL">All Types</option>
             <option value="ADVANCE">Advance</option>
             <option value="DUE_PAYMENT">Due Payment</option>
+            <option value="SALE">Sale Payment</option>
+            <option value="LAYAWAY">Layaway Payment</option>
+            <option value="SCHEME">Scheme Payment</option>
           </select>
         </div>
         <div>
@@ -700,7 +585,6 @@ export default function CustomerPaymentList() {
                 <th className="text-right p-2">Cash</th>
                 <th className="text-right p-2">Bank</th>
                 <th className="text-right p-2">Card</th>
-                <th className="text-right p-2">Old Gold</th>
                 <th className="text-right p-2">Total</th>
                 <th className="text-right p-2">Bal Before</th>
                 <th className="text-right p-2">Bal After</th>
@@ -710,9 +594,9 @@ export default function CustomerPaymentList() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={13} className="p-8 text-center text-gray-400">Loading...</td></tr>
+                <tr><td colSpan={12} className="p-8 text-center text-gray-400">Loading...</td></tr>
               ) : payments.length === 0 ? (
-                <tr><td colSpan={13} className="p-8 text-center text-gray-400">No payments found</td></tr>
+                <tr><td colSpan={12} className="p-8 text-center text-gray-400">No payments found</td></tr>
               ) : (
                 payments.map((p: any) => (
                   <tr
@@ -727,15 +611,17 @@ export default function CustomerPaymentList() {
                     </td>
                     <td className="p-2 text-center">
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        p.source === 'SALE' ? 'bg-orange-100 text-orange-700' :
+                        p.source === 'LAYAWAY' ? 'bg-purple-100 text-purple-700' :
+                        p.source === 'SCHEME' ? 'bg-teal-100 text-teal-700' :
                         p.paymentType === 'ADVANCE' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
                       }`}>
-                        {p.paymentType === 'ADVANCE' ? 'Advance' : 'Due Payment'}
+                        {p.source === 'SALE' ? 'Sale' : p.source === 'LAYAWAY' ? 'Layaway' : p.source === 'SCHEME' ? 'Scheme' : p.paymentType === 'ADVANCE' ? 'Advance' : 'Due Payment'}
                       </span>
                     </td>
                     <td className="p-2 text-right">{Number(p.cashAmount) > 0 ? formatIndianNumber(Number(p.cashAmount)) : '-'}</td>
                     <td className="p-2 text-right">{Number(p.bankAmount) > 0 ? formatIndianNumber(Number(p.bankAmount)) : '-'}</td>
                     <td className="p-2 text-right">{Number(p.cardAmount) > 0 ? formatIndianNumber(Number(p.cardAmount)) : '-'}</td>
-                    <td className="p-2 text-right text-amber-700">{Number(p.oldGoldAmount) > 0 ? formatIndianNumber(Number(p.oldGoldAmount)) : '-'}</td>
                     <td className="p-2 text-right font-bold text-green-700">{formatIndianNumber(Number(p.totalAmount))}</td>
                     <td className={`p-2 text-right ${Number(p.balanceBefore) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatIndianNumber(Math.abs(Number(p.balanceBefore)))} {Number(p.balanceBefore) > 0 ? 'DR' : 'CR'}
@@ -751,7 +637,7 @@ export default function CustomerPaymentList() {
                       </span>
                     </td>
                     <td className="p-2 text-center">
-                      {p.status === 'ACTIVE' && (
+                      {p.status === 'ACTIVE' && p.source === 'PAYMENT' && (
                         <button
                           onClick={() => setCancelId(p.id)}
                           className="text-red-500 hover:text-red-700 font-bold"

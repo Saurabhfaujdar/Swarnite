@@ -980,4 +980,162 @@ describe('POST /api/layaway/:id/payment', () => {
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('Payment error');
   });
+
+  it('increments cashAmount when paymentMode is Cash', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(CREATED_ENTRY);
+    mockPrisma.layawayPayment.create.mockResolvedValueOnce({});
+    mockPrisma.layawayEntry.update.mockResolvedValueOnce({
+      ...CREATED_ENTRY, paymentAmount: 3000, dueAmount: 8796, status: 'PARTIALLY_PAID', accountId: CUSTOMER.id,
+    });
+    mockPrisma.layawayStatusHistory.create.mockResolvedValueOnce({});
+    mockPrisma.account.update.mockResolvedValue({});
+
+    await request(app).post('/api/layaway/1/payment').send({ amount: 3000, paymentMode: 'Cash' });
+
+    const updateData = mockPrisma.layawayEntry.update.mock.calls[0][0].data;
+    expect(updateData.cashAmount).toEqual({ increment: 3000 });
+    expect(updateData.bankAmount).toBeUndefined();
+  });
+
+  it('increments bankAmount when paymentMode is Bank', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(CREATED_ENTRY);
+    mockPrisma.layawayPayment.create.mockResolvedValueOnce({});
+    mockPrisma.layawayEntry.update.mockResolvedValueOnce({
+      ...CREATED_ENTRY, paymentAmount: 5000, dueAmount: 6796, status: 'PARTIALLY_PAID', accountId: CUSTOMER.id,
+    });
+    mockPrisma.layawayStatusHistory.create.mockResolvedValueOnce({});
+    mockPrisma.account.update.mockResolvedValue({});
+
+    await request(app).post('/api/layaway/1/payment').send({ amount: 5000, paymentMode: 'Bank' });
+
+    const updateData = mockPrisma.layawayEntry.update.mock.calls[0][0].data;
+    expect(updateData.bankAmount).toEqual({ increment: 5000 });
+    expect(updateData.cashAmount).toBeUndefined();
+  });
+
+  it('increments upiAmount when paymentMode is UPI', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(CREATED_ENTRY);
+    mockPrisma.layawayPayment.create.mockResolvedValueOnce({});
+    mockPrisma.layawayEntry.update.mockResolvedValueOnce({
+      ...CREATED_ENTRY, paymentAmount: 2000, dueAmount: 9796, status: 'PARTIALLY_PAID', accountId: CUSTOMER.id,
+    });
+    mockPrisma.layawayStatusHistory.create.mockResolvedValueOnce({});
+    mockPrisma.account.update.mockResolvedValue({});
+
+    await request(app).post('/api/layaway/1/payment').send({ amount: 2000, paymentMode: 'UPI' });
+
+    const updateData = mockPrisma.layawayEntry.update.mock.calls[0][0].data;
+    expect(updateData.upiAmount).toEqual({ increment: 2000 });
+    expect(updateData.cashAmount).toBeUndefined();
+  });
+
+  it('increments cardAmount when paymentMode is Card', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(CREATED_ENTRY);
+    mockPrisma.layawayPayment.create.mockResolvedValueOnce({});
+    mockPrisma.layawayEntry.update.mockResolvedValueOnce({
+      ...CREATED_ENTRY, paymentAmount: 4000, dueAmount: 7796, status: 'PARTIALLY_PAID', accountId: CUSTOMER.id,
+    });
+    mockPrisma.layawayStatusHistory.create.mockResolvedValueOnce({});
+    mockPrisma.account.update.mockResolvedValue({});
+
+    await request(app).post('/api/layaway/1/payment').send({ amount: 4000, paymentMode: 'Card' });
+
+    const updateData = mockPrisma.layawayEntry.update.mock.calls[0][0].data;
+    expect(updateData.cardAmount).toEqual({ increment: 4000 });
+    expect(updateData.cashAmount).toBeUndefined();
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// POST /api/layaway/:id/convert - Convert layaway to sale
+// ════════════════════════════════════════════════════════════
+describe('POST /api/layaway/:id/convert', () => {
+  const convertedLayaway = {
+    ...CREATED_ENTRY,
+    status: 'READY_FOR_CONVERSION',
+    paymentAmount: 11796,
+    dueAmount: 0,
+    finalDue: 0,
+    cashAmount: 11796,
+    items: [{ id: 1, labelId: 100, itemId: 1, labelNo: 'BCD/2', itemName: 'Bracelet Diamond',
+      grossWeight: 3.08, netWeight: 2.342, fineWeight: 1.366, pcs: 1,
+      metalRate: 0, metalAmount: 0, diamondWeight: 0.27,
+      labourRate: 650, labourAmount: 2082, otherCharge: 0 }],
+  };
+
+  it('converts layaway to sale reusing the layaway voucher number', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(convertedLayaway);
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 0 });
+    mockPrisma.label.update.mockResolvedValue({});
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce({ id: 1, voucherNo: 'LY/1' });
+    mockPrisma.salesItem.create.mockResolvedValue({});
+    mockPrisma.layawayEntry.update.mockResolvedValue({});
+    mockPrisma.layawayStatusHistory.create.mockResolvedValue({});
+
+    const res = await request(app).post('/api/layaway/1/convert').send({});
+
+    expect(res.status).toBe(200);
+    // Verify SalesVoucher was created with the layaway's voucher number (not a new JGI/ number)
+    const salesData = mockPrisma.salesVoucher.create.mock.calls[0][0].data;
+    expect(salesData.voucherNo).toBe('LY/1');
+    expect(salesData.voucherPrefix).toBe('LY');
+    expect(salesData.voucherNumber).toBe(1);
+  });
+
+  it('returns 400 for CANCELLED layaway', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce({
+      ...CREATED_ENTRY, status: 'CANCELLED', items: [],
+    });
+
+    const res = await request(app).post('/api/layaway/1/convert').send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for non-existent layaway', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(null);
+
+    const res = await request(app).post('/api/layaway/999/convert').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Layaway not found');
+  });
+
+  it('distributes final payment into correct mode bucket', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    const partialLay = {
+      ...CREATED_ENTRY,
+      status: 'PARTIALLY_PAID',
+      paymentAmount: 5000,
+      dueAmount: 6796,
+      cashAmount: 5000,
+      bankAmount: 0,
+      cardAmount: 0,
+      upiAmount: 0,
+      oldGoldAmount: 0,
+      items: [],
+    };
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(partialLay);
+    mockPrisma.layawayPayment.create.mockResolvedValue({});
+    mockPrisma.account.update.mockResolvedValue({});
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce({ id: 1, voucherNo: 'LY/1' });
+    mockPrisma.layawayEntry.update.mockResolvedValue({});
+    mockPrisma.layawayStatusHistory.create.mockResolvedValue({});
+
+    await request(app).post('/api/layaway/1/convert').send({
+      finalPaymentAmount: 6796,
+      finalPaymentMode: 'UPI',
+    });
+
+    // Verify the sales voucher has UPI = 6796 and cash = 5000
+    const salesData = mockPrisma.salesVoucher.create.mock.calls[0][0].data;
+    expect(salesData.cashAmount).toBe(5000);
+    expect(salesData.upiAmount).toBe(6796);
+    expect(salesData.bankAmount).toBe(0);
+  });
 });

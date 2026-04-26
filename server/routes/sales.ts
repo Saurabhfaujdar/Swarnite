@@ -449,6 +449,72 @@ router.post('/', async (req: Request, res: Response) => {
         });
       }
 
+      // Create PurchaseVoucher for old gold if details provided
+      const og = data.oldGoldDetails;
+      if (og && Number(data.oldGoldAmount) > 0) {
+        const ogSeq = await tx.voucherSequence.upsert({
+          where: {
+            companyId_prefix_entityType_financialYear: {
+              companyId: req.companyId!,
+              prefix: 'URD',
+              entityType: 'PURCHASE',
+              financialYear: data.financialYear || '2025-2026',
+            },
+          },
+          update: { lastNumber: { increment: 1 } },
+          create: {
+            companyId: req.companyId!,
+            prefix: 'URD',
+            entityType: 'PURCHASE',
+            financialYear: data.financialYear || '2025-2026',
+            lastNumber: 1,
+          },
+        });
+
+        const ogVoucherNo = `URD/${ogSeq.lastNumber}`;
+        const ogAmount = Number(data.oldGoldAmount);
+
+        await tx.purchaseVoucher.create({
+          data: {
+            voucherNo: ogVoucherNo,
+            voucherPrefix: 'URD',
+            voucherNumber: ogSeq.lastNumber,
+            voucherDate: new Date(data.voucherDate),
+            purchaseType: 'URD',
+            accountId: data.accountId,
+            companyId: req.companyId!,
+            branchId,
+            userId,
+            description: 'OLD GOLD',
+            group: 'OGN',
+            totalGrossWeight: og.grossWeight || 0,
+            totalNetWeight: og.netWeight || 0,
+            totalFineWeight: og.fineWeight || 0,
+            totalPcs: 1,
+            purity: og.purityPercent || 0,
+            metalRate: og.metalRate || 0,
+            metalAmount: ogAmount,
+            totalAmount: ogAmount,
+            finalAmount: ogAmount,
+            narration: `Old gold against sale ${voucherNo}`,
+            reference: voucherNo,
+          },
+        });
+
+        // Create purchase item
+        await tx.purchaseItem.create({
+          data: {
+            purchaseVoucherId: (await tx.purchaseVoucher.findUnique({ where: { voucherNo: ogVoucherNo }, select: { id: true } }))!.id,
+            styleName: `Old Gold ${og.purityCode || ''}`.trim(),
+            weight: og.netWeight || 0,
+            pcs: 1,
+            amtCalcOn: 'WEIGHT',
+            rate: og.metalRate || 0,
+            amount: ogAmount,
+          },
+        });
+      }
+
       return salesVoucher;
     });
 

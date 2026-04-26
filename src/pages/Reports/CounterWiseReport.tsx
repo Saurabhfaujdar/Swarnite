@@ -3,19 +3,23 @@ import { useQuery } from '@tanstack/react-query';
 import { reportsAPI } from '../../lib/api';
 import { formatIndianNumber, formatWeight, getToday } from '../../lib/utils';
 import { exportToExcel } from '../../lib/export';
+import BranchFilter from '../../components/BranchFilter';
+import ReportTabs from '../../components/ReportTabs';
 
 export default function CounterWiseReport() {
   const [dateFrom, setDateFrom] = useState(getToday());
   const [dateTo, setDateTo] = useState(getToday());
   const [reportType, setReportType] = useState<'sales' | 'stock'>('sales');
+  const [branchId, setBranchId] = useState('');
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['report-counter', dateFrom, dateTo, reportType],
+    queryKey: ['report-counter', dateFrom, dateTo, reportType, branchId],
     queryFn: () => {
+      const branchParam = branchId ? { branchId } : {};
       if (reportType === 'stock') {
-        return reportsAPI.stock({ groupBy: 'counter' }).then((r) => r.data);
+        return reportsAPI.stock({ groupBy: 'counter', ...branchParam }).then((r) => r.data);
       }
-      return reportsAPI.dailySales({ dateFrom, dateTo, groupBy: 'counter' }).then((r) => r.data);
+      return reportsAPI.dailySales({ dateFrom, dateTo, groupBy: 'counter', ...branchParam }).then((r) => r.data);
     },
   });
 
@@ -35,6 +39,7 @@ export default function CounterWiseReport() {
 
   return (
     <div className="flex flex-col gap-3 h-full">
+      <ReportTabs />
       <div className="panel">
         <div className="panel-header">Counter-Wise Report</div>
         <div className="panel-body flex gap-4 items-end flex-wrap">
@@ -57,6 +62,7 @@ export default function CounterWiseReport() {
               </div>
             </>
           )}
+          <BranchFilter value={branchId} onChange={setBranchId} />
           <button onClick={() => refetch()} className="btn-primary">🔍 Generate</button>
           <div className="ml-auto flex gap-2">
             <button onClick={handleExport} className="btn-outline text-xs">📊 Excel</button>

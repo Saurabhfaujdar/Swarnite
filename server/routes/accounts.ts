@@ -290,7 +290,7 @@ router.get('/:id/history', async (req: Request, res: Response) => {
           id: true, voucherNo: true, voucherDate: true,
           totalGrossWeight: true, totalNetWeight: true, totalPcs: true,
           metalAmount: true, labourAmount: true, voucherAmount: true,
-          paymentAmount: true, dueAmount: true, oldGoldAmount: true,
+          paymentAmount: true, dueAmount: true,
           cashAmount: true, bankAmount: true, cardAmount: true,
           upiAmount: true, status: true,
           salesman: { select: { name: true } },
@@ -309,7 +309,10 @@ router.get('/:id/history', async (req: Request, res: Response) => {
         where: {
           accountId,
           status: 'ACTIVE',
-          description: { contains: 'OLD GOLD', mode: 'insensitive' },
+          OR: [
+            { description: { contains: 'OLD GOLD', mode: 'insensitive' } },
+            { group: 'OGN' },
+          ],
           companyId: req.companyId,
           ...(dateFilter ? { voucherDate: dateFilter } : {}),
         },
@@ -345,7 +348,6 @@ router.get('/:id/history', async (req: Request, res: Response) => {
     ]);
 
     const totalSalesAmount = sales.reduce((s, v) => s + Number(v.voucherAmount), 0);
-    const totalOldGoldAmount = sales.reduce((s, v) => s + Number(v.oldGoldAmount), 0);
     const totalOGPurchaseAmount = oldGoldPurchases.reduce((s, v) => s + Number(v.finalAmount || v.totalAmount), 0);
 
     res.json({
@@ -355,13 +357,13 @@ router.get('/:id/history', async (req: Request, res: Response) => {
       summary: {
         totalSalesCount: sales.length,
         totalSalesAmount,
-        totalOldGoldInSales: totalOldGoldAmount,
         totalOGPurchaseCount: oldGoldPurchases.length,
         totalOGPurchaseAmount,
         totalLayawayCount: layaways.length,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    console.error('History endpoint error:', error?.message || error);
     res.status(500).json({ error: 'Failed to fetch customer history' });
   }
 });

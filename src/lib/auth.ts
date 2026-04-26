@@ -13,6 +13,7 @@ export interface AuthUser {
     id: number;
     name: string;
     code: string;
+    isMaster?: boolean;
     company?: { id: number; name: string };
   };
 }

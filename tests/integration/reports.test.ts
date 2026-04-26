@@ -271,4 +271,227 @@ describe('GET /api/reports/daily-sales', () => {
     expect(res.body.summary.cashAmount).toBe(0);
     expect(res.body.summary.dueAmount).toBe(0);
   });
+
+  it('applies branchId filter when provided', async () => {
+    mockPrisma.salesVoucher.findMany.mockResolvedValue([]);
+
+    await request(app).get(url).query({ ...params, branchId: '5' });
+
+    const call = mockPrisma.salesVoucher.findMany.mock.calls[0][0];
+    expect(call.where.branchId).toBe(5);
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// BRANCH FILTER ENDPOINT
+// ════════════════════════════════════════════════════════════
+describe('GET /api/reports/branches', () => {
+  it('returns list of branches for master user', async () => {
+    const branches = [
+      { id: 1, name: 'Main', code: 'M', isMaster: true },
+      { id: 2, name: 'Branch 1', code: 'B1', isMaster: false },
+    ];
+    mockPrisma.branch.findMany.mockResolvedValue(branches);
+
+    const res = await request(app).get('/api/reports/branches');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(2);
+    expect(res.body[0].name).toBe('Main');
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// ITEM-WISE SALES REPORT
+// ════════════════════════════════════════════════════════════
+describe('GET /api/reports/item-wise-sales', () => {
+  const url = '/api/reports/item-wise-sales';
+  const params = { dateFrom: '2026-03-01', dateTo: '2026-03-31' };
+
+  function makeSalesItem(overrides: Record<string, any> = {}) {
+    return {
+      id: 1,
+      salesVoucherId: 1,
+      labelId: null,
+      itemId: 1,
+      labelNo: 'AA22/1',
+      itemName: 'Gold Ring 22KT',
+      grossWeight: 10,
+      netWeight: 9,
+      fineWeight: 8.25,
+      pcs: 1,
+      metalRate: 6500,
+      metalAmount: 58500,
+      diamondWeight: 0,
+      labourRate: 500,
+      labourAmount: 4500,
+      otherCharge: 0,
+      discountStAmt: 0,
+      totalAmount: 63000,
+      taxableAmount: 63000,
+      item: {
+        name: 'Gold Ring 22KT',
+        itemGroup: { name: 'RING' },
+        metalType: { name: 'GOLD' },
+        purity: { name: '22 KT' },
+      },
+      salesVoucher: {
+        salesman: { name: 'Amit' },
+      },
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    mockPrisma.salesItem.findMany.mockResolvedValue([]);
+    mockPrisma.label.findMany.mockResolvedValue([]);
+    mockPrisma.itemGroup.findMany.mockResolvedValue([{ name: 'RING' }, { name: 'CHAIN' }]);
+    mockPrisma.metalType.findMany.mockResolvedValue([{ name: 'GOLD' }, { name: 'SILVER' }]);
+  });
+
+  it('returns empty rows when no sales items', async () => {
+    const res = await request(app).get(url).query(params);
+
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toHaveLength(0);
+    expect(res.body.summary.totalSales).toBe(0);
+    expect(res.body.summary.totalQty).toBe(0);
+    expect(res.body.filters.categories).toEqual(['RING', 'CHAIN']);
+    expect(res.body.filters.metals).toEqual(['GOLD', 'SILVER']);
+  });
+
+  it('aggregates items by name (default grouping)', async () => {
+    const items = [
+      makeSalesItem({ id: 1, pcs: 1, grossWeight: 10, totalAmount: 63000, metalAmount: 58500, labourAmount: 4500 }),
+      makeSalesItem({ id: 2, pcs: 2, grossWeight: 20, totalAmount: 126000, metalAmount: 117000, labourAmount: 9000 }),
+    ];
+    mockPrisma.salesItem.findMany.mockResolvedValue(items);
+
+    const res = await request(app).get(url).query(params);
+
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toHaveLength(1); // Same item name grouped
+    expect(res.body.rows[0].qtySold).toBe(3);
+    expect(res.body.rows[0].totalWeight).toBe(30);
+    expect(res.body.rows[0].totalSales).toBe(189000);
+    expect(res.body.rows[0].metalAmount).toBe(175500);
+    expect(res.body.rows[0].labourAmount).toBe(13500);
+    expect(res.body.rows[0].avgPrice).toBeCloseTo(63000, 0);
+    expect(res.body.rows[0].avgWeight).toBeCloseTo(10, 0);
+    expect(res.body.rows[0].labourPercent).toBeCloseTo(7.69, 1);
+  });
+
+  it('groups by category when groupBy=category', async () => {
+    const items = [
+      makeSalesItem({ id: 1, item: { ...makeSalesItem().item, itemGroup: { name: 'RING' } } }),
+      makeSalesItem({ id: 2, item: { ...makeSalesItem().item, itemGroup: { name: 'CHAIN' } } }),
+    ];
+    mockPrisma.salesItem.findMany.mockResolvedValue(items);
+
+    const res = await request(app).get(url).query({ ...params, groupBy: 'category' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toHaveLength(2);
+    const names = res.body.rows.map((r: any) => r.name).sort();
+    expect(names).toEqual(['CHAIN', 'RING']);
+  });
+
+  it('groups by metal when groupBy=metal', async () => {
+    const items = [
+      makeSalesItem({ id: 1, item: { ...makeSalesItem().item, metalType: { name: 'GOLD' } } }),
+      makeSalesItem({ id: 2, item: { ...makeSalesItem().item, metalType: { name: 'SILVER' } } }),
+    ];
+    mockPrisma.salesItem.findMany.mockResolvedValue(items);
+
+    const res = await request(app).get(url).query({ ...params, groupBy: 'metal' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toHaveLength(2);
+    const names = res.body.rows.map((r: any) => r.name).sort();
+    expect(names).toEqual(['GOLD', 'SILVER']);
+  });
+
+  it('groups by salesman when groupBy=salesman', async () => {
+    const items = [
+      makeSalesItem({ id: 1, salesVoucher: { salesman: { name: 'Amit' } } }),
+      makeSalesItem({ id: 2, salesVoucher: { salesman: { name: 'Rahul' } } }),
+      makeSalesItem({ id: 3, salesVoucher: { salesman: null } }),
+    ];
+    mockPrisma.salesItem.findMany.mockResolvedValue(items);
+
+    const res = await request(app).get(url).query({ ...params, groupBy: 'salesman' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toHaveLength(3);
+    const names = res.body.rows.map((r: any) => r.name).sort();
+    expect(names).toContain('Amit');
+    expect(names).toContain('Rahul');
+    expect(names).toContain('No Salesman');
+  });
+
+  it('includes making charge percentage in response', async () => {
+    mockPrisma.salesItem.findMany.mockResolvedValue([
+      makeSalesItem({ metalAmount: 100000, labourAmount: 15000, totalAmount: 115000 }),
+    ]);
+
+    const res = await request(app).get(url).query(params);
+
+    expect(res.body.rows[0].labourPercent).toBeCloseTo(15, 0);
+    expect(res.body.summary.totalMetal).toBe(100000);
+    expect(res.body.summary.totalLabour).toBe(15000);
+  });
+
+  it('returns dead stock items (in stock with zero sales)', async () => {
+    // No sales items
+    mockPrisma.salesItem.findMany.mockResolvedValue([]);
+    // But items in stock
+    mockPrisma.label.findMany.mockResolvedValue([
+      { itemId: 5, pcsCount: 1, grossWeight: 15, item: { name: 'Dead Ring', itemGroup: { name: 'RING' }, metalType: { name: 'GOLD' } } },
+      { itemId: 5, pcsCount: 1, grossWeight: 12, item: { name: 'Dead Ring', itemGroup: { name: 'RING' }, metalType: { name: 'GOLD' } } },
+      { itemId: 6, pcsCount: 2, grossWeight: 50, item: { name: 'Dead Chain', itemGroup: { name: 'CHAIN' }, metalType: { name: 'GOLD' } } },
+    ]);
+
+    const res = await request(app).get(url).query(params);
+
+    expect(res.status).toBe(200);
+    expect(res.body.deadStock).toHaveLength(2);
+    const deadRing = res.body.deadStock.find((d: any) => d.name === 'Dead Ring');
+    expect(deadRing.stockQty).toBe(2);
+    expect(deadRing.stockWeight).toBe(27);
+    const deadChain = res.body.deadStock.find((d: any) => d.name === 'Dead Chain');
+    expect(deadChain.stockQty).toBe(2);
+    expect(deadChain.stockWeight).toBe(50);
+  });
+
+  it('excludes sold item types from dead stock', async () => {
+    // Item 1 was sold
+    mockPrisma.salesItem.findMany.mockResolvedValue([
+      makeSalesItem({ itemId: 1 }),
+    ]);
+    // Item 1 AND item 5 are in stock — only item 5 should be dead stock
+    mockPrisma.label.findMany.mockResolvedValue([
+      { itemId: 1, pcsCount: 1, grossWeight: 10, item: { name: 'Sold Ring', itemGroup: { name: 'RING' }, metalType: { name: 'GOLD' } } },
+      { itemId: 5, pcsCount: 1, grossWeight: 20, item: { name: 'Unsold Bangle', itemGroup: { name: 'BANGLE' }, metalType: { name: 'GOLD' } } },
+    ]);
+
+    const res = await request(app).get(url).query(params);
+
+    expect(res.body.deadStock).toHaveLength(1);
+    expect(res.body.deadStock[0].name).toBe('Unsold Bangle');
+  });
+
+  it('applies branchId filter', async () => {
+    const res = await request(app).get(url).query({ ...params, branchId: '3' });
+
+    expect(res.status).toBe(200);
+    const salesWhere = mockPrisma.salesItem.findMany.mock.calls[0][0].where;
+    expect(salesWhere.salesVoucher.branchId).toBe(3);
+  });
+
+  it('handles server error gracefully', async () => {
+    mockPrisma.salesItem.findMany.mockRejectedValue(new Error('DB fail'));
+
+    const res = await request(app).get(url).query(params);
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('Failed to generate item-wise sales report');
+  });
 });

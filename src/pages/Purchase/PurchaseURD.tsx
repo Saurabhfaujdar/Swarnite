@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { purchaseAPI, accountsAPI, mastersAPI } from '../../lib/api';
 import { formatIndianNumber, formatWeight, getToday, calculateGST, getFinancialYear } from '../../lib/utils';
 import toast from 'react-hot-toast';
+import { Trash2 } from 'lucide-react';
 
 interface PurchaseItem {
   labelNo: string;
@@ -25,11 +26,17 @@ interface PurchaseItem {
 
 export default function PurchaseURD() {
   const queryClient = useQueryClient();
+  const [view, setView] = useState<'list' | 'form'>('list');
   const [voucherDate, setVoucherDate] = useState(getToday());
   const [purchaseType, setPurchaseType] = useState<'URD' | 'OLD_GOLD'>('URD');
   const [supplierId, setSupplierId] = useState<number | null>(null);
   const [supplierSearch, setSupplierSearch] = useState('');
   const [items, setItems] = useState<PurchaseItem[]>([]);
+
+  // List filters
+  const [listDateFrom, setListDateFrom] = useState(getToday());
+  const [listDateTo, setListDateTo] = useState(getToday());
+  const [listType, setListType] = useState<'URD' | 'OLD_GOLD' | ''>('');
 
   // New item form
   const [newItem, setNewItem] = useState({
@@ -60,12 +67,30 @@ export default function PurchaseURD() {
     queryFn: () => mastersAPI.purities().then((r) => r.data),
   });
 
+  // Purchase list query
+  const { data: listData, isLoading: listLoading } = useQuery({
+    queryKey: ['purchase-list', listDateFrom, listDateTo, listType],
+    queryFn: () => purchaseAPI.list({ dateFrom: listDateFrom, dateTo: listDateTo, type: listType || undefined }).then((r) => r.data),
+    enabled: view === 'list',
+  });
+  const purchaseList = listData?.vouchers || [];
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: number) => purchaseAPI.cancel(id),
+    onSuccess: () => {
+      toast.success('Purchase voucher cancelled');
+      queryClient.invalidateQueries({ queryKey: ['purchase-list'] });
+    },
+    onError: () => toast.error('Failed to cancel voucher'),
+  });
+
   const saveMutation = useMutation({
     mutationFn: (data: any) => purchaseAPI.create(data),
     onSuccess: (res) => {
       toast.success(`Purchase voucher ${res.data.voucherNo} created!`);
+      queryClient.invalidateQueries({ queryKey: ['purchase-list'] });
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
-      resetForm();
+      setView('list');
     },
     onError: () => toast.error('Failed to save'),
   });
@@ -181,11 +206,124 @@ export default function PurchaseURD() {
 
   return (
     <div className="flex flex-col gap-3 h-full">
+      {view === 'list' ? (
+        <>
+          {/* List View */}
+          <div className="panel">
+            <div className="panel-header flex items-center justify-between">
+              <span>Purchase Vouchers</span>
+              <div className="flex gap-2">
+                <button onClick={() => { setPurchaseType('URD'); setView('form'); }} className="btn-outline text-xs">
+                  + New URD Purchase
+                </button>
+                <button onClick={() => { setPurchaseType('OLD_GOLD'); setView('form'); }} className="btn-primary text-xs">
+                  + New Old Gold Purchase
+                </button>
+              </div>
+            </div>
+            <div className="panel-body flex gap-4 items-end flex-wrap">
+              <div>
+                <label className="form-label block text-xs">From Date</label>
+                <input type="date" className="form-input" value={listDateFrom} onChange={(e) => setListDateFrom(e.target.value)} />
+              </div>
+              <div>
+                <label className="form-label block text-xs">To Date</label>
+                <input type="date" className="form-input" value={listDateTo} onChange={(e) => setListDateTo(e.target.value)} />
+              </div>
+              <div>
+                <label className="form-label block text-xs">Type</label>
+                <select className="form-select" value={listType} onChange={(e) => setListType(e.target.value as any)}>
+                  <option value="">All</option>
+                  <option value="URD">URD</option>
+                  <option value="OLD_GOLD">Old Gold</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="panel flex-1 overflow-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Sr.</th>
+                  <th>Voucher No</th>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Supplier/Customer</th>
+                  <th className="text-right">Items</th>
+                  <th className="text-right">Gross Wt</th>
+                  <th className="text-right">Net Wt</th>
+                  <th className="text-right">Fine Wt</th>
+                  <th className="text-right">Metal Amt</th>
+                  <th className="text-right">Total</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {listLoading && (
+                  <tr><td colSpan={13} className="text-center py-8">Loading...</td></tr>
+                )}
+                {!listLoading && purchaseList.length === 0 && (
+                  <tr><td colSpan={13} className="text-center py-8 text-gray-400">No purchase vouchers found</td></tr>
+                )}
+                {purchaseList.map((v: any, idx: number) => (
+                  <tr key={v.id} className="hover:bg-blue-50">
+                    <td>{idx + 1}</td>
+                    <td className="font-medium text-blue-600">{v.voucherNo}</td>
+                    <td>{new Date(v.voucherDate).toLocaleDateString('en-IN')}</td>
+                    <td>
+                      <span className={`px-2 py-0.5 rounded text-xs ${
+                        v.description?.includes('OLD GOLD') || v.group === 'OGN'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {v.description?.includes('OLD GOLD') || v.group === 'OGN' ? 'Old Gold' : 'URD'}
+                      </span>
+                    </td>
+                    <td>{v.account?.name || '-'}</td>
+                    <td className="text-right">{v.items?.length || 0}</td>
+                    <td className="text-right">{formatWeight(v.totalGrossWeight)}</td>
+                    <td className="text-right">{formatWeight(v.totalNetWeight)}</td>
+                    <td className="text-right">{formatWeight(v.totalFineWeight)}</td>
+                    <td className="text-right">{formatIndianNumber(v.metalAmount)}</td>
+                    <td className="text-right font-bold">{formatIndianNumber(v.finalAmount || v.totalAmount)}</td>
+                    <td>
+                      <span className={`px-2 py-0.5 rounded text-xs ${v.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        {v.status}
+                      </span>
+                    </td>
+                    <td>
+                      {v.status === 'ACTIVE' && (
+                        <button
+                          onClick={() => { if (confirm('Cancel this voucher?')) cancelMutation.mutate(v.id); }}
+                          className="text-red-500 hover:text-red-700"
+                          title="Cancel voucher"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <>
+      {/* Form View */}
       {/* Header */}
       <div className="panel">
         <div className="panel-header flex items-center justify-between">
           <span>Purchase {purchaseType === 'OLD_GOLD' ? '(Old Gold)' : '(URD)'}</span>
           <div className="flex gap-2">
+            <button
+              onClick={() => { resetForm(); setView('list'); }}
+              className="btn-outline text-xs"
+            >
+              ← Back to List
+            </button>
             <button
               onClick={() => { setPurchaseType('URD'); setSupplierId(null); setSupplierSearch(''); }}
               className={purchaseType === 'URD' ? 'btn-primary text-xs' : 'btn-outline text-xs'}
@@ -434,6 +572,8 @@ export default function PurchaseURD() {
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

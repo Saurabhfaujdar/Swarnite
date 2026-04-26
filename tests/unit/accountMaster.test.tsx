@@ -118,7 +118,7 @@ describe('AccountMasterModal', () => {
       expect(screen.getByText('TDS Entry')).toBeDefined();
       expect(screen.getByText('Metal Outstanding')).toBeDefined();
       expect(screen.getByText('Bill To Bill')).toBeDefined();
-      expect(screen.getByText('Party Bank Detail')).toBeDefined();
+      expect(screen.getByText('Payments')).toBeDefined();
     });
   });
 
@@ -210,10 +210,10 @@ describe('AccountMasterModal', () => {
       expect(screen.getByText('Bill To Bill — Coming Soon')).toBeDefined();
     });
 
-    it('shows "Coming Soon" for Party Bank Detail tab', async () => {
+    it('shows "Save first" message for Payments tab on new account', async () => {
       renderModal();
-      fireEvent.click(screen.getByText('Party Bank Detail'));
-      expect(screen.getByText('Party Bank Detail — Coming Soon')).toBeDefined();
+      fireEvent.click(screen.getByText('Payments'));
+      expect(screen.getByText('Save the account first to view payments')).toBeDefined();
     });
   });
 

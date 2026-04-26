@@ -12,7 +12,7 @@ router.use(authenticate);
 // ============================================================
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { dateFrom, dateTo, type, page = '1', limit = '50' } = req.query;
+    const { dateFrom, dateTo, type, search, page = '1', limit = '50' } = req.query;
 
     const where: Prisma.PurchaseVoucherWhereInput = { status: 'ACTIVE', ...tenantScope(req) };
 
@@ -22,7 +22,33 @@ router.get('/', async (req: Request, res: Response) => {
         lte: new Date(dateTo + 'T23:59:59.999'),
       };
     }
-    if (type) where.purchaseType = type as any;
+    if (search) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        { OR: [
+          { voucherNo: { contains: search as string, mode: 'insensitive' } },
+          { account: { name: { contains: search as string, mode: 'insensitive' } } },
+        ]},
+      ];
+    }
+    if (type === 'OLD_GOLD') {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        { OR: [
+          { description: { contains: 'OLD GOLD', mode: 'insensitive' } },
+          { group: 'OGN' },
+        ]},
+      ];
+    } else if (type) {
+      where.purchaseType = type as any;
+      // Exclude old gold entries from URD filter
+      where.NOT = {
+        OR: [
+          { description: { contains: 'OLD GOLD', mode: 'insensitive' } },
+          { group: 'OGN' },
+        ],
+      };
+    }
 
     const [vouchers, total] = await Promise.all([
       prisma.purchaseVoucher.findMany({
@@ -113,9 +139,9 @@ router.post('/', async (req: Request, res: Response) => {
           companyId: req.companyId!,
           branchId,
           userId,
-          description: data.description,
+          description: data.description || (isOldGold ? 'OLD GOLD' : undefined),
           variety: data.variety,
-          group: data.group,
+          group: data.group || (isOldGold ? 'OGN' : undefined),
           totalGrossWeight: data.totalGrossWeight || 0,
           totalNetWeight: data.totalNetWeight || 0,
           totalFineWeight: data.totalFineWeight || 0,

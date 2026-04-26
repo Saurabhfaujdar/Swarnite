@@ -151,7 +151,7 @@ describe('OldGoldPurchaseModal', () => {
   });
 
   describe('actions', () => {
-    it('calls onConfirm with calculated amount', async () => {
+    it('calls onConfirm with calculated amount and details', async () => {
       const { props } = renderModal();
 
       await userEvent.type(screen.getByTestId('og-gross-weight'), '10');
@@ -159,7 +159,16 @@ describe('OldGoldPurchaseModal', () => {
       await userEvent.click(screen.getByTestId('og-confirm'));
 
       // 10g × 91.6% = 9.16g fine × 7000 = 64120
-      expect(props.onConfirm).toHaveBeenCalledWith(64120);
+      expect(props.onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+        grossWeight: 10,
+        lessWeight: 0,
+        netWeight: 10,
+        purityCode: '916',
+        purityPercent: 91.6,
+        fineWeight: 9.16,
+        metalRate: 7000,
+        amount: 64120,
+      }));
     });
 
     it('calls onClose when cancel button clicked', async () => {
@@ -181,10 +190,10 @@ describe('OldGoldPurchaseModal', () => {
       expect(props.onClose).toHaveBeenCalled();
     });
 
-    it('Clear OG calls onConfirm with 0', async () => {
+    it('Clear OG calls onConfirm with zero amount', async () => {
       const { props } = renderModal({ currentAmount: 5000 });
       await userEvent.click(screen.getByTestId('og-clear'));
-      expect(props.onConfirm).toHaveBeenCalledWith(0);
+      expect(props.onConfirm).toHaveBeenCalledWith(expect.objectContaining({ amount: 0 }));
     });
   });
 
@@ -198,7 +207,14 @@ describe('OldGoldPurchaseModal', () => {
       await userEvent.click(screen.getByTestId('og-confirm'));
 
       // Net = 20 - 2 = 18g, Fine = 18 × 91.6% = 16.488, Amount = 16.488 × 7000 = 115416
-      expect(props.onConfirm).toHaveBeenCalledWith(115416);
+      expect(props.onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+        grossWeight: 20,
+        lessWeight: 2,
+        netWeight: 18,
+        fineWeight: expect.closeTo(16.488, 2),
+        metalRate: 7000,
+        amount: 115416,
+      }));
     });
   });
 });

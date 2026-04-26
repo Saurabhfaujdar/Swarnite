@@ -9,6 +9,7 @@ router.use(authenticate);
 
 // ============================================================
 // GET /api/customer-payments - List payments with filters
+// Includes standalone customer payments, sale payments, and layaway payments
 // ============================================================
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -19,64 +20,235 @@ router.get('/', async (req: Request, res: Response) => {
       dateTo,
       status,
       search,
-      sortBy = 'paymentDate',
       sortOrder = 'desc',
       page = '1',
       limit = '50',
     } = req.query;
 
-    const where: Prisma.CustomerPaymentWhereInput = { companyId: req.companyId };
+    const pageNum = Math.max(1, Number(page));
+    const pageSize = Math.min(100, Math.max(1, Number(limit)));
+    const typeFilter = (paymentType as string) || 'ALL';
+    const statusFilter = (status as string) || 'ALL';
+    const searchStr = search ? String(search) : undefined;
 
-    if (accountId) where.accountId = Number(accountId);
-    if (paymentType && paymentType !== 'ALL') where.paymentType = paymentType as any;
-    if (status && status !== 'ALL') where.status = status as any;
+    // Common date filter builder
+    const dateFilter = (dateFrom || dateTo) ? {
+      ...(dateFrom ? { gte: new Date(dateFrom as string) } : {}),
+      ...(dateTo ? { lte: (() => { const d = new Date(dateTo as string); d.setHours(23, 59, 59, 999); return d; })() } : {}),
+    } : undefined;
 
-    if (dateFrom || dateTo) {
-      where.paymentDate = {};
-      if (dateFrom) where.paymentDate.gte = new Date(dateFrom as string);
-      if (dateTo) {
-        const end = new Date(dateTo as string);
-        end.setHours(23, 59, 59, 999);
-        where.paymentDate.lte = end;
+    // Determine which sources to query based on type filter
+    const queryPayments = typeFilter === 'ALL' || typeFilter === 'ADVANCE' || typeFilter === 'DUE_PAYMENT';
+    const querySales = typeFilter === 'ALL' || typeFilter === 'SALE';
+    const queryLayaway = typeFilter === 'ALL' || typeFilter === 'LAYAWAY';
+
+    const accountSelect = { id: true, name: true, mobile: true, closingBalance: true, balanceType: true } as const;
+    const allResults: any[] = [];
+
+    // 1. Query CustomerPayments
+    if (queryPayments) {
+      const where: Prisma.CustomerPaymentWhereInput = { companyId: req.companyId };
+      if (accountId) where.accountId = Number(accountId);
+      if (typeFilter === 'ADVANCE') where.paymentType = 'ADVANCE';
+      if (typeFilter === 'DUE_PAYMENT') where.paymentType = 'DUE_PAYMENT';
+      if (statusFilter !== 'ALL') where.status = statusFilter as any;
+      if (dateFilter) where.paymentDate = dateFilter;
+      if (searchStr) {
+        where.OR = [
+          { receiptNo: { contains: searchStr, mode: 'insensitive' } },
+          { narration: { contains: searchStr, mode: 'insensitive' } },
+          { reference: { contains: searchStr, mode: 'insensitive' } },
+          { account: { name: { contains: searchStr, mode: 'insensitive' } } },
+        ];
+      }
+
+      const payments = await prisma.customerPayment.findMany({
+        where,
+        include: { account: { select: accountSelect } },
+      });
+
+      for (const p of payments) {
+        allResults.push({
+          id: p.id,
+          receiptNo: p.receiptNo,
+          paymentDate: p.paymentDate,
+          source: 'PAYMENT',
+          paymentType: p.paymentType,
+          account: p.account,
+          cashAmount: p.cashAmount,
+          bankAmount: p.bankAmount,
+          cardAmount: p.cardAmount,
+          upiAmount: p.upiAmount,
+          totalAmount: p.totalAmount,
+          balanceBefore: p.balanceBefore,
+          balanceAfter: p.balanceAfter,
+          status: p.status,
+          narration: p.narration,
+        });
       }
     }
 
-    if (search) {
-      const s = String(search);
-      where.OR = [
-        { receiptNo: { contains: s, mode: 'insensitive' } },
-        { narration: { contains: s, mode: 'insensitive' } },
-        { reference: { contains: s, mode: 'insensitive' } },
-        { account: { name: { contains: s, mode: 'insensitive' } } },
-      ];
+    // 2. Query SalesVoucher payments (only ACTIVE sales with payment > 0)
+    if (querySales && (statusFilter === 'ALL' || statusFilter === 'ACTIVE')) {
+      const salesWhere: Prisma.SalesVoucherWhereInput = {
+        companyId: req.companyId,
+        status: 'ACTIVE',
+        paymentAmount: { gt: 0 },
+      };
+      if (accountId) salesWhere.accountId = Number(accountId);
+      if (dateFilter) salesWhere.voucherDate = dateFilter;
+      if (searchStr) {
+        salesWhere.OR = [
+          { voucherNo: { contains: searchStr, mode: 'insensitive' } },
+          { account: { name: { contains: searchStr, mode: 'insensitive' } } },
+        ];
+      }
+
+      const sales = await prisma.salesVoucher.findMany({
+        where: salesWhere,
+        include: { account: { select: accountSelect } },
+      });
+
+      for (const s of sales) {
+        allResults.push({
+          id: s.id,
+          receiptNo: s.voucherNo,
+          paymentDate: s.voucherDate,
+          source: 'SALE',
+          paymentType: 'SALE',
+          account: s.account,
+          cashAmount: s.cashAmount,
+          bankAmount: s.bankAmount,
+          cardAmount: s.cardAmount,
+          upiAmount: s.upiAmount,
+          totalAmount: s.paymentAmount,
+          balanceBefore: s.previousOs,
+          balanceAfter: s.finalDue,
+          status: s.status,
+          narration: `Payment against sale ${s.voucherNo}`,
+        });
+      }
     }
 
-    const pageNum = Math.max(1, Number(page));
-    const pageSize = Math.min(100, Math.max(1, Number(limit)));
-
-    const validSortFields: Record<string, string> = {
-      paymentDate: 'paymentDate',
-      totalAmount: 'totalAmount',
-      receiptNo: 'receiptNo',
-      createdAt: 'createdAt',
-    };
-    const orderField = validSortFields[sortBy as string] || 'paymentDate';
-    const orderDir = sortOrder === 'asc' ? 'asc' : 'desc';
-
-    const [payments, total] = await Promise.all([
-      prisma.customerPayment.findMany({
-        where,
-        include: {
-          account: { select: { id: true, name: true, mobile: true, closingBalance: true, balanceType: true } },
+    // 3. Query individual LayawayPayment records
+    if (queryLayaway && (statusFilter === 'ALL' || statusFilter === 'ACTIVE')) {
+      const layawayPayWhere: Prisma.LayawayPaymentWhereInput = {
+        layaway: {
+          companyId: req.companyId,
+          status: { notIn: ['CANCELLED'] },
         },
-        orderBy: { [orderField]: orderDir },
-        skip: (pageNum - 1) * pageSize,
-        take: pageSize,
-      }),
-      prisma.customerPayment.count({ where }),
-    ]);
+      };
+      if (accountId) layawayPayWhere.layaway = { ...layawayPayWhere.layaway as any, accountId: Number(accountId) };
+      if (dateFilter) layawayPayWhere.paymentDate = dateFilter;
+      if (searchStr) {
+        layawayPayWhere.OR = [
+          { layaway: { voucherNo: { contains: searchStr, mode: 'insensitive' } } },
+          { layaway: { account: { name: { contains: searchStr, mode: 'insensitive' } } } },
+          { narration: { contains: searchStr, mode: 'insensitive' } },
+        ];
+      }
 
-    res.json({ payments, total, page: pageNum, limit: pageSize });
+      const layawayPayments = await prisma.layawayPayment.findMany({
+        where: layawayPayWhere,
+        include: {
+          layaway: {
+            select: {
+              voucherNo: true,
+              accountId: true,
+              account: { select: accountSelect },
+            },
+          },
+        },
+      });
+
+      for (const lp of layawayPayments) {
+        const mode = lp.paymentMode || 'Cash';
+        const amt = Number(lp.amount);
+        allResults.push({
+          id: lp.id,
+          receiptNo: lp.layaway.voucherNo,
+          paymentDate: lp.paymentDate,
+          source: 'LAYAWAY',
+          paymentType: 'LAYAWAY',
+          account: lp.layaway.account,
+          cashAmount: mode === 'Cash' ? amt : 0,
+          bankAmount: mode === 'Bank' ? amt : 0,
+          cardAmount: mode === 'Card' ? amt : 0,
+          upiAmount: mode === 'UPI' ? amt : 0,
+          totalAmount: amt,
+          balanceBefore: 0,
+          balanceAfter: 0,
+          status: 'ACTIVE',
+          narration: lp.narration || `Payment against layaway ${lp.layaway.voucherNo}`,
+        });
+      }
+    }
+
+    // 4. Query SchemeInstallment payments (PAID installments)
+    const queryScheme = typeFilter === 'ALL' || typeFilter === 'SCHEME';
+    if (queryScheme && (statusFilter === 'ALL' || statusFilter === 'ACTIVE')) {
+      const schemeInstWhere: Prisma.SchemeInstallmentWhereInput = {
+        status: 'PAID',
+        scheme: {
+          companyId: req.companyId,
+          status: { notIn: ['CANCELLED'] },
+        },
+      };
+      if (accountId) schemeInstWhere.scheme = { ...schemeInstWhere.scheme as any, accountId: Number(accountId) };
+      if (dateFilter) schemeInstWhere.paidDate = dateFilter;
+      if (searchStr) {
+        schemeInstWhere.OR = [
+          { scheme: { schemeNo: { contains: searchStr, mode: 'insensitive' } } },
+          { scheme: { account: { name: { contains: searchStr, mode: 'insensitive' } } } },
+          { narration: { contains: searchStr, mode: 'insensitive' } },
+        ];
+      }
+
+      const schemePayments = await prisma.schemeInstallment.findMany({
+        where: schemeInstWhere,
+        include: {
+          scheme: {
+            select: {
+              schemeNo: true,
+              accountId: true,
+              account: { select: accountSelect },
+            },
+          },
+        },
+      });
+
+      for (const si of schemePayments) {
+        const mode = si.paymentMode || 'Cash';
+        const amt = Number(si.amount);
+        allResults.push({
+          id: si.id,
+          receiptNo: si.scheme.schemeNo,
+          paymentDate: si.paidDate || si.dueDate,
+          source: 'SCHEME',
+          paymentType: 'SCHEME',
+          account: si.scheme.account,
+          cashAmount: mode === 'Cash' ? amt : 0,
+          bankAmount: mode === 'Bank' ? amt : 0,
+          cardAmount: mode === 'Card' ? amt : 0,
+          upiAmount: mode === 'UPI' ? amt : 0,
+          totalAmount: amt,
+          balanceBefore: 0,
+          balanceAfter: 0,
+          status: 'ACTIVE',
+          narration: si.narration || `Scheme ${si.scheme.schemeNo} installment #${si.installmentNo}`,
+        });
+      }
+    }
+
+    // Sort by date
+    const dirMul = sortOrder === 'asc' ? 1 : -1;
+    allResults.sort((a, b) => dirMul * (new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime()));
+
+    // Paginate
+    const total = allResults.length;
+    const paginatedResults = allResults.slice((pageNum - 1) * pageSize, pageNum * pageSize);
+
+    res.json({ payments: paginatedResults, total, page: pageNum, limit: pageSize });
   } catch (error) {
     console.error('Error listing customer payments:', error);
     res.status(500).json({ error: 'Failed to list customer payments' });

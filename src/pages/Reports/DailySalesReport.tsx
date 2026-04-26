@@ -3,15 +3,18 @@ import { useQuery } from '@tanstack/react-query';
 import { reportsAPI } from '../../lib/api';
 import { formatIndianNumber, formatWeight, getToday } from '../../lib/utils';
 import { exportToExcel, exportToPDF } from '../../lib/export';
+import BranchFilter from '../../components/BranchFilter';
+import ReportTabs from '../../components/ReportTabs';
 
 export default function DailySalesReport() {
   const [dateFrom, setDateFrom] = useState(getToday());
   const [dateTo, setDateTo] = useState(getToday());
   const [groupBy, setGroupBy] = useState('date');
+  const [branchId, setBranchId] = useState('');
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['report-daily-sales', dateFrom, dateTo],
-    queryFn: () => reportsAPI.dailySales({ dateFrom, dateTo }).then((r) => r.data),
+    queryKey: ['report-daily-sales', dateFrom, dateTo, branchId],
+    queryFn: () => reportsAPI.dailySales({ dateFrom, dateTo, ...(branchId ? { branchId } : {}) }).then((r) => r.data),
   });
 
   const report = data || {};
@@ -58,6 +61,7 @@ export default function DailySalesReport() {
 
   return (
     <div className="flex flex-col gap-3 h-full">
+      <ReportTabs />
       <div className="panel">
         <div className="panel-header">Daily Sales Report</div>
         <div className="panel-body flex gap-4 items-end flex-wrap">
@@ -77,6 +81,7 @@ export default function DailySalesReport() {
               <option value="counter">Counter</option>
             </select>
           </div>
+          <BranchFilter value={branchId} onChange={setBranchId} />
           <button onClick={() => refetch()} className="btn-primary">🔍 Generate</button>
           <div className="ml-auto flex gap-2">
             <button onClick={handleExportExcel} className="btn-outline text-xs">📊 Excel</button>

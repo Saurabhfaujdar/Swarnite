@@ -34,7 +34,7 @@ const MOCK_HISTORY = {
       id: 1, voucherNo: 'JGI/1001', voucherDate: '2025-01-15T00:00:00Z',
       totalGrossWeight: '25.500', totalNetWeight: '24.000', totalPcs: 3,
       metalAmount: '150000', labourAmount: '5000', voucherAmount: '165000',
-      paymentAmount: '100000', dueAmount: '65000', oldGoldAmount: '20000',
+      paymentAmount: '100000', dueAmount: '65000',
       cashAmount: '50000', bankAmount: '50000', cardAmount: '0', upiAmount: '0',
       status: 'ACTIVE',
       salesman: { name: 'Ramesh' },
@@ -48,7 +48,7 @@ const MOCK_HISTORY = {
       id: 2, voucherNo: 'JGI/1002', voucherDate: '2025-02-10T00:00:00Z',
       totalGrossWeight: '10.000', totalNetWeight: '9.500', totalPcs: 1,
       metalAmount: '66025', labourAmount: '2000', voucherAmount: '72000',
-      paymentAmount: '72000', dueAmount: '0', oldGoldAmount: '0',
+      paymentAmount: '72000', dueAmount: '0',
       cashAmount: '72000', bankAmount: '0', cardAmount: '0', upiAmount: '0',
       status: 'ACTIVE',
       salesman: null,
@@ -80,7 +80,6 @@ const MOCK_HISTORY = {
   summary: {
     totalSalesCount: 2,
     totalSalesAmount: 237000,
-    totalOldGoldInSales: 20000,
     totalOGPurchaseCount: 1,
     totalOGPurchaseAmount: 46716,
     totalLayawayCount: 1,
@@ -181,38 +180,6 @@ describe('AccountMasterModal – Sales & OG History Tab', () => {
     expect(screen.getByText('Sales Vouchers')).toBeInTheDocument();
   });
 
-  it('shows old gold amount in sales rows when > 0', async () => {
-    mockHistory.mockResolvedValue({ data: MOCK_HISTORY });
-    renderModal({ id: 42, name: 'Test Customer', type: 'CUSTOMER' });
-
-    await userEvent.click(screen.getByText('Sales & OG History'));
-
-    await waitFor(() => {
-      expect(screen.getByText('JGI/1001')).toBeInTheDocument();
-    });
-    // Find the row for JGI/1001 and check it has old gold amount
-    const row = screen.getByText('JGI/1001').closest('tr');
-    expect(row).toBeTruthy();
-    // Old gold column should show ₹20,000 for the first row
-    expect(row!.textContent).toContain('20,000');
-  });
-
-  it('shows dash for old gold when amount is 0', async () => {
-    mockHistory.mockResolvedValue({ data: MOCK_HISTORY });
-    renderModal({ id: 42, name: 'Test Customer', type: 'CUSTOMER' });
-
-    await userEvent.click(screen.getByText('Sales & OG History'));
-
-    await waitFor(() => {
-      expect(screen.getByText('JGI/1002')).toBeInTheDocument();
-    });
-    const row = screen.getByText('JGI/1002').closest('tr');
-    // The old gold cell in the second row should show '-'
-    const cells = row!.querySelectorAll('td');
-    // Old gold column is the 5th (index 4)
-    expect(cells[4].textContent).toBe('-');
-  });
-
   it('renders old gold purchase rows', async () => {
     mockHistory.mockResolvedValue({ data: MOCK_HISTORY });
     renderModal({ id: 42, name: 'Test Customer', type: 'CUSTOMER' });
@@ -249,7 +216,6 @@ describe('AccountMasterModal – Sales & OG History Tab', () => {
         summary: {
           totalSalesCount: 0,
           totalSalesAmount: 0,
-          totalOldGoldInSales: 0,
           totalOGPurchaseCount: 0,
           totalOGPurchaseAmount: 0,
           totalLayawayCount: 0,
@@ -296,9 +262,9 @@ describe('AccountMasterModal – Sales & OG History Tab', () => {
     });
     const row = screen.getByText('JGI/1001').closest('tr');
     const cells = row!.querySelectorAll('td');
-    // Due column is 7th (index 6)
-    expect(cells[6].className).toContain('text-red-600');
-    expect(cells[6].textContent).toContain('65,000');
+    // Due column is 6th (index 5)
+    expect(cells[5].className).toContain('text-red-600');
+    expect(cells[5].textContent).toContain('65,000');
   });
 
   it('shows dash for due amount when 0', async () => {
@@ -312,6 +278,6 @@ describe('AccountMasterModal – Sales & OG History Tab', () => {
     });
     const row = screen.getByText('JGI/1002').closest('tr');
     const cells = row!.querySelectorAll('td');
-    expect(cells[6].textContent).toBe('-');
+    expect(cells[5].textContent).toBe('-');
   });
 });

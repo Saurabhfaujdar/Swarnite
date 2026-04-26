@@ -10,6 +10,7 @@ const mockNavigate = vi.fn();
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  useLocation: () => ({ pathname: '/layaway', search: '', hash: '', state: null, key: 'default' }),
 }));
 
 // ── Mock api module ────────────────────────────────────────

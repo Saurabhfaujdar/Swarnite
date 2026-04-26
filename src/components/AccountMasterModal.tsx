@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { accountsAPI } from '../lib/api';
+import { accountsAPI, customerPaymentsAPI } from '../lib/api';
 import { formatIndianNumber } from '../lib/utils';
 import toast from 'react-hot-toast';
 import { Search, X, Shield, Building2, Save, ChevronDown } from 'lucide-react';
@@ -133,7 +133,7 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
   const [showGSTSearch, setShowGSTSearch] = useState(false);
   const [gstSearchInput, setGstSearchInput] = useState('');
   const [gstResult, setGstResult] = useState<GSTSearchResult | null>(null);
-  const [activeTab, setActiveTab] = useState<'address' | 'tds' | 'metal' | 'bill' | 'bank' | 'history'>('address');
+  const [activeTab, setActiveTab] = useState<'address' | 'tds' | 'metal' | 'bill' | 'payments' | 'history'>('address');
 
   // Reset form when modal opens
   useEffect(() => {
@@ -179,6 +179,12 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
     queryKey: ['account-history', accountId],
     queryFn: () => accountsAPI.history(accountId!).then(r => r.data),
     enabled: activeTab === 'history' && !!accountId,
+  });
+
+  const paymentsQuery = useQuery({
+    queryKey: ['account-payments', accountId],
+    queryFn: () => customerPaymentsAPI.list({ accountId: accountId! }).then(r => r.data),
+    enabled: activeTab === 'payments' && !!accountId,
   });
 
   const gstSearchMutation = useMutation({
@@ -439,7 +445,7 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                 { key: 'tds', label: 'TDS Entry' },
                 { key: 'metal', label: 'Metal Outstanding' },
                 { key: 'bill', label: 'Bill To Bill' },
-                { key: 'bank', label: 'Party Bank Detail' },
+                { key: 'payments', label: 'Payments' },
                 ...(editData?.id ? [{ key: 'history' as const, label: 'Sales & OG History' }] : []),
               ] as const).map((tab) => (
                 <button
@@ -580,9 +586,90 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                   Bill To Bill — Coming Soon
                 </div>
               )}
-              {activeTab === 'bank' && (
-                <div className="text-center text-gray-400 py-8 text-sm">
-                  Party Bank Detail — Coming Soon
+              {activeTab === 'payments' && (
+                <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                  {!accountId ? (
+                    <div className="text-center text-gray-400 py-8 text-sm">Save the account first to view payments</div>
+                  ) : paymentsQuery.isLoading ? (
+                    <div className="text-center py-8 text-gray-400 text-sm">Loading payments...</div>
+                  ) : paymentsQuery.isError ? (
+                    <div className="text-center py-8 text-red-400 text-sm">Failed to load payments</div>
+                  ) : !paymentsQuery.data?.payments?.length ? (
+                    <div className="text-center text-gray-400 py-8 text-sm">No payments found for this customer</div>
+                  ) : (
+                    <>
+                      {/* Payment Summary */}
+                      <div className="grid grid-cols-4 gap-3">
+                        {(() => {
+                          const payments = paymentsQuery.data.payments;
+                          const totalPaid = payments.reduce((s: number, p: any) => s + Number(p.totalAmount || 0), 0);
+                          const totalCash = payments.reduce((s: number, p: any) => s + Number(p.cashAmount || 0), 0);
+                          const totalBank = payments.reduce((s: number, p: any) => s + Number(p.bankAmount || 0), 0);
+                          const totalCard = payments.reduce((s: number, p: any) => s + Number(p.cardAmount || 0), 0);
+                          return (
+                            <>
+                              <div className="bg-green-50 p-2 rounded text-center">
+                                <div className="text-[10px] text-gray-500">Total Paid</div>
+                                <div className="text-sm font-bold text-green-700">{formatIndianNumber(totalPaid)}</div>
+                                <div className="text-[10px] text-gray-400">{payments.length} payments</div>
+                              </div>
+                              <div className="bg-blue-50 p-2 rounded text-center">
+                                <div className="text-[10px] text-gray-500">Cash</div>
+                                <div className="text-sm font-bold text-blue-700">{formatIndianNumber(totalCash)}</div>
+                              </div>
+                              <div className="bg-purple-50 p-2 rounded text-center">
+                                <div className="text-[10px] text-gray-500">Bank</div>
+                                <div className="text-sm font-bold text-purple-700">{formatIndianNumber(totalBank)}</div>
+                              </div>
+                              <div className="bg-orange-50 p-2 rounded text-center">
+                                <div className="text-[10px] text-gray-500">Card/UPI</div>
+                                <div className="text-sm font-bold text-orange-700">{formatIndianNumber(totalCard)}</div>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Payments Table */}
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="text-left p-1.5">Voucher#</th>
+                            <th className="text-left p-1.5">Date</th>
+                            <th className="text-center p-1.5">Type</th>
+                            <th className="text-right p-1.5">Cash</th>
+                            <th className="text-right p-1.5">Bank</th>
+                            <th className="text-right p-1.5">Card</th>
+                            <th className="text-right p-1.5">UPI</th>
+                            <th className="text-right p-1.5">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paymentsQuery.data.payments.map((p: any) => (
+                            <tr key={`${p.source}-${p.id}`} className="border-b hover:bg-gray-50">
+                              <td className="p-1.5 font-mono">{p.receiptNo}</td>
+                              <td className="p-1.5">{new Date(p.paymentDate).toLocaleDateString('en-IN')}</td>
+                              <td className="p-1.5 text-center">
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                  p.source === 'SALE' ? 'bg-orange-100 text-orange-700' :
+                                  p.source === 'LAYAWAY' ? 'bg-purple-100 text-purple-700' :
+                                  p.source === 'SCHEME' ? 'bg-teal-100 text-teal-700' :
+                                  p.paymentType === 'ADVANCE' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {p.source === 'SALE' ? 'Sale' : p.source === 'LAYAWAY' ? 'Layaway' : p.source === 'SCHEME' ? 'Scheme' : p.paymentType === 'ADVANCE' ? 'Advance' : 'Due Payment'}
+                                </span>
+                              </td>
+                              <td className="p-1.5 text-right">{Number(p.cashAmount) > 0 ? formatIndianNumber(Number(p.cashAmount)) : '-'}</td>
+                              <td className="p-1.5 text-right">{Number(p.bankAmount) > 0 ? formatIndianNumber(Number(p.bankAmount)) : '-'}</td>
+                              <td className="p-1.5 text-right">{Number(p.cardAmount) > 0 ? formatIndianNumber(Number(p.cardAmount)) : '-'}</td>
+                              <td className="p-1.5 text-right">{Number(p.upiAmount) > 0 ? formatIndianNumber(Number(p.upiAmount)) : '-'}</td>
+                              <td className="p-1.5 text-right font-bold text-green-700">{formatIndianNumber(Number(p.totalAmount))}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -611,7 +698,6 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                         <div className="bg-purple-50 border border-purple-200 rounded p-3 text-center">
                           <div className="text-lg font-bold text-purple-700">{historyQuery.data.summary.totalLayawayCount}</div>
                           <div className="text-xs text-purple-600">Layaways</div>
-                          <div className="text-sm font-semibold text-purple-800 mt-1">OG in Sales: ₹{formatIndianNumber(historyQuery.data.summary.totalOldGoldInSales)}</div>
                         </div>
                       </div>
 
@@ -626,7 +712,6 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                                 <th className="border px-2 py-1 text-left">Date</th>
                                 <th className="border px-2 py-1 text-right">Items</th>
                                 <th className="border px-2 py-1 text-right">Amount</th>
-                                <th className="border px-2 py-1 text-right">Old Gold</th>
                                 <th className="border px-2 py-1 text-right">Paid</th>
                                 <th className="border px-2 py-1 text-right">Due</th>
                               </tr>
@@ -638,7 +723,6 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                                   <td className="border px-2 py-1">{new Date(s.voucherDate).toLocaleDateString('en-IN')}</td>
                                   <td className="border px-2 py-1 text-right">{s.items?.length ?? 0}</td>
                                   <td className="border px-2 py-1 text-right">₹{formatIndianNumber(s.voucherAmount)}</td>
-                                  <td className="border px-2 py-1 text-right text-amber-700">{Number(s.oldGoldAmount) > 0 ? `₹${formatIndianNumber(s.oldGoldAmount)}` : '-'}</td>
                                   <td className="border px-2 py-1 text-right text-green-700">₹{formatIndianNumber(s.paymentAmount)}</td>
                                   <td className="border px-2 py-1 text-right text-red-600">{Number(s.dueAmount) > 0 ? `₹${formatIndianNumber(s.dueAmount)}` : '-'}</td>
                                 </tr>

@@ -1,10 +1,56 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
-import { authenticate, tenantScope, branchWhere } from '../middleware/branchAccess';
+import { authenticate, tenantScope, branchWhere, canAccessBranch } from '../middleware/branchAccess';
 
 const router = Router();
 
 router.use(authenticate);
+
+/**
+ * Build branch-aware scope for report queries.
+ * If the user is a master branch user and provides ?branchId=X,
+ * filter to that specific branch (after validating access).
+ * Otherwise, fall back to the normal tenantScope.
+ */
+function reportScope(req: Request): Record<string, any> {
+  const filterBranchId = req.query.branchId ? Number(req.query.branchId) : null;
+  if (filterBranchId && req.isMasterBranch && canAccessBranch(req, filterBranchId)) {
+    return { companyId: req.companyId, branchId: filterBranchId };
+  }
+  return tenantScope(req);
+}
+
+function reportBranchWhere(req: Request): Record<string, any> {
+  const filterBranchId = req.query.branchId ? Number(req.query.branchId) : null;
+  if (filterBranchId && req.isMasterBranch && canAccessBranch(req, filterBranchId)) {
+    return { branchId: filterBranchId };
+  }
+  return branchWhere(req);
+}
+
+// GET /api/reports/branches — list branches accessible to the user (for branch filter dropdown)
+router.get('/branches', async (req: Request, res: Response) => {
+  try {
+    if (!req.isMasterBranch) {
+      return res.json([]);
+    }
+    const branches = await prisma.branch.findMany({
+      where: {
+        companyId: req.companyId,
+        isDeleted: false,
+        isActive: true,
+        ...(req.branchScope && req.branchScope.length > 0
+          ? { id: { in: req.branchScope } }
+          : {}),
+      },
+      select: { id: true, name: true, code: true, isMaster: true },
+      orderBy: { name: 'asc' },
+    });
+    res.json(branches);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch branches' });
+  }
+});
 
 // ============================================================
 // DAILY SALES REPORT
@@ -12,7 +58,7 @@ router.use(authenticate);
 router.get('/daily-sales', async (req: Request, res: Response) => {
   try {
     const { dateFrom, dateTo, groupBy } = req.query;
-    const where: any = { status: 'ACTIVE', ...tenantScope(req) };
+    const where: any = { status: 'ACTIVE', ...reportScope(req) };
 
     if (dateFrom && dateTo) {
       where.voucherDate = {
@@ -110,7 +156,7 @@ router.get('/daily-sales', async (req: Request, res: Response) => {
 router.get('/daily-purchase', async (req: Request, res: Response) => {
   try {
     const { dateFrom, dateTo, type } = req.query;
-    const where: any = { status: 'ACTIVE', ...tenantScope(req) };
+    const where: any = { status: 'ACTIVE', ...reportScope(req) };
 
     if (dateFrom && dateTo) {
       where.voucherDate = {
@@ -145,10 +191,8 @@ router.get('/daily-purchase', async (req: Request, res: Response) => {
 // ============================================================
 router.get('/stock', async (req: Request, res: Response) => {
   try {
-    const { branchId, counterId, groupName, metalType } = req.query;
-    const where: any = { status: 'IN_STOCK', branch: { companyId: req.companyId }, ...branchWhere(req) };
-
-    if (branchId) where.branchId = Number(branchId);
+    const { counterId, groupName, metalType } = req.query;
+    const where: any = { status: 'IN_STOCK', branch: { companyId: req.companyId }, ...reportBranchWhere(req) };
     if (counterId) where.counterId = Number(counterId);
     if (groupName && groupName !== 'ALL') {
       where.item = { itemGroup: { name: groupName as string } };
@@ -208,7 +252,7 @@ router.get('/gst', async (req: Request, res: Response) => {
       const sales = await prisma.salesVoucher.findMany({
         where: {
           status: 'ACTIVE',
-          ...tenantScope(req),
+          ...reportScope(req),
           voucherDate: {
             gte: new Date(dateFrom as string),
             lte: new Date(dateTo as string),
@@ -290,16 +334,16 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       latestRates,
     ] = await Promise.all([
       prisma.salesVoucher.aggregate({
-        where: { status: 'ACTIVE', ...tenantScope(req), voucherDate: { gte: today, lt: tomorrow } },
+        where: { status: 'ACTIVE', ...reportScope(req), voucherDate: { gte: today, lt: tomorrow } },
         _sum: { voucherAmount: true },
         _count: true,
       }),
       prisma.purchaseVoucher.aggregate({
-        where: { status: 'ACTIVE', ...tenantScope(req), voucherDate: { gte: today, lt: tomorrow } },
+        where: { status: 'ACTIVE', ...reportScope(req), voucherDate: { gte: today, lt: tomorrow } },
         _sum: { finalAmount: true },
         _count: true,
       }),
-      prisma.label.count({ where: { status: 'IN_STOCK', branch: { companyId: req.companyId }, ...branchWhere(req) } }),
+      prisma.label.count({ where: { status: 'IN_STOCK', branch: { companyId: req.companyId }, ...reportBranchWhere(req) } }),
       prisma.account.count({ where: { type: 'CUSTOMER', isActive: true, companyId: req.companyId } }),
       prisma.metalRate.findMany({
         where: { isActive: true, companyId: req.companyId },
@@ -325,6 +369,150 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch dashboard data' });
+  }
+});
+
+// ============================================================
+// ITEM-WISE SALES REPORT
+// ============================================================
+router.get('/item-wise-sales', async (req: Request, res: Response) => {
+  try {
+    const { dateFrom, dateTo, category, metal, groupBy } = req.query;
+    const voucherWhere: any = { status: 'ACTIVE', ...reportScope(req) };
+
+    if (dateFrom && dateTo) {
+      voucherWhere.voucherDate = {
+        gte: new Date(dateFrom as string),
+        lte: new Date(dateTo as string),
+      };
+    }
+
+    const salesItems = await prisma.salesItem.findMany({
+      where: {
+        salesVoucher: voucherWhere,
+        ...(category && category !== 'ALL' ? { item: { itemGroup: { name: category as string } } } : {}),
+        ...(metal && metal !== 'ALL' ? { item: { metalType: { name: metal as string } } } : {}),
+      },
+      include: {
+        item: {
+          include: {
+            itemGroup: { select: { name: true } },
+            metalType: { select: { name: true } },
+            purity: { select: { name: true } },
+          },
+        },
+        salesVoucher: {
+          select: { salesman: { select: { name: true } } },
+        },
+      },
+    });
+
+    // Determine grouping key
+    const getGroupKey = (si: any): string => {
+      if (groupBy === 'category') return si.item.itemGroup?.name || 'Unknown';
+      if (groupBy === 'metal') return si.item.metalType?.name || 'Unknown';
+      if (groupBy === 'salesman') return si.salesVoucher?.salesman?.name || 'No Salesman';
+      // Default: group by item name
+      return si.itemName || si.item.name;
+    };
+
+    const grouped: Record<string, any> = {};
+    for (const si of salesItems) {
+      const key = getGroupKey(si);
+      if (!grouped[key]) {
+        grouped[key] = {
+          name: key,
+          category: si.item.itemGroup?.name || '',
+          metal: si.item.metalType?.name || '',
+          purity: si.item.purity?.name || '',
+          qtySold: 0,
+          totalWeight: 0,
+          totalSales: 0,
+          metalAmount: 0,
+          labourAmount: 0,
+          otherCharge: 0,
+        };
+      }
+      const g = grouped[key];
+      g.qtySold += si.pcs;
+      g.totalWeight += Number(si.grossWeight);
+      g.totalSales += Number(si.totalAmount);
+      g.metalAmount += Number(si.metalAmount);
+      g.labourAmount += Number(si.labourAmount);
+      g.otherCharge += Number(si.otherCharge);
+    }
+
+    // Compute averages and labour percentage
+    const rows = Object.values(grouped).map((g: any) => ({
+      ...g,
+      avgPrice: g.qtySold > 0 ? g.totalSales / g.qtySold : 0,
+      avgWeight: g.qtySold > 0 ? g.totalWeight / g.qtySold : 0,
+      labourPercent: g.metalAmount > 0 ? (g.labourAmount / g.metalAmount) * 100 : 0,
+    }));
+
+    // ── Dead stock: items in stock with 0 sales in the period ──
+    const soldItemIds = new Set(salesItems.map(si => si.itemId));
+    const stockWhere: any = {
+      status: 'IN_STOCK',
+      branch: { companyId: req.companyId },
+      ...reportBranchWhere(req),
+      ...(category && category !== 'ALL' ? { item: { itemGroup: { name: category as string } } } : {}),
+      ...(metal && metal !== 'ALL' ? { item: { metalType: { name: metal as string } } } : {}),
+    };
+    const stockLabels = await prisma.label.findMany({
+      where: stockWhere,
+      include: {
+        item: {
+          include: {
+            itemGroup: { select: { name: true } },
+            metalType: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    // Group unsold stock by item
+    const deadStockMap: Record<string, any> = {};
+    for (const label of stockLabels) {
+      if (soldItemIds.has(label.itemId)) continue; // skip items that sold
+      const key = label.item.name;
+      if (!deadStockMap[key]) {
+        deadStockMap[key] = {
+          name: key,
+          category: label.item.itemGroup?.name || '',
+          metal: label.item.metalType?.name || '',
+          stockQty: 0,
+          stockWeight: 0,
+        };
+      }
+      deadStockMap[key].stockQty += label.pcsCount;
+      deadStockMap[key].stockWeight += Number(label.grossWeight);
+    }
+    const deadStock = Object.values(deadStockMap).sort((a: any, b: any) => b.stockWeight - a.stockWeight);
+
+    // Fetch distinct categories and metals for filter dropdowns
+    const [categories, metals] = await Promise.all([
+      prisma.itemGroup.findMany({ where: { isActive: true }, select: { name: true }, orderBy: { name: 'asc' } }),
+      prisma.metalType.findMany({ where: { isActive: true }, select: { name: true }, orderBy: { name: 'asc' } }),
+    ]);
+
+    const totalSales = rows.reduce((sum, r) => sum + r.totalSales, 0);
+    const totalQty = rows.reduce((sum, r) => sum + r.qtySold, 0);
+    const totalWeight = rows.reduce((sum, r) => sum + r.totalWeight, 0);
+    const totalMetal = rows.reduce((sum, r) => sum + r.metalAmount, 0);
+    const totalLabour = rows.reduce((sum, r) => sum + r.labourAmount, 0);
+
+    res.json({
+      rows,
+      deadStock,
+      summary: { totalSales, totalQty, totalWeight, totalMetal, totalLabour },
+      filters: {
+        categories: categories.map(c => c.name),
+        metals: metals.map(m => m.name),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate item-wise sales report' });
   }
 });
 
