@@ -134,6 +134,21 @@ describe('GET /api/branches', () => {
       })
     );
   });
+
+  it('does NOT apply branchId scope filter for master branch users', async () => {
+    // Master user should see ALL company branches (regression test for hierarchy bug)
+    mockPrisma.branch.findMany.mockResolvedValueOnce([MASTER_BRANCH, CHILD_BRANCH]);
+
+    const res = await request(app).get('/api/branches');
+
+    expect(res.status).toBe(200);
+    const callArgs = mockPrisma.branch.findMany.mock.calls[0][0];
+    // Where clause should NOT restrict by branchId for master users
+    expect(callArgs.where.branchId).toBeUndefined();
+    expect(callArgs.where.id).toBeUndefined();
+    // But MUST be scoped by companyId for tenant isolation
+    expect(callArgs.where.companyId).toBe(1);
+  });
 });
 
 // ════════════════════════════════════════════════════════════

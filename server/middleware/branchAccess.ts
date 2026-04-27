@@ -66,12 +66,12 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       req.isMasterBranch = branch.isMaster;
 
       if (branch.isMaster) {
-        // Master can access itself + all children
-        const children = await prisma.branch.findMany({
-          where: { parentId: branch.id, isDeleted: false },
+        // Master can access itself + all company branches
+        const companyBranches = await prisma.branch.findMany({
+          where: { companyId: decoded.companyId, isDeleted: false },
           select: { id: true },
         });
-        req.branchScope = [branch.id, ...children.map(c => c.id)];
+        req.branchScope = companyBranches.map(c => c.id);
       } else {
         // Branch user can only access their own branch
         req.branchScope = [branch.id];

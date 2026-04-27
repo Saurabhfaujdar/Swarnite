@@ -19,9 +19,24 @@ function labelScope(req: Request) {
 // GET /api/inventory/labels - List labels with filters
 router.get('/labels', async (req: Request, res: Response) => {
   try {
-    const { dateFrom, dateTo, groupName, status, counterId, page = '1', limit = '100' } = req.query;
+    const { dateFrom, dateTo, search, groupName, status, counterId, page = '1', limit = '100' } = req.query;
 
     const where: Prisma.LabelWhereInput = { ...labelScope(req) };
+
+    if (search) {
+      const s = String(search).trim();
+      if (s) {
+        where.AND = [
+          {
+            OR: [
+              { labelNo: { contains: s, mode: 'insensitive' } },
+              { item: { is: { name: { contains: s, mode: 'insensitive' } } } },
+              { item: { is: { metalType: { is: { name: { contains: s, mode: 'insensitive' } } } } } },
+            ],
+          },
+        ];
+      }
+    }
 
     if (dateFrom || dateTo) {
       where.createdAt = {};

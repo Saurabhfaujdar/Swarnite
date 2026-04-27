@@ -222,6 +222,61 @@ describe('GET /api/inventory/labels', () => {
     const callArgs = mockPrisma.label.findMany.mock.calls[0][0];
     expect(callArgs.where.createdAt).toBeUndefined();
   });
+
+  it('filters by search term using AND/OR on labelNo, item name, and metal type', async () => {
+    mockPrisma.label.findMany.mockResolvedValueOnce([]);
+    mockPrisma.label.count.mockResolvedValueOnce(0);
+
+    const res = await request(app).get('/api/inventory/labels?search=silver');
+    expect(res.status).toBe(200);
+    const callArgs = mockPrisma.label.findMany.mock.calls[0][0];
+    // Search must use AND to combine with existing scope filters
+    expect(callArgs.where.AND).toBeDefined();
+    expect(callArgs.where.AND).toHaveLength(1);
+    // Inside AND, there should be an OR with three conditions
+    const orConditions = callArgs.where.AND[0].OR;
+    expect(orConditions).toHaveLength(3);
+    // labelNo search
+    expect(orConditions[0]).toEqual({ labelNo: { contains: 'silver', mode: 'insensitive' } });
+    // item name search (nested relation with 'is')
+    expect(orConditions[1]).toEqual({ item: { is: { name: { contains: 'silver', mode: 'insensitive' } } } });
+    // metal type name search (deeply nested relation with 'is')
+    expect(orConditions[2]).toEqual({ item: { is: { metalType: { is: { name: { contains: 'silver', mode: 'insensitive' } } } } } });
+  });
+
+  it('does not apply search filter when search param is empty', async () => {
+    mockPrisma.label.findMany.mockResolvedValueOnce([]);
+    mockPrisma.label.count.mockResolvedValueOnce(0);
+
+    const res = await request(app).get('/api/inventory/labels?search=');
+    expect(res.status).toBe(200);
+    const callArgs = mockPrisma.label.findMany.mock.calls[0][0];
+    expect(callArgs.where.AND).toBeUndefined();
+    expect(callArgs.where.OR).toBeUndefined();
+  });
+
+  it('does not apply search filter when search param is whitespace only', async () => {
+    mockPrisma.label.findMany.mockResolvedValueOnce([]);
+    mockPrisma.label.count.mockResolvedValueOnce(0);
+
+    const res = await request(app).get('/api/inventory/labels?search=%20%20');
+    expect(res.status).toBe(200);
+    const callArgs = mockPrisma.label.findMany.mock.calls[0][0];
+    expect(callArgs.where.AND).toBeUndefined();
+  });
+
+  it('combines search filter with date range filter', async () => {
+    mockPrisma.label.findMany.mockResolvedValueOnce([]);
+    mockPrisma.label.count.mockResolvedValueOnce(0);
+
+    const res = await request(app).get('/api/inventory/labels?search=gold&dateTo=2026-04-28');
+    expect(res.status).toBe(200);
+    const callArgs = mockPrisma.label.findMany.mock.calls[0][0];
+    // Both search AND date filters should be present
+    expect(callArgs.where.AND).toBeDefined();
+    expect(callArgs.where.AND[0].OR).toHaveLength(3);
+    expect(callArgs.where.createdAt.lte).toBeDefined();
+  });
 });
 
 describe('GET /api/inventory/labels/search', () => {

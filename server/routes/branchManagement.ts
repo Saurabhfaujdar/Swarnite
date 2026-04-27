@@ -51,16 +51,10 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     // If branchScope is provided via middleware, filter branches
-    // Always include the master branch so the hierarchy tree can render
-    if (req.branchScope && req.branchScope.length > 0) {
-      const masterBranch = await prisma.branch.findFirst({
-        where: { companyId: req.companyId, isMaster: true, isDeleted: false },
-        select: { id: true },
-      });
-      const scopeIds = masterBranch
-        ? [...new Set([masterBranch.id, ...req.branchScope])]
-        : req.branchScope;
-      where.id = { in: scopeIds };
+    // Branch management page needs full company view for hierarchy,
+    // so only apply branch scoping for non-master/non-admin users
+    if (req.branchScope && req.branchScope.length > 0 && !req.isMasterBranch) {
+      where.id = { in: req.branchScope };
     }
 
     const branches = await prisma.branch.findMany({

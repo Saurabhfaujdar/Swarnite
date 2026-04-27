@@ -133,6 +133,9 @@ describe('GET /api/accounts', () => {
 describe('GET /api/accounts/:id', () => {
   it('returns account by id', async () => {
     mockPrisma.account.findFirst.mockResolvedValueOnce(DUMMY_ACCOUNTS[0]);
+    // Customer category lookup needs aggregate result shape
+    mockPrisma.salesVoucher.aggregate.mockResolvedValueOnce({ _count: { id: 0 }, _sum: { voucherAmount: null } });
+    mockPrisma.salesVoucher.findFirst.mockResolvedValueOnce(null);
 
     const res = await request(app).get('/api/accounts/1');
     expect(res.status).toBe(200);
@@ -145,6 +148,69 @@ describe('GET /api/accounts/:id', () => {
     const res = await request(app).get('/api/accounts/999');
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Account not found' });
+  });
+
+  it('attaches customerTag for CUSTOMER accounts', async () => {
+    mockPrisma.account.findFirst.mockResolvedValueOnce(DUMMY_ACCOUNTS[0]);
+    mockPrisma.salesVoucher.aggregate.mockResolvedValueOnce({ _count: { id: 3 }, _sum: { voucherAmount: 150000 } });
+    mockPrisma.salesVoucher.findFirst.mockResolvedValueOnce({ voucherDate: new Date() });
+
+    const res = await request(app).get('/api/accounts/1');
+    expect(res.status).toBe(200);
+    expect(res.body.customerTag).toBeDefined();
+    expect(res.body.customerTag).toMatchObject({ label: 'Regular', color: 'blue' });
+  });
+
+  it('returns Premium tag when total spend >= 20 lakh', async () => {
+    mockPrisma.account.findFirst.mockResolvedValueOnce(DUMMY_ACCOUNTS[0]);
+    mockPrisma.salesVoucher.aggregate.mockResolvedValueOnce({ _count: { id: 5 }, _sum: { voucherAmount: 2500000 } });
+    mockPrisma.salesVoucher.findFirst.mockResolvedValueOnce({ voucherDate: new Date() });
+
+    const res = await request(app).get('/api/accounts/1');
+    expect(res.status).toBe(200);
+    expect(res.body.customerTag).toMatchObject({ label: 'Premium', color: 'amber' });
+  });
+
+  it('returns VIP tag when total spend >= 5 lakh', async () => {
+    mockPrisma.account.findFirst.mockResolvedValueOnce(DUMMY_ACCOUNTS[0]);
+    mockPrisma.salesVoucher.aggregate.mockResolvedValueOnce({ _count: { id: 3 }, _sum: { voucherAmount: 600000 } });
+    mockPrisma.salesVoucher.findFirst.mockResolvedValueOnce({ voucherDate: new Date() });
+
+    const res = await request(app).get('/api/accounts/1');
+    expect(res.status).toBe(200);
+    expect(res.body.customerTag).toMatchObject({ label: 'VIP', color: 'purple' });
+  });
+
+  it('returns New tag for customer with 0-1 purchases', async () => {
+    mockPrisma.account.findFirst.mockResolvedValueOnce(DUMMY_ACCOUNTS[0]);
+    mockPrisma.salesVoucher.aggregate.mockResolvedValueOnce({ _count: { id: 1 }, _sum: { voucherAmount: 5000 } });
+    mockPrisma.salesVoucher.findFirst.mockResolvedValueOnce({ voucherDate: new Date() });
+
+    const res = await request(app).get('/api/accounts/1');
+    expect(res.status).toBe(200);
+    expect(res.body.customerTag).toMatchObject({ label: 'New', color: 'green' });
+  });
+
+  it('returns Inactive tag when last purchase > 12 months ago', async () => {
+    mockPrisma.account.findFirst.mockResolvedValueOnce(DUMMY_ACCOUNTS[0]);
+    mockPrisma.salesVoucher.aggregate.mockResolvedValueOnce({ _count: { id: 5 }, _sum: { voucherAmount: 50000 } });
+    const oldDate = new Date();
+    oldDate.setMonth(oldDate.getMonth() - 14);
+    mockPrisma.salesVoucher.findFirst.mockResolvedValueOnce({ voucherDate: oldDate });
+
+    const res = await request(app).get('/api/accounts/1');
+    expect(res.status).toBe(200);
+    expect(res.body.customerTag).toMatchObject({ label: 'Inactive', color: 'gray' });
+  });
+
+  it('does NOT attach customerTag for non-CUSTOMER accounts (e.g. SUPPLIER)', async () => {
+    mockPrisma.account.findFirst.mockResolvedValueOnce(DUMMY_ACCOUNTS[1]); // SUPPLIER
+
+    const res = await request(app).get('/api/accounts/2');
+    expect(res.status).toBe(200);
+    expect(res.body.customerTag).toBeUndefined();
+    // salesVoucher should not be queried for non-customers
+    expect(mockPrisma.salesVoucher.aggregate).not.toHaveBeenCalled();
   });
 });
 
@@ -166,6 +232,39 @@ describe('POST /api/accounts', () => {
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ name: 'Sita Devi' });
   });
+
+  it('rejects mobile with fewer than 10 digits', async () => {
+    const res = await request(app)
+      .post('/api/accounts')
+      .send({ name: 'Bad Mobile', type: 'CUSTOMER', mobile: '98765' });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Mobile number must be exactly 10 digits' });
+    expect(mockPrisma.account.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects mobile with more than 10 digits', async () => {
+    const res = await request(app)
+      .post('/api/accounts')
+      .send({ name: 'Bad Mobile', type: 'CUSTOMER', mobile: '98765432101' });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Mobile number must be exactly 10 digits' });
+  });
+
+  it('rejects mobile containing non-digit characters', async () => {
+    const res = await request(app)
+      .post('/api/accounts')
+      .send({ name: 'Bad Mobile', type: 'CUSTOMER', mobile: '98765-4321' });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Mobile number must be exactly 10 digits' });
+  });
+
+  it('allows account creation when mobile is omitted', async () => {
+    mockPrisma.account.create.mockResolvedValueOnce({ id: 5, name: 'No Mobile', type: 'SUPPLIER' });
+    const res = await request(app)
+      .post('/api/accounts')
+      .send({ name: 'No Mobile', type: 'SUPPLIER' });
+    expect(res.status).toBe(201);
+  });
 });
 
 // ════════════════════════════════════════════════════════════
@@ -183,6 +282,16 @@ describe('PUT /api/accounts/:id', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ mobile: '1111111111' });
+  });
+
+  it('rejects update with invalid mobile (too short)', async () => {
+    mockPrisma.account.findFirst.mockResolvedValueOnce(DUMMY_ACCOUNTS[0]);
+    const res = await request(app)
+      .put('/api/accounts/1')
+      .send({ mobile: '12345' });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Mobile number must be exactly 10 digits' });
+    expect(mockPrisma.account.update).not.toHaveBeenCalled();
   });
 });
 
