@@ -4,6 +4,8 @@ import { accountsAPI, customerPaymentsAPI } from '../lib/api';
 import { formatIndianNumber } from '../lib/utils';
 import toast from 'react-hot-toast';
 import { Search, X, Shield, Building2, Save, ChevronDown } from 'lucide-react';
+import CustomerCategoryBadge from './CustomerCategoryBadge';
+import { WhatsAppPanel } from './WhatsAppActions';
 
 /* ============================================================
    Types
@@ -133,7 +135,7 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
   const [showGSTSearch, setShowGSTSearch] = useState(false);
   const [gstSearchInput, setGstSearchInput] = useState('');
   const [gstResult, setGstResult] = useState<GSTSearchResult | null>(null);
-  const [activeTab, setActiveTab] = useState<'address' | 'tds' | 'metal' | 'bill' | 'payments' | 'history'>('address');
+  const [activeTab, setActiveTab] = useState<'address' | 'tds' | 'metal' | 'bill' | 'payments' | 'history' | 'whatsapp'>('address');
 
   // Reset form when modal opens
   useEffect(() => {
@@ -283,6 +285,10 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
       nameRef.current?.focus();
       return;
     }
+    if (form.mobile && form.mobile.length !== 10) {
+      toast.error('Mobile number must be exactly 10 digits');
+      return;
+    }
 
     // Build full address from parts
     const fullAddress = [form.blockNo, form.building, form.street, form.area]
@@ -308,6 +314,7 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
           <div className="flex items-center gap-2">
             <Building2 size={16} />
             <h3 className="text-sm font-semibold">Account Master</h3>
+            {editData?.customerTag && <CustomerCategoryBadge tag={editData.customerTag} size="md" />}
           </div>
           <button onClick={onClose} className="text-white hover:text-red-200 text-lg leading-none">&times;</button>
         </div>
@@ -447,6 +454,7 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                 { key: 'bill', label: 'Bill To Bill' },
                 { key: 'payments', label: 'Payments' },
                 ...(editData?.id ? [{ key: 'history' as const, label: 'Sales & OG History' }] : []),
+                ...(editData?.id && editData?.type === 'CUSTOMER' ? [{ key: 'whatsapp' as const, label: '💬 WhatsApp' }] : []),
               ] as const).map((tab) => (
                 <button
                   key={tab.key}
@@ -806,6 +814,14 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                     </>
                   )}
                 </div>
+              )}
+
+              {activeTab === 'whatsapp' && (
+                <WhatsAppPanel
+                  customerName={form.name}
+                  mobile={form.mobile}
+                  outstandingAmount={Number(editData?.closingBalance || 0)}
+                />
               )}
             </div>
           </div>

@@ -4,6 +4,8 @@ import { accountsAPI } from '../../lib/api';
 import { formatIndianNumber } from '../../lib/utils';
 import toast from 'react-hot-toast';
 import AccountMasterModal from '../../components/AccountMasterModal';
+import CustomerCategoryBadge from '../../components/CustomerCategoryBadge';
+import { WhatsAppDropdown } from '../../components/WhatsAppActions';
 
 export default function CustomerList() {
   const queryClient = useQueryClient();
@@ -50,6 +52,7 @@ export default function CustomerList() {
             <tr>
               <th>Sr.</th>
               <th>Name</th>
+              <th>Category</th>
               <th>Mobile</th>
               <th>Email</th>
               <th>City</th>
@@ -62,14 +65,15 @@ export default function CustomerList() {
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={11} className="text-center py-8">Loading...</td></tr>}
+            {isLoading && <tr><td colSpan={12} className="text-center py-8">Loading...</td></tr>}
             {!isLoading && accounts.length === 0 && (
-              <tr><td colSpan={11} className="text-center py-8 text-gray-400">No accounts found</td></tr>
+              <tr><td colSpan={12} className="text-center py-8 text-gray-400">No accounts found</td></tr>
             )}
             {accounts.map((a: any, idx: number) => (
               <tr key={a.id} className="cursor-pointer hover:bg-blue-50" onDoubleClick={() => { setEditingAccount(a); setShowAccountMaster(true); }}>
                 <td>{idx + 1}</td>
                 <td className="font-medium">{a.name}</td>
+                <td><CustomerCategoryBadge tag={a.customerTag} /></td>
                 <td>{a.mobile || '-'}</td>
                 <td className="text-xs">{a.email || '-'}</td>
                 <td>{a.city || '-'}</td>
@@ -96,12 +100,23 @@ export default function CustomerList() {
                 }`}>{formatIndianNumber(Math.abs(Number(a.closingBalance || 0)))}</td>
                 <td className="text-xs">{a.balanceType || '-'}</td>
                 <td>
-                  <button
-                    className="text-blue-600 hover:text-blue-800 text-xs underline"
-                    onClick={(e) => { e.stopPropagation(); setEditingAccount(a); setShowAccountMaster(true); }}
-                  >
-                    Edit
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="text-blue-600 hover:text-blue-800 text-xs underline"
+                      onClick={(e) => { e.stopPropagation(); setEditingAccount(a); setShowAccountMaster(true); }}
+                    >
+                      Edit
+                    </button>
+                    {a.type === 'CUSTOMER' && a.mobile && (
+                      <span onClick={(e) => e.stopPropagation()}>
+                        <WhatsAppDropdown
+                          customerName={a.name}
+                          mobile={a.mobile}
+                          outstandingAmount={Number(a.closingBalance || 0)}
+                        />
+                      </span>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

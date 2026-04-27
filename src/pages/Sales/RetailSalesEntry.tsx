@@ -8,6 +8,8 @@ import toast from 'react-hot-toast';
 import AccountMasterModal from '../../components/AccountMasterModal';
 import VoucherPrintDialog from '../../components/VoucherPrintDialog';
 import OldGoldPurchaseModal, { OldGoldData } from '../../components/OldGoldPurchaseModal';
+import CustomerCategoryBadge from '../../components/CustomerCategoryBadge';
+import { WhatsAppDropdown } from '../../components/WhatsAppActions';
 
 interface SalesItem {
   labelNo: string;
@@ -397,6 +399,7 @@ export default function RetailSalesEntry() {
               <div className="flex items-center gap-1">
                 <span className="text-gray-500">Customer:</span>
                 <span className="font-semibold text-blue-700">{customerData.name}</span>
+                <CustomerCategoryBadge tag={customerData.customerTag} />
               </div>
               {customerData.mobile && (
                 <div className="flex items-center gap-1">
@@ -428,6 +431,11 @@ export default function RetailSalesEntry() {
                   {formatIndianNumber(Math.abs(previousOs))} {customerData.balanceType !== 'NONE' ? customerData.balanceType : ''}
                 </span>
               </div>
+              <WhatsAppDropdown
+                customerName={customerData.name}
+                mobile={customerData.mobile || ''}
+                outstandingAmount={previousOs}
+              />
               <button
                 className="text-blue-600 hover:text-blue-800 underline text-[11px]"
                 onClick={() => setShowCustomerModal(true)}
@@ -883,6 +891,10 @@ function CustomerSelectModal({
       nameRef.current?.focus();
       return;
     }
+    if (form.mobile && form.mobile.length !== 10) {
+      toast.error('Mobile number must be exactly 10 digits');
+      return;
+    }
     createMutation.mutate({
       ...form,
       name: form.name.trim(),
@@ -1125,6 +1137,7 @@ function CustomerSelectModal({
                 <thead className="sticky top-0 bg-gray-50">
                   <tr>
                     <th className="text-left">Party Name</th>
+                    <th className="text-left">Category</th>
                     <th className="text-left">Phone</th>
                     <th className="text-left">State</th>
                     <th className="text-left">City</th>
@@ -1136,13 +1149,13 @@ function CustomerSelectModal({
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-8 text-gray-400">
+                      <td colSpan={8} className="text-center py-8 text-gray-400">
                         Loading customers...
                       </td>
                     </tr>
                   ) : customers.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-8 text-gray-400">
+                      <td colSpan={8} className="text-center py-8 text-gray-400">
                         No customers found
                       </td>
                     </tr>
@@ -1154,6 +1167,7 @@ function CustomerSelectModal({
                         onClick={() => onSelect(c.id, c.name, c)}
                       >
                         <td className="font-medium">{c.name}</td>
+                        <td><CustomerCategoryBadge tag={c.customerTag} /></td>
                         <td>{c.mobile || c.phone || '-'}</td>
                         <td>{c.state || '-'}</td>
                         <td>{c.city || '-'}</td>

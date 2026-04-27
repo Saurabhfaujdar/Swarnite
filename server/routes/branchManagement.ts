@@ -51,8 +51,16 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     // If branchScope is provided via middleware, filter branches
+    // Always include the master branch so the hierarchy tree can render
     if (req.branchScope && req.branchScope.length > 0) {
-      where.id = { in: req.branchScope };
+      const masterBranch = await prisma.branch.findFirst({
+        where: { companyId: req.companyId, isMaster: true, isDeleted: false },
+        select: { id: true },
+      });
+      const scopeIds = masterBranch
+        ? [...new Set([masterBranch.id, ...req.branchScope])]
+        : req.branchScope;
+      where.id = { in: scopeIds };
     }
 
     const branches = await prisma.branch.findMany({
@@ -242,13 +250,16 @@ router.post('/', async (req: Request, res: Response) => {
     const data = req.body;
 
     // Validate required fields
-    if (!data.name || !data.code || !data.companyId) {
-      return res.status(400).json({ error: 'name, code, and companyId are required' });
+    if (!data.name || !data.code) {
+      return res.status(400).json({ error: 'name and code are required' });
     }
+
+    // Always use the authenticated user's companyId
+    const companyId = req.companyId!;
 
     // Check for duplicate code within the same company
     const existing = await prisma.branch.findFirst({
-      where: { code: data.code, companyId: data.companyId },
+      where: { code: data.code, companyId },
     });
     if (existing) {
       return res.status(409).json({ error: `Branch code '${data.code}' already exists` });
@@ -256,7 +267,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     // Determine if this is a master branch (first branch for company, or explicitly set)
     const companyBranches = await prisma.branch.count({
-      where: { companyId: data.companyId, isDeleted: false },
+      where: { companyId, isDeleted: false },
     });
 
     const isMaster = companyBranches === 0 || data.isMaster === true;
@@ -267,7 +278,7 @@ router.post('/', async (req: Request, res: Response) => {
       if (!parentId) {
         // Auto-assign to the master branch of the company
         const masterBranch = await prisma.branch.findFirst({
-          where: { companyId: data.companyId, isMaster: true, isDeleted: false },
+          where: { companyId, isMaster: true, isDeleted: false },
         });
         if (masterBranch) parentId = masterBranch.id;
       } else {
@@ -282,7 +293,7 @@ router.post('/', async (req: Request, res: Response) => {
       data: {
         name: data.name,
         code: data.code,
-        companyId: data.companyId,
+        companyId,
         branchType: isMaster ? 'MASTER' : 'BRANCH',
         isMaster,
         parentId: isMaster ? null : parentId,

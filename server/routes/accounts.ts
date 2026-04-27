@@ -8,6 +8,112 @@ const router = Router();
 router.use(authenticate);
 
 // ============================================================
+// Customer Category Logic
+// ============================================================
+// New Customer: 0-1 purchases
+// Regular Customer: 2-5 purchases
+// VIP Customer: Total spend > ₹5,00,000
+// Premium Customer: Total spend > ₹20,00,000
+// Inactive Customer: No purchase in 12 months (overrides others)
+// ============================================================
+interface CustomerCategory {
+  label: string;
+  color: string; // tailwind color key
+}
+
+async function computeCustomerCategory(accountId: number, companyId: number): Promise<CustomerCategory> {
+  const [stats, lastSale] = await Promise.all([
+    prisma.salesVoucher.aggregate({
+      where: { accountId, companyId, status: 'ACTIVE' },
+      _count: { id: true },
+      _sum: { voucherAmount: true },
+    }),
+    prisma.salesVoucher.findFirst({
+      where: { accountId, companyId, status: 'ACTIVE' },
+      orderBy: { voucherDate: 'desc' },
+      select: { voucherDate: true },
+    }),
+  ]);
+
+  const totalPurchases = stats._count.id;
+  const totalSpend = Number(stats._sum.voucherAmount || 0);
+
+  // Check inactive first (no purchase in 12 months)
+  if (totalPurchases > 0 && lastSale) {
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+    if (lastSale.voucherDate < twelveMonthsAgo) {
+      return { label: 'Inactive', color: 'gray' };
+    }
+  }
+
+  // Spend-based tiers take priority
+  if (totalSpend >= 2000000) return { label: 'Premium', color: 'amber' };
+  if (totalSpend >= 500000) return { label: 'VIP', color: 'purple' };
+
+  // Purchase-count based
+  if (totalPurchases <= 1) return { label: 'New', color: 'green' };
+  if (totalPurchases <= 5) return { label: 'Regular', color: 'blue' };
+
+  // >5 purchases but under ₹5L spend
+  return { label: 'Regular', color: 'blue' };
+}
+
+async function enrichAccountsWithCategory(accounts: any[], companyId: number): Promise<any[]> {
+  const accountIds = accounts.filter(a => a.type === 'CUSTOMER').map(a => a.id);
+  if (accountIds.length === 0) return accounts;
+
+  // Batch aggregate: count + sum per account
+  const [countAgg, lastSales] = await Promise.all([
+    prisma.salesVoucher.groupBy({
+      by: ['accountId'],
+      where: { accountId: { in: accountIds }, companyId, status: 'ACTIVE' },
+      _count: { id: true },
+      _sum: { voucherAmount: true },
+    }),
+    prisma.salesVoucher.findMany({
+      where: { accountId: { in: accountIds }, companyId, status: 'ACTIVE' },
+      orderBy: { voucherDate: 'desc' },
+      distinct: ['accountId'],
+      select: { accountId: true, voucherDate: true },
+    }),
+  ]);
+
+  const statsMap = new Map<number, { count: number; total: number }>();
+  for (const row of countAgg) {
+    statsMap.set(row.accountId, { count: row._count.id, total: Number(row._sum.voucherAmount || 0) });
+  }
+  const lastSaleMap = new Map<number, Date>();
+  for (const row of lastSales) {
+    lastSaleMap.set(row.accountId, row.voucherDate);
+  }
+
+  const twelveMonthsAgo = new Date();
+  twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+
+  return accounts.map(a => {
+    if (a.type !== 'CUSTOMER') return a;
+    const s = statsMap.get(a.id) || { count: 0, total: 0 };
+    const lastDate = lastSaleMap.get(a.id);
+    let category: CustomerCategory;
+
+    if (s.count > 0 && lastDate && lastDate < twelveMonthsAgo) {
+      category = { label: 'Inactive', color: 'gray' };
+    } else if (s.total >= 2000000) {
+      category = { label: 'Premium', color: 'amber' };
+    } else if (s.total >= 500000) {
+      category = { label: 'VIP', color: 'purple' };
+    } else if (s.count <= 1) {
+      category = { label: 'New', color: 'green' };
+    } else {
+      category = { label: 'Regular', color: 'blue' };
+    }
+
+    return { ...a, customerTag: category };
+  });
+}
+
+// ============================================================
 // ACCOUNTS / CUSTOMERS / SUPPLIERS
 // ============================================================
 
@@ -177,7 +283,8 @@ router.get('/', async (req: Request, res: Response) => {
       prisma.account.count({ where }),
     ]);
 
-    res.json({ accounts, total });
+    const enriched = await enrichAccountsWithCategory(accounts, req.companyId!);
+    res.json({ accounts: enriched, total });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch accounts' });
   }
@@ -190,7 +297,10 @@ router.get('/:id', async (req: Request, res: Response) => {
       where: { id: Number(req.params.id), companyId: req.companyId },
     });
     if (!account) return res.status(404).json({ error: 'Account not found' });
-    res.json(account);
+    const customerTag = account.type === 'CUSTOMER'
+      ? await computeCustomerCategory(account.id, req.companyId!)
+      : undefined;
+    res.json({ ...account, customerTag });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch account' });
   }
@@ -401,6 +511,9 @@ router.post('/', async (req: Request, res: Response) => {
     if (!data.type) {
       return res.status(400).json({ error: 'Account type is required' });
     }
+    if (data.mobile && !/^\d{10}$/.test(String(data.mobile))) {
+      return res.status(400).json({ error: 'Mobile number must be exactly 10 digits' });
+    }
     const account = await prisma.account.create({ data: { ...data, companyId: req.companyId! } as any });
     res.status(201).json(account);
   } catch (error: any) {
@@ -417,6 +530,9 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (!existing) return res.status(404).json({ error: 'Account not found' });
 
     const data = sanitizeAccountData(req.body);
+    if (data.mobile && !/^\d{10}$/.test(String(data.mobile))) {
+      return res.status(400).json({ error: 'Mobile number must be exactly 10 digits' });
+    }
     const account = await prisma.account.update({
       where: { id: existing.id },
       data,

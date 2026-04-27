@@ -113,6 +113,27 @@ describe('GET /api/branches', () => {
     const callArgs = mockPrisma.branch.findMany.mock.calls[0][0];
     expect(callArgs.where.isDeleted).toBeUndefined();
   });
+
+  it('uses req.companyId for branch creation instead of client-sent companyId', async () => {
+    mockPrisma.branch.findFirst.mockResolvedValueOnce(null); // no duplicate
+    mockPrisma.branch.count.mockResolvedValueOnce(0); // first branch
+    mockPrisma.branch.create.mockResolvedValueOnce(MASTER_BRANCH);
+    mockPrisma.auditLog.create.mockResolvedValueOnce({});
+
+    const res = await request(app)
+      .post('/api/branches')
+      .send({ name: 'Main Store', code: 'MAIN' }); // no companyId in body
+
+    expect(res.status).toBe(201);
+    // Should use req.companyId (=1 from mock middleware), not body
+    expect(mockPrisma.branch.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          companyId: 1,
+        }),
+      })
+    );
+  });
 });
 
 // ════════════════════════════════════════════════════════════
@@ -207,7 +228,7 @@ describe('POST /api/branches', () => {
 
     const res = await request(app)
       .post('/api/branches')
-      .send({ name: 'Main Store', code: 'MAIN', companyId: 1 });
+      .send({ name: 'Main Store', code: 'MAIN' });
 
     expect(res.status).toBe(201);
     expect(mockPrisma.branch.create).toHaveBeenCalledWith(
@@ -231,7 +252,7 @@ describe('POST /api/branches', () => {
 
     const res = await request(app)
       .post('/api/branches')
-      .send({ name: 'Branch Store 1', code: 'BR01', companyId: 1, city: 'Pune' });
+      .send({ name: 'Branch Store 1', code: 'BR01', city: 'Pune' });
 
     expect(res.status).toBe(201);
     expect(mockPrisma.branch.create).toHaveBeenCalledWith(
@@ -249,7 +270,7 @@ describe('POST /api/branches', () => {
 
     const res = await request(app)
       .post('/api/branches')
-      .send({ name: 'Another Branch', code: 'BR01', companyId: 1 });
+      .send({ name: 'Another Branch', code: 'BR01' });
 
     expect(res.status).toBe(409);
     expect(res.body.error).toContain('already exists');
@@ -271,7 +292,7 @@ describe('POST /api/branches', () => {
 
     const res = await request(app)
       .post('/api/branches')
-      .send({ name: 'New Branch', code: 'NEW1', companyId: 1, parentId: 2 });
+      .send({ name: 'New Branch', code: 'NEW1', parentId: 2 });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('master branch');
@@ -774,29 +795,30 @@ describe('GET /api/branches/audit-log', () => {
 // BRANCH CODE COMPOUND UNIQUENESS (companyId + code)
 // ════════════════════════════════════════════════════════════
 describe('POST /api/branches — compound unique constraint', () => {
-  it('allows same branch code in different companies', async () => {
-    // No duplicate for companyId=2
+  it('checks duplicate code within the authenticated user company', async () => {
+    // No duplicate for req.companyId (=1 from mock middleware)
     mockPrisma.branch.findFirst.mockResolvedValueOnce(null);
     mockPrisma.branch.count.mockResolvedValueOnce(1);
-    mockPrisma.branch.findFirst.mockResolvedValueOnce({ id: 10, isMaster: true }); // master of company 2
+    mockPrisma.branch.findFirst.mockResolvedValueOnce({ id: 1, isMaster: true }); // master of company 1
     mockPrisma.branch.create.mockResolvedValueOnce({
-      id: 20, name: 'Branch Store', code: 'BR01', companyId: 2,
-      branchType: 'BRANCH', isMaster: false, parentId: 10,
-      company: { id: 2, name: 'Other Company' },
+      id: 20, name: 'Branch Store', code: 'BR01', companyId: 1,
+      branchType: 'BRANCH', isMaster: false, parentId: 1,
+      company: { id: 1, name: 'Swarnite Jewellers' },
     });
     mockPrisma.auditLog.create.mockResolvedValueOnce({});
 
+    // Even if client sends companyId: 2, server uses req.companyId (=1)
     const res = await request(app)
       .post('/api/branches')
       .send({ name: 'Branch Store', code: 'BR01', companyId: 2 });
 
     expect(res.status).toBe(201);
-    // findFirst should check code + companyId together
+    // findFirst should check code + req.companyId (1), ignoring client-sent companyId
     expect(mockPrisma.branch.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           code: 'BR01',
-          companyId: 2,
+          companyId: 1, // req.companyId from middleware, not body
         }),
       })
     );
@@ -808,7 +830,7 @@ describe('POST /api/branches — compound unique constraint', () => {
 
     const res = await request(app)
       .post('/api/branches')
-      .send({ name: 'Duplicate', code: 'BR01', companyId: 1 });
+      .send({ name: 'Duplicate', code: 'BR01' });
 
     expect(res.status).toBe(409);
     expect(res.body.error).toContain("'BR01'");
@@ -824,7 +846,7 @@ describe('POST /api/branches — compound unique constraint', () => {
 
     const res = await request(app)
       .post('/api/branches')
-      .send({ name: 'Race Condition', code: 'BR01', companyId: 1 });
+      .send({ name: 'Race Condition', code: 'BR01' });
 
     expect(res.status).toBe(409);
     expect(res.body.error).toContain('already exists');

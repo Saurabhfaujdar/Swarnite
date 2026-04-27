@@ -82,7 +82,10 @@ export default function BranchManagement() {
     try {
       const res = await branchManagementAPI.list();
       setBranches(res.data.branches || []);
-    } catch { /* ignore */ }
+    } catch (err: any) {
+      console.error('Failed to fetch branches:', err);
+      toast.error(err?.response?.data?.error || 'Failed to load branches');
+    }
     setLoading(false);
   }, []);
 
@@ -122,7 +125,6 @@ export default function BranchManagement() {
         name: createForm.name, code: createForm.code, address: createForm.address,
         city: createForm.city, state: createForm.state, phone: createForm.phone,
         email: createForm.email, gstin: createForm.gstin,
-        companyId: masterBranch?.companyId || 1,
         parentId: masterBranch?.id,
       });
       // If user credentials provided, create a user for the new branch
@@ -313,6 +315,8 @@ export default function BranchManagement() {
             <h2 className="text-sm font-semibold mb-2 text-gray-700">Store Hierarchy</h2>
             {loading ? (
               <p className="text-xs text-gray-400 py-4 text-center">Loading branches...</p>
+            ) : branches.length === 0 ? (
+              <p className="text-xs text-gray-400 py-4 text-center">No branches found. Create a branch to get started.</p>
             ) : (
               <div className="space-y-1">
                 {/* Master Branch */}
