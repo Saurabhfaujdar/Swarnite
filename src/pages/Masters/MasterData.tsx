@@ -554,6 +554,17 @@ function SalesmenTab() {
     onError: () => toast.error('Failed to create salesman'),
   });
 
+  const remove = useMutation({
+    mutationFn: (id: number) => mastersAPI.deleteSalesman(id),
+    onSuccess: () => { toast.success('Salesman deleted'); qc.invalidateQueries({ queryKey: ['salesmen'] }); },
+    onError: () => toast.error('Failed to delete salesman'),
+  });
+
+  const handleDelete = (s: any) => {
+    if (!confirm(`Delete salesman "${s.name}" (${s.code})?\n\nThis will deactivate the salesman. Existing sales records will be preserved.`)) return;
+    remove.mutate(s.id);
+  };
+
   return (
     <div className="panel">
       <div className="panel-header flex justify-between items-center">
@@ -590,11 +601,26 @@ function SalesmenTab() {
 
       <div className="panel-body p-0">
         <table className="data-table w-full">
-          <thead><tr><th>ID</th><th>Name</th><th>Code</th><th>Mobile</th></tr></thead>
+          <thead><tr><th>ID</th><th>Name</th><th>Code</th><th>Mobile</th><th className="w-20">Actions</th></tr></thead>
           <tbody>
-            {isLoading ? <tr><td colSpan={4} className="text-center py-6 text-gray-400">Loading...</td></tr> :
+            {isLoading ? <tr><td colSpan={5} className="text-center py-6 text-gray-400">Loading...</td></tr> :
               salesmen?.map((s: any) => (
-                <tr key={s.id}><td>{s.id}</td><td className="font-medium">{s.name}</td><td>{s.code}</td><td>{s.mobile || '-'}</td></tr>
+                <tr key={s.id}>
+                  <td>{s.id}</td>
+                  <td className="font-medium">{s.name}</td>
+                  <td>{s.code}</td>
+                  <td>{s.mobile || '-'}</td>
+                  <td>
+                    <button
+                      onClick={() => handleDelete(s)}
+                      className="text-red-600 hover:text-red-800 text-xs font-semibold"
+                      disabled={remove.isPending}
+                      title="Delete salesman"
+                    >
+                      🗑️ Delete
+                    </button>
+                  </td>
+                </tr>
               ))}
           </tbody>
         </table>

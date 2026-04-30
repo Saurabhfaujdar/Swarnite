@@ -1,0 +1,64 @@
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mC:/Swarnite[39m
+
+(node:32056) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Swarnite/postcss.config.js?t=1777582959811 is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to C:\Swarnite\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31mΓ¥»[39m tests/unit/branchManagement.test.tsx [2m([22m[2m29 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 2516[2mms[22m[39m
+     [32mΓ£ô[39m renders the page header[32m 69[2mms[22m[39m
+     [32mΓ£ô[39m loads and displays branch list[32m 23[2mms[22m[39m
+     [32mΓ£ô[39m shows MASTER badge for master branch[32m 15[2mms[22m[39m
+     [32mΓ£ô[39m shows New Branch button[32m 11[2mms[22m[39m
+     [32mΓ£ô[39m displays tabs for branches, transfers, and audit[32m 11[2mms[22m[39m
+     [32mΓ£ô[39m shows stats when a branch is selected[32m 237[2mms[22m[39m
+     [32mΓ£ô[39m shows default message when no branch selected[32m 14[2mms[22m[39m
+     [32mΓ£ô[39m opens create dialog when New Branch is clicked[32m 99[2mms[22m[39m
+     [32mΓ£ô[39m has required fields for branch name and code[32m 71[2mms[22m[39m
+     [32mΓ£ô[39m disables Create button when name/code is empty[32m 75[2mms[22m[39m
+     [33m[2mΓ£ô[22m[39m calls create API and refreshes list on success [33m 526[2mms[22m[39m
+     [32mΓ£ô[39m closes dialog on Cancel[32m 190[2mms[22m[39m
+     [32mΓ£ô[39m loads transfer history when tab is clicked[32m 68[2mms[22m[39m
+     [32mΓ£ô[39m shows empty state when no transfers[32m 81[2mms[22m[39m
+     [32mΓ£ô[39m loads audit logs when tab is clicked[32m 84[2mms[22m[39m
+     [32mΓ£ô[39m shows empty state when no audit logs[32m 74[2mms[22m[39m
+     [32mΓ£ô[39m shows child branches when master is expanded[32m 119[2mms[22m[39m
+     [32mΓ£ô[39m shows child branch actions when expanded[32m 150[2mms[22m[39m
+     [32mΓ£ô[39m renders Store Hierarchy heading[32m 8[2mms[22m[39m
+[31m     [31m├ù[31m shows nothing when no master branch exists (isMaster=false)[39m[32m 18[2mms[22m[39m
+     [32mΓ£ô[39m renders master with MASTER badge when isMaster=true[32m 14[2mms[22m[39m
+     [32mΓ£ô[39m shows children under master when expanded[32m 74[2mms[22m[39m
+     [32mΓ£ô[39m shows Disabled badge for inactive branches[32m 92[2mms[22m[39m
+     [32mΓ£ô[39m shows "No branch stores yet" when no children exist[32m 84[2mms[22m[39m
+     [32mΓ£ô[39m shows optional user credentials section in create dialog[32m 92[2mms[22m[39m
+     [32mΓ£ô[39m renders the root branch even when no row has isMaster=true[32m 23[2mms[22m[39m
+     [32mΓ£ô[39m treats every other row as a child of the fallback master[32m 77[2mms[22m[39m
+     [32mΓ£ô[39m does NOT render the master twice when it is also the only row[32m 15[2mms[22m[39m
+     [32mΓ£ô[39m still prefers an explicitly-flagged master over the parentId fallback[32m 94[2mms[22m[39m
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ» Failed Tests 1 ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+
+ FAIL  tests/unit/branchManagement.test.tsx > BranchManagement ΓÇö Store Hierarchy > shows nothing when no master branch exists (isMaster=false)
+Error: expect(element).not.toBeInTheDocument()
+
+expected document not to contain element, found <span
+  class="ml-auto px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-[10px] font-medium"
+>
+  MASTER
+</span> instead
+ Γ¥» tests/unit/branchManagement.test.tsx:417:46
+    415| 
+    416|     // Master badge should NOT appear since no branch has isMaster=true
+    417|     expect(screen.queryByText('MASTER')).not.toBeInTheDocument();
+       |                                              ^
+    418|   });
+    419| 
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/1]ΓÄ»
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m28 passed[39m[22m[90m (29)[39m
+[2m   Start at [22m 02:32:39
+[2m   Duration [22m 8.43s[2m (transform 489ms, setup 697ms, import 1.15s, tests 2.52s, environment 3.54s)[22m
+

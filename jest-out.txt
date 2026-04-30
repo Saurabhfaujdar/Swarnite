@@ -1,0 +1,805 @@
+  console.info
+    {"timestamp":"2026-04-30T21:04:06.770Z","level":"info","message":"request","requestId":"e0eb1a09-ea73-4f1f-b3c3-79d43b386491","method":"GET","path":"/api/branches","status":200,"duration":"62ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:06.929Z","level":"info","message":"request","requestId":"984b5744-7013-4285-b4bf-9ba3115876b2","method":"GET","path":"/api/branches?search=Pune","status":200,"duration":"7ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:06.973Z","level":"info","message":"request","requestId":"80781b05-470c-4917-8caf-2a627d103424","method":"GET","path":"/api/branches?includeDeleted=true","status":200,"duration":"4ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.053Z","level":"info","message":"request","requestId":"a0d59292-d2fb-4bcf-9d84-2e4e76858285","method":"POST","path":"/api/branches","status":201,"duration":"45ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.067Z","level":"info","message":"request","requestId":"c8594129-3c74-49e4-a4f7-45d320d5dfd3","method":"GET","path":"/api/branches","status":200,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.079Z","level":"info","message":"request","requestId":"1892e6bd-0250-4439-bd38-8b7d00015795","method":"GET","path":"/api/branches","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.093Z","level":"info","message":"request","requestId":"b2fd287d-2c3b-4018-81c2-03989a58d27d","method":"GET","path":"/api/branches/1","status":200,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.115Z","level":"warn","message":"request","requestId":"af1d5b9c-785b-44a4-bf8b-e11bfd653f0d","method":"GET","path":"/api/branches/999","status":404,"duration":"4ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.191Z","level":"info","message":"request","requestId":"88923c59-66bf-4c23-8828-13c7eabc924e","method":"GET","path":"/api/branches/1/children","status":200,"duration":"8ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.229Z","level":"info","message":"request","requestId":"1f20fdfc-55e2-4bf6-b9cc-bc0d2523df05","method":"GET","path":"/api/branches/1/stats","status":200,"duration":"6ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.263Z","level":"info","message":"request","requestId":"ebfeb541-cd9d-486c-9fb0-2147670d9e3f","method":"POST","path":"/api/branches","status":201,"duration":"5ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.299Z","level":"info","message":"request","requestId":"f823d36a-84c3-46c7-a23b-e62c9c71dad5","method":"POST","path":"/api/branches","status":201,"duration":"7ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.332Z","level":"warn","message":"request","requestId":"2c228d45-14e1-4981-b75b-7e2c1ab6e610","method":"POST","path":"/api/branches","status":409,"duration":"5ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.366Z","level":"warn","message":"request","requestId":"9976cfa7-36b0-4834-a678-19e114ef7570","method":"POST","path":"/api/branches","status":400,"duration":"5ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.402Z","level":"warn","message":"request","requestId":"4f0045f1-76b7-4ad2-bd3a-22f6ed410e6c","method":"POST","path":"/api/branches","status":400,"duration":"4ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.447Z","level":"info","message":"request","requestId":"eda9e3b9-a1cb-4291-8b30-e691c8eabfe2","method":"PUT","path":"/api/branches/2","status":200,"duration":"8ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.485Z","level":"warn","message":"request","requestId":"52c3a473-1c11-42f1-be65-ea5c53ee78a1","method":"PUT","path":"/api/branches/999","status":404,"duration":"8ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.521Z","level":"info","message":"request","requestId":"347a6dda-bff5-4071-a148-575ed277705d","method":"PUT","path":"/api/branches/2/disable","status":200,"duration":"5ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.542Z","level":"warn","message":"request","requestId":"52350345-48cf-4c24-9637-b90a1a657752","method":"PUT","path":"/api/branches/1/disable","status":400,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.572Z","level":"warn","message":"request","requestId":"09f7f027-2fd1-4c51-8231-fc59cebc3256","method":"PUT","path":"/api/branches/4/disable","status":400,"duration":"3ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.602Z","level":"info","message":"request","requestId":"5cb1f94e-c02b-428a-9f17-de1ac8cc4090","method":"PUT","path":"/api/branches/4/enable","status":200,"duration":"4ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.626Z","level":"warn","message":"request","requestId":"8f814523-6bd7-4b03-b327-911b3a4c11c3","method":"PUT","path":"/api/branches/2/enable","status":400,"duration":"3ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.654Z","level":"info","message":"request","requestId":"df1add72-c0b1-48c6-b5c2-0eecca3850fd","method":"DELETE","path":"/api/branches/2","status":200,"duration":"4ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.681Z","level":"warn","message":"request","requestId":"5bdd4b67-6b9e-4692-a26c-71ca08413f64","method":"DELETE","path":"/api/branches/1","status":400,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.721Z","level":"warn","message":"request","requestId":"b2d3cb7f-0fcb-4c9e-819b-f41819109675","method":"DELETE","path":"/api/branches/2","status":400,"duration":"4ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.779Z","level":"warn","message":"request","requestId":"a2d4854f-c495-4ef8-8cd0-93181cc99f58","method":"DELETE","path":"/api/branches/2","status":400,"duration":"10ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.812Z","level":"warn","message":"request","requestId":"79d89b5e-3882-4b26-9446-3a4230571845","method":"DELETE","path":"/api/branches/5","status":400,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.828Z","level":"info","message":"request","requestId":"fbb2872e-ffc9-426c-8c1d-5735526db5dd","method":"DELETE","path":"/api/branches/2/permanent","status":200,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.841Z","level":"warn","message":"request","requestId":"8838e090-5e03-4d81-a385-3d7549b8d172","method":"DELETE","path":"/api/branches/2/permanent","status":400,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.859Z","level":"warn","message":"request","requestId":"467bccbe-fa47-4c9f-9581-32931cb663c7","method":"DELETE","path":"/api/branches/1/permanent","status":400,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:07.879Z","level":"info","message":"request","requestId":"59b9afae-f568-457f-ab05-5cb61ec6be3c","method":"POST","path":"/api/branches/transfer","status":201,"duration":"4ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.898Z","level":"warn","message":"request","requestId":"aeebd69b-d103-4a07-bd81-4d8d193f6071","method":"POST","path":"/api/branches/transfer","status":400,"duration":"3ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.924Z","level":"warn","message":"request","requestId":"3ce4b5eb-14fb-4ae7-8b9b-5f2eecd851d3","method":"POST","path":"/api/branches/transfer","status":400,"duration":"3ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.942Z","level":"warn","message":"request","requestId":"83ca6ea8-48b6-490e-b103-4eaa239d322a","method":"POST","path":"/api/branches/transfer","status":404,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.960Z","level":"warn","message":"request","requestId":"e55237f3-6324-43ec-a38b-e8b1ba1e3c85","method":"POST","path":"/api/branches/transfer","status":400,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:07.977Z","level":"warn","message":"request","requestId":"87ce448a-2827-41a2-a360-5db1e64f7944","method":"POST","path":"/api/branches/transfer","status":400,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.error
+    Error in branch transfer: Error: Label GN/001 does not belong to source branch
+        at C:\Swarnite\server\routes\branchManagement.ts:669:19
+        at processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at C:\Swarnite\server\routes\branchManagement.ts:638:20
+
+    [0m [90m 758 |[39m     res[33m.[39mstatus([35m201[39m)[33m.[39mjson(fullTransfer)[33m;[39m
+     [90m 759 |[39m   } [36mcatch[39m (error[33m:[39m any) {
+    [31m[1m>[22m[39m[90m 760 |[39m     console[33m.[39merror([32m'Error in branch transfer:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 761 |[39m     [36mif[39m (error[33m.[39mmessage[33m?[39m[33m.[39mincludes([32m'not found'[39m) [33m||[39m error[33m.[39mmessage[33m?[39m[33m.[39mincludes([32m'not in-stock'[39m) [33m||[39m error[33m.[39mmessage[33m?[39m[33m.[39mincludes([32m'does not belong'[39m)) {
+     [90m 762 |[39m       [36mreturn[39m res[33m.[39mstatus([35m400[39m)[33m.[39mjson({ error[33m:[39m error[33m.[39mmessage })[33m;[39m
+     [90m 763 |[39m     }[0m
+
+      at server/routes/branchManagement.ts:760:13
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:08.076Z","level":"warn","message":"request","requestId":"25cc1b68-52dc-47f4-b95a-3be5d2a04406","method":"POST","path":"/api/branches/transfer","status":400,"duration":"76ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.error
+    Error in branch transfer: Error: Label GN/003 is not in-stock (status: SOLD)
+        at C:\Swarnite\server\routes\branchManagement.ts:672:19
+        at processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at C:\Swarnite\server\routes\branchManagement.ts:638:20
+
+    [0m [90m 758 |[39m     res[33m.[39mstatus([35m201[39m)[33m.[39mjson(fullTransfer)[33m;[39m
+     [90m 759 |[39m   } [36mcatch[39m (error[33m:[39m any) {
+    [31m[1m>[22m[39m[90m 760 |[39m     console[33m.[39merror([32m'Error in branch transfer:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 761 |[39m     [36mif[39m (error[33m.[39mmessage[33m?[39m[33m.[39mincludes([32m'not found'[39m) [33m||[39m error[33m.[39mmessage[33m?[39m[33m.[39mincludes([32m'not in-stock'[39m) [33m||[39m error[33m.[39mmessage[33m?[39m[33m.[39mincludes([32m'does not belong'[39m)) {
+     [90m 762 |[39m       [36mreturn[39m res[33m.[39mstatus([35m400[39m)[33m.[39mjson({ error[33m:[39m error[33m.[39mmessage })[33m;[39m
+     [90m 763 |[39m     }[0m
+
+      at server/routes/branchManagement.ts:760:13
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:08.124Z","level":"warn","message":"request","requestId":"7a92284f-c0db-4e86-99d0-9a19d95bc757","method":"POST","path":"/api/branches/transfer","status":400,"duration":"19ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:08.140Z","level":"info","message":"request","requestId":"e8b88cc4-deec-4034-8cea-a9bb4e39d925","method":"GET","path":"/api/branches/transfer/history","status":200,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:08.152Z","level":"info","message":"request","requestId":"27e62b87-0626-4178-bb9f-9d6f4699f9cf","method":"GET","path":"/api/branches/transfer/history?branchId=1","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:08.163Z","level":"info","message":"request","requestId":"c8608e56-b47a-4625-a42d-7bd1ed29f7b1","method":"GET","path":"/api/branches/transfer/history?dateFrom=2025-07-01&dateTo=2025-07-31","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:08.176Z","level":"info","message":"request","requestId":"206a652f-60bd-4904-a9e0-c51db29e1f47","method":"GET","path":"/api/branches/audit-log?entityType=Branch","status":200,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:08.187Z","level":"info","message":"request","requestId":"92f96fe2-534a-472a-a653-825a6a4f8ac1","method":"GET","path":"/api/branches/audit-log?action=TRANSFER","status":200,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:08.199Z","level":"info","message":"request","requestId":"c4151d65-8234-4244-99a4-1710545df53b","method":"GET","path":"/api/branches/audit-log?dateFrom=2025-07-01&dateTo=2025-07-31","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:08.214Z","level":"info","message":"request","requestId":"6fdd3976-2ee3-489b-a49b-a50880aacc30","method":"GET","path":"/api/branches/audit-log?page=2&limit=10","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:08.227Z","level":"info","message":"request","requestId":"4d7da65c-f294-405e-8047-8e5275f3dcd9","method":"POST","path":"/api/branches","status":201,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:08.239Z","level":"warn","message":"request","requestId":"06110b14-3fb3-47b8-a0ae-05cba2c7a62a","method":"POST","path":"/api/branches","status":409,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.error
+    Error creating branch: { code: 'P2002' }
+
+    [0m [90m 321 |[39m     res[33m.[39mstatus([35m201[39m)[33m.[39mjson(branch)[33m;[39m
+     [90m 322 |[39m   } [36mcatch[39m (error[33m:[39m any) {
+    [31m[1m>[22m[39m[90m 323 |[39m     console[33m.[39merror([32m'Error creating branch:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 324 |[39m     [36mif[39m (error[33m.[39mcode [33m===[39m [32m'P2002'[39m) {
+     [90m 325 |[39m       [36mreturn[39m res[33m.[39mstatus([35m409[39m)[33m.[39mjson({ error[33m:[39m [32m'Branch code already exists'[39m })[33m;[39m
+     [90m 326 |[39m     }[0m
+
+      at server/routes/branchManagement.ts:323:13
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:08.267Z","level":"warn","message":"request","requestId":"72b003fd-582a-4cc4-a071-2f9809809b9d","method":"POST","path":"/api/branches","status":409,"duration":"16ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:08.281Z","level":"info","message":"request","requestId":"9784b2af-e06c-405f-99f2-a8564beeafe1","method":"GET","path":"/api/branches/2/users","status":200,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:08.292Z","level":"info","message":"request","requestId":"dbf9fb6d-5c67-4b27-a46e-0b43c5ee6efd","method":"GET","path":"/api/branches/3/users","status":200,"duration":"3ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:09.041Z","level":"info","message":"request","requestId":"fce8c843-520d-46df-9e26-10dd044193ab","method":"POST","path":"/api/branches/2/user","status":201,"duration":"735ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:09.788Z","level":"info","message":"request","requestId":"11cc2846-8e00-4769-882f-814bf810a16d","method":"POST","path":"/api/branches/2/user","status":201,"duration":"736ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:09.800Z","level":"warn","message":"request","requestId":"1a342e15-cc4d-4719-bc15-30c6b4bb774c","method":"POST","path":"/api/branches/2/user","status":400,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:09.813Z","level":"warn","message":"request","requestId":"a29327db-386d-4953-87e1-fbf931436ac5","method":"POST","path":"/api/branches/2/user","status":400,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:09.825Z","level":"warn","message":"request","requestId":"882ddc4a-9e8b-4dab-8211-45d5833cabaa","method":"POST","path":"/api/branches/2/user","status":400,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:09.837Z","level":"warn","message":"request","requestId":"8619ae3b-e779-4953-a652-67b0546ec5d0","method":"POST","path":"/api/branches/999/user","status":404,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:09.850Z","level":"warn","message":"request","requestId":"cc236864-6b01-450a-bec0-be81824449c5","method":"POST","path":"/api/branches/5/user","status":404,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:10.580Z","level":"warn","message":"request","requestId":"4d31d76a-c927-4271-a9db-50052971499c","method":"POST","path":"/api/branches/2/user","status":409,"duration":"719ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:10.595Z","level":"info","message":"request","requestId":"d38d75e7-8175-424c-a5d6-f0ead88f7a92","method":"PUT","path":"/api/branches/2/user/10","status":200,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:11.573Z","level":"info","message":"request","requestId":"c0af3893-cee3-4b24-aac0-805a15fd515e","method":"PUT","path":"/api/branches/2/user/10","status":200,"duration":"968ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:11.596Z","level":"warn","message":"request","requestId":"961b9b6f-11bd-4969-b2a6-715d341d59a0","method":"PUT","path":"/api/branches/2/user/10","status":400,"duration":"4ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:11.621Z","level":"warn","message":"request","requestId":"69c70824-5b4f-4e40-a517-db9731a92afd","method":"PUT","path":"/api/branches/2/user/999","status":404,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:11.634Z","level":"warn","message":"request","requestId":"6dd95ac5-ae90-4e15-92d0-4f1304d5a414","method":"PUT","path":"/api/branches/2/user/10","status":404,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:11.646Z","level":"warn","message":"request","requestId":"b593ec32-5d60-4440-b0f6-cdbbed5f5110","method":"PUT","path":"/api/branches/2/user/10","status":404,"duration":"1ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:11.662Z","level":"info","message":"request","requestId":"0f3dd256-9aa3-4e9e-b26b-b351967a37e2","method":"PUT","path":"/api/branches/2/user/10","status":200,"duration":"3ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.info
+    {"timestamp":"2026-04-30T21:04:11.683Z","level":"info","message":"request","requestId":"04010637-b3ca-4c82-af7b-11d25ac56b8e","method":"PUT","path":"/api/branches/2/user/10","status":200,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+      at Object.info (server/logger.ts:45:36)
+
+  console.error
+    PUT /branches/:id/user/:userId error: { code: 'P2002' }
+
+    [0m [90m 954 |[39m     res[33m.[39mjson(updated)[33m;[39m
+     [90m 955 |[39m   } [36mcatch[39m (error[33m:[39m any) {
+    [31m[1m>[22m[39m[90m 956 |[39m     console[33m.[39merror([32m'PUT /branches/:id/user/:userId error:'[39m[33m,[39m error)[33m;[39m
+     [90m     |[39m             [31m[1m^[22m[39m
+     [90m 957 |[39m     [36mif[39m (error[33m.[39mcode [33m===[39m [32m'P2002'[39m) {
+     [90m 958 |[39m       [36mreturn[39m res[33m.[39mstatus([35m409[39m)[33m.[39mjson({ error[33m:[39m [32m'Username already exists'[39m })[33m;[39m
+     [90m 959 |[39m     }[0m
+
+      at server/routes/branchManagement.ts:956:13
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:11.732Z","level":"warn","message":"request","requestId":"98747291-4c67-475d-9635-3735cb73e8d3","method":"PUT","path":"/api/branches/2/user/10","status":409,"duration":"30ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+  console.warn
+    {"timestamp":"2026-04-30T21:04:11.756Z","level":"warn","message":"request","requestId":"a8b7106a-382a-4170-95ba-8d9775d1df1b","method":"PUT","path":"/api/branches/abc/user/xyz","status":400,"duration":"2ms","ip":"::ffff:127.0.0.1","userId":1,"companyId":1,"branchId":1}
+
+    [0m [90m 46 |[39m   }[33m,[39m
+     [90m 47 |[39m   warn(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+    [31m[1m>[22m[39m[90m 48 |[39m     [36mif[39m (shouldLog([32m'warn'[39m)) console[33m.[39mwarn(formatMessage([32m'warn'[39m[33m,[39m message[33m,[39m meta))[33m;[39m
+     [90m    |[39m                                    [31m[1m^[22m[39m
+     [90m 49 |[39m   }[33m,[39m
+     [90m 50 |[39m   error(message[33m:[39m string[33m,[39m meta[33m?[39m[33m:[39m [33mRecord[39m[33m<[39m[33mstring[39m[33m,[39m unknown[33m>[39m) {
+     [90m 51 |[39m     [36mif[39m (shouldLog([32m'error'[39m)) console[33m.[39merror(formatMessage([32m'error'[39m[33m,[39m message[33m,[39m meta))[33m;[39m[0m
+
+      at Object.warn (server/logger.ts:48:36)
+      at ServerResponse.<anonymous> (server/middleware/requestLogger.ts:47:14)
+
+PASS tests/integration/branchManagement.test.ts (21.835 s)
+  GET /api/branches
+    ΓêÜ returns all branches ordered master-first (273 ms)
+    ΓêÜ filters by search query (55 ms)
+    ΓêÜ includes deleted branches when requested (36 ms)
+    ΓêÜ uses req.companyId for branch creation instead of client-sent companyId (70 ms)
+    ΓêÜ does NOT apply branchId scope filter for master branch users (13 ms)
+    ΓêÜ returns legacy rows missing isMaster=true verbatim with parentId preserved (12 ms)
+  GET /api/branches/:id
+    ΓêÜ returns branch with children and counts (12 ms)
+    ΓêÜ returns 404 for non-existent branch (56 ms)
+  GET /api/branches/:id/children
+    ΓêÜ returns child branches of a parent (51 ms)
+  GET /api/branches/:id/stats
+    ΓêÜ returns inventory, sales, users, and transfer counts (32 ms)
+  POST /api/branches
+    ΓêÜ creates the first branch as master automatically (33 ms)
+    ΓêÜ creates a child branch under the master (34 ms)
+    ΓêÜ rejects duplicate branch code (35 ms)
+    ΓêÜ rejects missing required fields (36 ms)
+    ΓêÜ validates parentId must be a master branch (35 ms)
+  PUT /api/branches/:id
+    ΓêÜ updates branch details and creates audit log (38 ms)
+    ΓêÜ returns 404 for non-existent branch (42 ms)
+  PUT /api/branches/:id/disable
+    ΓêÜ disables an active child branch (27 ms)
+    ΓêÜ blocks disabling the master branch (27 ms)
+    ΓêÜ returns error if already disabled (25 ms)
+  PUT /api/branches/:id/enable
+    ΓêÜ enables a disabled branch (28 ms)
+    ΓêÜ returns error if already active (24 ms)
+  DELETE /api/branches/:id (soft-delete)
+    ΓêÜ soft-deletes a branch with no active data (30 ms)
+    ΓêÜ blocks deletion of master branch (31 ms)
+    ΓêÜ blocks deletion when branch has in-stock labels (49 ms)
+    ΓêÜ blocks deletion when branch has active sales & users (46 ms)
+    ΓêÜ blocks deletion of already-deleted branch (26 ms)
+  DELETE /api/branches/:id/permanent
+    ΓêÜ permanently deletes a branch with zero data (11 ms)
+    ΓêÜ blocks permanent delete when branch has data (17 ms)
+    ΓêÜ blocks permanent delete of master branch (18 ms)
+  POST /api/branches/transfer
+    ΓêÜ creates an atomic inventory transfer (18 ms)
+    ΓêÜ rejects transfer to the same branch (24 ms)
+    ΓêÜ rejects transfer without items (21 ms)
+    ΓêÜ rejects transfer when source branch not found (17 ms)
+    ΓêÜ rejects transfer when destination branch is disabled (15 ms)
+    ΓêÜ rejects transfer with missing required fields (20 ms)
+    ΓêÜ validates labels belong to source branch within transaction (108 ms)
+    ΓêÜ validates labels are IN_STOCK within transaction (34 ms)
+  GET /api/branches/transfer/history
+    ΓêÜ returns transfer history with pagination (12 ms)
+    ΓêÜ filters by branchId (11 ms)
+    ΓêÜ filters by date range (12 ms)
+  GET /api/branches/audit-log
+    ΓêÜ returns audit logs with filters (11 ms)
+    ΓêÜ filters by action type (11 ms)
+    ΓêÜ filters by date range (14 ms)
+    ΓêÜ supports pagination (13 ms)
+  POST /api/branches ΓÇö compound unique constraint
+    ΓêÜ checks duplicate code within the authenticated user company (12 ms)
+    ΓêÜ rejects duplicate branch code within the same company (13 ms)
+    ΓêÜ handles P2002 unique constraint error from database (28 ms)
+  GET /api/branches/:id/users
+    ΓêÜ returns users of a branch (11 ms)
+    ΓêÜ returns empty array when branch has no users (13 ms)
+  POST /api/branches/:id/user
+    ΓêÜ creates a user for a branch (747 ms)
+    ΓêÜ uses username as fullName when not provided (747 ms)
+    ΓêÜ rejects missing username (13 ms)
+    ΓêÜ rejects missing password (13 ms)
+    ΓêÜ rejects short password (11 ms)
+    ΓêÜ returns 404 for non-existent branch (12 ms)
+    ΓêÜ returns 404 for deleted branch (13 ms)
+    ΓêÜ rejects duplicate username with P2002 (731 ms)
+  PUT /api/branches/:id/user/:userId
+    ΓêÜ updates user details (12 ms)
+    ΓêÜ updates password with hashing (981 ms)
+    ΓêÜ rejects short password (24 ms)
+    ΓêÜ returns 404 when user not found (22 ms)
+    ΓêÜ returns 404 when user belongs to different branch (11 ms)
+    ΓêÜ returns 404 when user belongs to different company (11 ms)
+    ΓêÜ can disable a user (17 ms)
+    ΓêÜ can change user role (23 ms)
+    ΓêÜ rejects duplicate username on update (52 ms)
+    ΓêÜ returns 400 for invalid IDs (19 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       68 passed, 68 total
+Snapshots:   0 total
+Time:        22.343 s
+Ran all test suites matching tests/integration/branchManagement.test.ts.

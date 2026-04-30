@@ -149,6 +149,38 @@ describe('GET /api/branches', () => {
     // But MUST be scoped by companyId for tenant isolation
     expect(callArgs.where.companyId).toBe(1);
   });
+
+  // ── Legacy data: no row has isMaster=true (prod regression) ──
+  // The 20260423 branch-fix migration back-fills isMaster + parentId.
+  // If it hasn't run, every row comes back with isMaster=false. The
+  // API must still return the rows (the frontend has a parentId
+  // fallback) and the response must include parentId so the client
+  // can identify the natural root.
+  it('returns legacy rows missing isMaster=true verbatim with parentId preserved', async () => {
+    const LEGACY_HQ = {
+      ...MASTER_BRANCH,
+      isMaster: false,
+      branchType: 'BRANCH',
+      parentId: null,
+      _count: { children: 0, users: 2, labels: 11, salesVouchers: 8 },
+    };
+    mockPrisma.branch.findMany.mockResolvedValueOnce([LEGACY_HQ]);
+
+    const res = await request(app).get('/api/branches');
+
+    expect(res.status).toBe(200);
+    expect(res.body.branches).toHaveLength(1);
+    const row = res.body.branches[0];
+    // Mirror the production payload shape so the UI fallback can fire:
+    expect(row.isMaster).toBe(false);
+    expect(row.parentId).toBeNull();
+    // The API must keep returning a deterministic ordering so the
+    // client-side `branches[0]` last-resort fallback is stable.
+    const callArgs = mockPrisma.branch.findMany.mock.calls[0][0];
+    expect(callArgs.orderBy).toEqual(
+      expect.arrayContaining([{ isMaster: 'desc' }, { name: 'asc' }]),
+    );
+  });
 });
 
 // ════════════════════════════════════════════════════════════

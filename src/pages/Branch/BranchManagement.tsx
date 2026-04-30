@@ -264,8 +264,22 @@ export default function BranchManagement() {
     fetchBranchUsers(branch.id);
   };
 
-  const masterBranch = branches.find(b => b.isMaster);
-  const childBranches = branches.filter(b => !b.isMaster);
+  // Defensive master-branch detection.
+  //
+  // Production data may be missing the `isMaster` flag if the
+  // 20260423 branch-fix migration hasn't been applied yet (we've
+  // observed deployed instances where every row has isMaster=false).
+  // To keep the Store Hierarchy panel useful in that scenario we
+  // fall back to the natural root: a row with parentId === null,
+  // and finally the first row in the list. The picked row is treated
+  // as the master and every OTHER row becomes a child branch.
+  const masterBranch =
+    branches.find((b) => b.isMaster) ||
+    branches.find((b) => b.parentId == null) ||
+    branches[0];
+  const childBranches = masterBranch
+    ? branches.filter((b) => b.id !== masterBranch.id)
+    : [];
 
   return (
     <div className="space-y-3">

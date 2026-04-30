@@ -79,6 +79,40 @@ router.get('/', async (req: Request, res: Response) => {
 // ============================================================
 // GET /api/layaway/:id - Get single layaway entry
 // ============================================================
+// ============================================================
+// GET /api/layaway/by-voucher?voucherNo=LY%2F5
+// Lookup a layaway entry by its voucher number. Uses a query
+// parameter (not a path segment) because real-world voucher
+// numbers contain '/' characters which Express normalises into
+// path separators even when URL-encoded.
+// ============================================================
+router.get('/by-voucher', async (req: Request, res: Response) => {
+  try {
+    const voucherNo = String(req.query.voucherNo || '').trim();
+    if (!voucherNo) return res.status(400).json({ error: 'voucherNo is required' });
+
+    const entry = await prisma.layawayEntry.findFirst({
+      where: { voucherNo, ...tenantScope(req) },
+      include: {
+        account: true,
+        branch: { select: { name: true } },
+        items: {
+          include: {
+            label: { include: { item: { include: { purity: true, metalType: true, itemGroup: true } } } },
+          },
+        },
+        payments: { orderBy: { paymentDate: 'desc' } },
+        statusHistory: { orderBy: { changedAt: 'asc' } },
+      },
+    });
+
+    if (!entry) return res.status(404).json({ error: 'Layaway entry not found' });
+    res.json(entry);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch layaway entry' });
+  }
+});
+
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
@@ -654,10 +688,15 @@ router.post('/:id/convert', async (req: Request, res: Response) => {
       await recordStatusHistory(tx, layawayId, layaway.status, 'CONVERTED',
         `Converted to sale ${saleVoucherNo}`);
 
-      return { converted, saleVoucherNo };
+      return { converted, saleVoucherNo, saleVoucherId: salesVoucher.id };
     });
 
-    res.json({ message: 'Layaway converted successfully', layaway: result.converted, saleVoucherNo: result.saleVoucherNo });
+    res.json({
+      message: 'Layaway converted successfully',
+      layaway: result.converted,
+      saleVoucherNo: result.saleVoucherNo,
+      saleVoucherId: result.saleVoucherId,
+    });
   } catch (error: any) {
     console.error('Error converting layaway:', error);
     res.status(400).json({ error: error.message || 'Failed to convert layaway' });

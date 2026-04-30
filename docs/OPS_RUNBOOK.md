@@ -207,6 +207,26 @@ docker compose exec app npx prisma migrate deploy
 
 > Migrations run automatically on container start (in CMD).
 
+#### Branch hierarchy data heal (May 2026)
+
+Migration `20260501000000_backfill_branch_hierarchy` re-runs the
+`branches.isMaster` / `branchType` / `parentId` backfill **idempotently**.
+It ships purely as a self-heal for instances where the previous
+`20260423000000_fix_branch_unique_constraint` data UPDATE either didn't
+take effect or was applied to a database that was reseeded afterwards.
+
+There is nothing to do operationally beyond redeploying — the container's
+entrypoint runs `prisma migrate deploy` automatically. To verify after
+deploy:
+
+```bash
+docker compose exec app npx prisma migrate status
+docker compose exec db psql -U jewelerp -d jewelerp -c \
+  "SELECT \"companyId\", count(*) FILTER (WHERE \"isMaster\") AS masters FROM branches WHERE \"isDeleted\"=false GROUP BY 1;"
+```
+
+Each company should report exactly one master row.
+
 ### Create a new migration (development)
 
 ```bash

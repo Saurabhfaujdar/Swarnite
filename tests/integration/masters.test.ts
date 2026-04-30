@@ -243,6 +243,45 @@ describe('GET /api/masters/salesmen', () => {
   });
 });
 
+describe('DELETE /api/masters/salesmen/:id', () => {
+  it('soft-deletes a salesman by setting isActive=false', async () => {
+    mockPrisma.salesman.findFirst.mockResolvedValueOnce(DUMMY_SALESMEN[0]);
+    mockPrisma.salesman.update.mockResolvedValueOnce({ ...DUMMY_SALESMEN[0], isActive: false });
+
+    const res = await request(app).delete('/api/masters/salesmen/1');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ message: 'Salesman deactivated' });
+    expect(mockPrisma.salesman.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: { isActive: false },
+    });
+  });
+
+  it('returns 404 when salesman not found', async () => {
+    mockPrisma.salesman.findFirst.mockResolvedValueOnce(null);
+
+    const res = await request(app).delete('/api/masters/salesmen/999');
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Salesman not found' });
+    expect(mockPrisma.salesman.update).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for invalid id', async () => {
+    const res = await request(app).delete('/api/masters/salesmen/abc');
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Invalid salesman id' });
+  });
+
+  it('scopes lookup by companyId for tenant isolation', async () => {
+    mockPrisma.salesman.findFirst.mockResolvedValueOnce(null);
+
+    await request(app).delete('/api/masters/salesmen/1');
+    expect(mockPrisma.salesman.findFirst).toHaveBeenCalledWith({
+      where: { id: 1, companyId: 1 },
+    });
+  });
+});
+
 // ════════════════════════════════════════════════════════════
 // COUNTERS
 // ════════════════════════════════════════════════════════════

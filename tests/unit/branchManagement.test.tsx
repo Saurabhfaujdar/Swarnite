@@ -396,8 +396,11 @@ describe('BranchManagement — Store Hierarchy', () => {
     });
   });
 
-  it('shows nothing when no master branch exists (isMaster=false)', async () => {
-    // All branches have isMaster=false — simulates the deployment bug
+  it('promotes the natural root when no row has isMaster=true (regression for prod data)', async () => {
+    // All branches come back with isMaster=false — the production
+    // payload shape when the 20260423 branch-fix migration hasn't
+    // been applied. The Store Hierarchy must still render the root
+    // (parentId == null) as the master so the panel isn't empty.
     mockList.mockResolvedValue({
       data: {
         branches: [
@@ -413,8 +416,10 @@ describe('BranchManagement — Store Hierarchy', () => {
       expect(screen.getByText('Store Hierarchy')).toBeInTheDocument();
     });
 
-    // Master badge should NOT appear since no branch has isMaster=true
-    expect(screen.queryByText('MASTER')).not.toBeInTheDocument();
+    // The natural root (Main Store, parentId=null) is promoted to
+    // master and gets the MASTER badge via the client-side fallback.
+    expect(screen.getByText('Main Store')).toBeInTheDocument();
+    expect(screen.getByText('MASTER')).toBeInTheDocument();
   });
 
   it('renders master with MASTER badge when isMaster=true', async () => {
@@ -518,6 +523,108 @@ describe('BranchManagement — Create Branch with User', () => {
       expect(screen.getByText('Branch Login Credentials (optional)')).toBeInTheDocument();
       expect(screen.getByText('Username')).toBeInTheDocument();
       expect(screen.getByText('Password')).toBeInTheDocument();
+    });
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// MASTER FALLBACK — handles legacy data missing the isMaster flag
+// ════════════════════════════════════════════════════════════
+//
+// Production has rows that pre-date the 20260423 branch-fix migration:
+// every branch has `isMaster=false` and no parent. With the old code
+// `branches.find(b => b.isMaster)` returned undefined and the entire
+// Store Hierarchy panel rendered nothing. The component now falls
+// back to the natural root (parentId === null, then branches[0]).
+describe('BranchManagement — Store Hierarchy fallback when isMaster is missing', () => {
+  // Mirrors the actual production payload the user shared (single
+  // branch, isMaster=false, parentId=null, branchType=BRANCH).
+  const LEGACY_HQ = {
+    id: 1, name: 'Main Branch', code: 'HQ', branchType: 'BRANCH',
+    isMaster: false, parentId: null, isActive: true, isDeleted: false,
+    companyId: 1, city: 'Mumbai', state: 'Maharashtra',
+    company: { id: 1, name: 'JAIGURU JEWELS LLP' },
+    parent: null,
+    _count: { children: 0, users: 2, labels: 11, salesVouchers: 8 },
+  };
+  const LEGACY_CHILD = {
+    id: 2, name: 'Pune Branch', code: 'PUN', branchType: 'BRANCH',
+    isMaster: false, parentId: 1, isActive: true, isDeleted: false,
+    companyId: 1, city: 'Pune',
+    parent: { id: 1, name: 'Main Branch', code: 'HQ' },
+    company: { id: 1, name: 'JAIGURU JEWELS LLP' },
+  };
+
+  it('renders the root branch even when no row has isMaster=true', async () => {
+    mockList.mockResolvedValue({ data: { branches: [LEGACY_HQ], total: 1 } });
+    render(<BranchManagement />);
+
+    // Store Hierarchy panel must NOT be empty; the legacy HQ row
+    // should be promoted to the master slot via the parentId fallback.
+    await waitFor(() => {
+      expect(screen.getByText('Main Branch')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Store Hierarchy')).toBeInTheDocument();
+    expect(screen.getByText('MASTER')).toBeInTheDocument();
+  });
+
+  it('treats every other row as a child of the fallback master', async () => {
+    mockList.mockResolvedValue({
+      data: { branches: [LEGACY_HQ, LEGACY_CHILD], total: 2 },
+    });
+    const user = userEvent.setup();
+    render(<BranchManagement />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Main Branch')).toBeInTheDocument();
+    });
+
+    // Expand the (fallback) master row.
+    const masterRow = screen.getByText('Main Branch').closest('[class*="cursor-pointer"]')!;
+    const expandBtn = within(masterRow as HTMLElement).getAllByRole('button')[0];
+    await user.click(expandBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Pune Branch')).toBeInTheDocument();
+    });
+  });
+
+  it('does NOT render the master twice when it is also the only row', async () => {
+    mockList.mockResolvedValue({ data: { branches: [LEGACY_HQ], total: 1 } });
+    render(<BranchManagement />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Main Branch')).toBeInTheDocument();
+    });
+    // The single row appears once as the master; it must not also
+    // appear inside its own child list.
+    expect(screen.getAllByText('Main Branch')).toHaveLength(1);
+  });
+
+  it('still prefers an explicitly-flagged master over the parentId fallback', async () => {
+    // A child has parentId=null (bad data) but another row IS flagged
+    // master — the flagged one must win so the tree doesn't invert.
+    const REAL_MASTER = { ...LEGACY_HQ, id: 10, name: 'Real HQ', isMaster: true, parentId: null };
+    const ORPHAN = { ...LEGACY_HQ, id: 11, name: 'Orphan Row', isMaster: false, parentId: null };
+    mockList.mockResolvedValue({
+      data: { branches: [ORPHAN, REAL_MASTER], total: 2 },
+    });
+    const user = userEvent.setup();
+    render(<BranchManagement />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Real HQ')).toBeInTheDocument();
+    });
+
+    // Real HQ holds the MASTER badge; orphan is treated as a child.
+    const masterRow = screen.getByText('Real HQ').closest('[class*="cursor-pointer"]')!;
+    expect(within(masterRow as HTMLElement).getByText('MASTER')).toBeInTheDocument();
+
+    const expandBtn = within(masterRow as HTMLElement).getAllByRole('button')[0];
+    await user.click(expandBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Orphan Row')).toBeInTheDocument();
     });
   });
 });

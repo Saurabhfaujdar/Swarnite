@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
-import { salesAPI, inventoryAPI, accountsAPI, mastersAPI } from '../../lib/api';
+import { salesAPI, inventoryAPI, accountsAPI, mastersAPI, layawayAPI } from '../../lib/api';
 import { formatCurrency, formatWeight, formatIndianNumber, getToday, calculateGST, getDayName, getFinancialYear } from '../../lib/utils';
 import { useKeyboardShortcuts } from '../../lib/useKeyboardShortcuts';
 import toast from 'react-hot-toast';
@@ -56,6 +56,15 @@ export default function RetailSalesEntry() {
   const [salesmanId, setSalesmanId] = useState<number | null>(null);
   const [labelNo, setLabelNo] = useState('');
   const [items, setItems] = useState<SalesItem[]>([]);
+
+  // Layaway-conversion state. When the user types a layaway voucher
+  // number (e.g. "LY/5") into the bar-code field we pull the booking
+  // into the form and switch Save to call the layaway convert endpoint
+  // instead of creating a brand-new sale. This keeps the layaway
+  // properly marked CONVERTED and reuses its voucher number / labels.
+  const [layawayId, setLayawayId] = useState<number | null>(null);
+  const [layawayVoucherNo, setLayawayVoucherNo] = useState<string | null>(null);
+  const [layawayPaidAmount, setLayawayPaidAmount] = useState(0);
 
   // Payment state
   const [cashAmount, setCashAmount] = useState(0);
@@ -114,6 +123,26 @@ export default function RetailSalesEntry() {
       setShowVoucherPrint(true);
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to save sales voucher'),
+  });
+
+  // Convert mutation - used when the form was loaded from a layaway
+  // booking. Marks the layaway CONVERTED and creates the matching
+  // SalesVoucher server-side. Returns the new sale voucher id so the
+  // print dialog can open against it.
+  const convertMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => layawayAPI.convert(id, data),
+    onSuccess: (res) => {
+      const { saleVoucherNo, saleVoucherId } = res.data || {};
+      toast.success(`Layaway converted to sale ${saleVoucherNo || ''}!`);
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['layaways'] });
+      queryClient.invalidateQueries({ queryKey: ['labels-list'] });
+      if (saleVoucherId) {
+        setSavedVoucherId(saleVoucherId);
+        setShowVoucherPrint(true);
+      }
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to convert layaway'),
   });
 
   // Load cart items from navigation state (from CartDrawer)
@@ -175,12 +204,106 @@ export default function RetailSalesEntry() {
     })();
   }, [location.state, isCartLoaded]);
 
+  // Pull a layaway booking into the sales form so the user can finalise
+  // it as a sale. Items + customer come from the layaway snapshot;
+  // anything the user already had on screen is replaced.
+  const loadFromLayaway = (entry: any) => {
+    if (!entry) return;
+    if (['CANCELLED', 'CONVERTED', 'EXPIRED'].includes(entry.status)) {
+      toast.error(`Layaway ${entry.voucherNo} is ${entry.status} and cannot be converted`);
+      return;
+    }
+
+    setLayawayId(entry.id);
+    setLayawayVoucherNo(entry.voucherNo);
+    setLayawayPaidAmount(Number(entry.paymentAmount || 0));
+
+    // Customer
+    if (entry.account) {
+      setCustomerId(entry.account.id);
+      setCustomerData(entry.account);
+    }
+
+    // Salesman is stored as a free-text name on layaway; we leave the
+    // FK field blank because the sales screen tracks it by id.
+    setSalesmanId(null);
+
+    // Items - mirror the layaway item rows directly
+    const mapped: SalesItem[] = (entry.items || []).map((it: any) => ({
+      labelNo: it.labelNo,
+      itemName: it.itemName,
+      itemId: it.itemId,
+      labelId: it.labelId ?? undefined,
+      grossWeight: Number(it.grossWeight) || 0,
+      netWeight: Number(it.netWeight) || 0,
+      fineWeight: Number(it.fineWeight) || 0,
+      pcs: Number(it.pcs) || 1,
+      totalPcsAvailable: Number(it.label?.pcsCount ?? it.pcs) || 1,
+      originalGrossWeight: Number(it.grossWeight) || 0,
+      originalNetWeight: Number(it.netWeight) || 0,
+      metalRate: Number(it.metalRate) || 0,
+      metalAmount: Number(it.metalAmount) || 0,
+      diamondWeight: Number(it.diamondWeight) || 0,
+      labourRate: Number(it.labourRate) || 0,
+      labourAmount: Number(it.labourAmount) || 0,
+      otherCharge: Number(it.otherCharge) || 0,
+      discountStAmt: Number(it.discountAmt ?? it.discountStAmt) || 0,
+      totalAmount: Number(it.totalAmount) || 0,
+      taxableAmount: Number(it.taxableAmount) || 0,
+    }));
+    setItems(mapped);
+
+    // Any prior payments are already on the layaway server-side, so
+    // we don't pre-populate the cash/bank inputs here. Whatever the
+    // user enters now becomes the FINAL payment passed to convert().
+    setCashAmount(0);
+    setBankAmount(0);
+    setCardAmount(0);
+    setUpiAmount(0);
+    setOldGoldAmount(0);
+    setOldGoldData(null);
+    setAdvanceAmount(0);
+    setDiscountAmount(0);
+    setDiscountPercent(0);
+    setRoundingDiscount(0);
+
+    setLabelNo('');
+    toast.success(`Loaded layaway ${entry.voucherNo} (Balance Due: ₹${formatIndianNumber(Math.max(0, Number(entry.voucherAmount || 0) - Number(entry.paymentAmount || 0)))})`);
+  };
+
+  // Heuristic: any input containing a slash is treated as a voucher
+  // number candidate (label codes also use slashes, so we still try
+  // the label search first and only fall back to layaway lookup on
+  // miss). When the prefix is unambiguously a layaway one (e.g.
+  // "LY/") we go straight to the layaway endpoint.
+  const looksLikeLayawayVoucher = (raw: string) => /^ly[\s/-]/i.test(raw.trim());
+
   // Add item by label scan
   const handleLabelScan = async () => {
-    if (!labelNo.trim()) return;
+    const raw = labelNo.trim();
+    if (!raw) return;
+
+    // Block scanning new items while a layaway is loaded - the items
+    // belong to that booking and must be converted as a unit.
+    if (layawayId) {
+      toast.error('Clear the loaded layaway before scanning new items');
+      return;
+    }
+
+    // Layaway-first path when the prefix clearly identifies one.
+    if (looksLikeLayawayVoucher(raw)) {
+      try {
+        const res = await layawayAPI.byVoucherNo(raw);
+        loadFromLayaway(res.data);
+        return;
+      } catch {
+        toast.error(`Layaway ${raw} not found`);
+        return;
+      }
+    }
 
     try {
-      const res = await inventoryAPI.searchLabel(labelNo.trim());
+      const res = await inventoryAPI.searchLabel(raw);
       const label = res.data;
 
       if (label.status !== 'IN_STOCK') {
@@ -249,6 +372,16 @@ export default function RetailSalesEntry() {
       setLabelNo('');
       labelInputRef.current?.focus();
     } catch (error) {
+      // Last-ditch fallback: if the label search 404s, try treating
+      // the input as a layaway voucher number. This lets cashiers
+      // type any voucher number without worrying about the prefix.
+      try {
+        const res = await layawayAPI.byVoucherNo(raw);
+        loadFromLayaway(res.data);
+        return;
+      } catch {
+        // ignore
+      }
       toast.error(`Label ${labelNo} not found`);
     }
   };
@@ -260,6 +393,32 @@ export default function RetailSalesEntry() {
   const handleSave = () => {
     if (!customerId) return toast.error('Please select a customer');
     if (items.length === 0) return toast.error('Please add at least one item');
+
+    // Layaway conversion path - delegate to the convert endpoint so
+    // the layaway is marked CONVERTED, labels are released, and the
+    // SalesVoucher is created server-side from the booking snapshot.
+    if (layawayId) {
+      // Pick the first non-zero payment bucket as the final payment
+      // mode (matches what LayawayDetail.tsx accepts today).
+      const buckets: Array<[number, string]> = [
+        [cashAmount, 'Cash'],
+        [bankAmount, 'Bank'],
+        [cardAmount, 'Card'],
+        [upiAmount, 'UPI'],
+        [oldGoldAmount, 'OldGold'],
+      ];
+      const finalAmt = buckets.reduce((s, [amt]) => s + amt, 0);
+      const finalMode = (buckets.find(([amt]) => amt > 0)?.[1]) || 'Cash';
+      convertMutation.mutate({
+        id: layawayId,
+        data: {
+          finalPaymentAmount: finalAmt,
+          finalPaymentMode: finalMode,
+        },
+      });
+      return;
+    }
+
     // Allow payment up to voucher + outstanding balance (if customer owes money)
     const maxAllowedPayment = voucherAmount + (previousOs > 0 ? previousOs : 0);
     if (paymentAmount > maxAllowedPayment) return toast.error('Total payment cannot exceed voucher amount plus outstanding balance');
@@ -335,6 +494,9 @@ export default function RetailSalesEntry() {
     setAdvanceAmount(0);
     setDiscountAmount(0);
     setRoundingDiscount(0);
+    setLayawayId(null);
+    setLayawayVoucherNo(null);
+    setLayawayPaidAmount(0);
   };
 
   // Keyboard shortcuts – use ref to avoid stale closure on handleSave
@@ -448,6 +610,26 @@ export default function RetailSalesEntry() {
 
         {/* Items Table */}
         <div className="panel flex-1 overflow-auto">
+          {layawayId && layawayVoucherNo && (
+            <div
+              data-testid="layaway-banner"
+              className="flex items-center justify-between bg-yellow-50 border-b border-yellow-300 px-3 py-2 text-xs"
+            >
+              <div className="text-yellow-800">
+                <span className="font-semibold">Loaded from Layaway {layawayVoucherNo}</span>
+                <span className="ml-3">Already paid: ₹{formatIndianNumber(layawayPaidAmount)}</span>
+                <span className="ml-3">Balance Due: ₹{formatIndianNumber(Math.max(0, voucherAmount - layawayPaidAmount))}</span>
+                <span className="ml-3 text-yellow-700">Save will convert this layaway to a sale.</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => { resetForm(); }}
+                className="btn-outline text-[11px]"
+              >
+                Clear Layaway
+              </button>
+            </div>
+          )}
           <table className="data-table">
             <thead>
               <tr>
@@ -758,8 +940,12 @@ export default function RetailSalesEntry() {
 
         {/* Save / Print / Close */}
         <div className="flex gap-2 mt-auto">
-          <button onClick={handleSave} className="btn-success flex-1" disabled={saveMutation.isPending}>
-            💾 Save
+          <button
+            onClick={handleSave}
+            className="btn-success flex-1"
+            disabled={saveMutation.isPending || convertMutation.isPending}
+          >
+            {layawayId ? '💾 Convert & Save' : '💾 Save'}
           </button>
           <button
             className={`flex-1 ${savedVoucherId ? 'btn-primary' : 'btn-outline opacity-50'}`}
@@ -797,7 +983,14 @@ export default function RetailSalesEntry() {
       {showVoucherPrint && savedVoucherId && (
         <VoucherPrintDialog
           voucherId={savedVoucherId}
-          onClose={() => setShowVoucherPrint(false)}
+          onClose={() => {
+            // Closing the post-save print/share window finishes the current
+            // voucher. Reset the form so the next entry starts on a clean
+            // screen instead of showing the previously-saved bill.
+            setShowVoucherPrint(false);
+            resetForm();
+            setSavedVoucherId(null);
+          }}
         />
       )}
 

@@ -1138,4 +1138,114 @@ describe('POST /api/layaway/:id/convert', () => {
     expect(salesData.upiAmount).toBe(6796);
     expect(salesData.bankAmount).toBe(0);
   });
+
+  it('returns saleVoucherId so the client can open the print dialog', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(convertedLayaway);
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 0 });
+    mockPrisma.label.update.mockResolvedValue({});
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce({ id: 77, voucherNo: 'LY/1' });
+    mockPrisma.salesItem.create.mockResolvedValue({});
+    mockPrisma.layawayEntry.update.mockResolvedValue({});
+    mockPrisma.layawayStatusHistory.create.mockResolvedValue({});
+
+    const res = await request(app).post('/api/layaway/1/convert').send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.saleVoucherNo).toBe('LY/1');
+    expect(res.body.saleVoucherId).toBe(77);
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// GET /api/layaway/by-voucher?voucherNo=... - Lookup by voucher number
+// ════════════════════════════════════════════════════════════
+describe('GET /api/layaway/by-voucher', () => {
+  it('returns the layaway entry for a valid voucher number', async () => {
+    const entry = {
+      ...CREATED_ENTRY,
+      account: CUSTOMER,
+      branch: BRANCH,
+      items: [{ ...CREATED_ITEM, label: LABEL_1 }],
+      payments: [],
+      statusHistory: [],
+    };
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(entry);
+
+    const res = await request(app).get('/api/layaway/by-voucher').query({ voucherNo: 'LY/1' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.voucherNo).toBe('LY/1');
+    expect(res.body.account.id).toBe(CUSTOMER.id);
+    expect(Array.isArray(res.body.items)).toBe(true);
+    // Verify lookup used the voucher number scoped to the tenant.
+    const where = mockPrisma.layawayEntry.findFirst.mock.calls[0][0].where;
+    expect(where.voucherNo).toBe('LY/1');
+    expect(where.companyId).toBe(1);
+  });
+
+  it('returns 400 when voucherNo query parameter is missing', async () => {
+    const res = await request(app).get('/api/layaway/by-voucher');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('voucherNo is required');
+  });
+
+  it('returns 404 when the voucher number is not found', async () => {
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(null);
+
+    const res = await request(app).get('/api/layaway/by-voucher').query({ voucherNo: 'LY/999' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('Layaway entry not found');
+  });
+
+  it('handles server errors gracefully', async () => {
+    mockPrisma.layawayEntry.findFirst.mockRejectedValueOnce(new Error('DB down'));
+
+    const res = await request(app).get('/api/layaway/by-voucher').query({ voucherNo: 'LY/1' });
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('Failed to fetch layaway entry');
+  });
+
+  it('accepts voucher numbers containing slashes verbatim (regression for %2F path bug)', async () => {
+    // Earlier the route was `/by-voucher/:voucherNo` and the client
+    // URL-encoded the slash. Express decodes %2F to '/' before route
+    // matching, which broke the lookup. The query-string version must
+    // preserve the literal slash all the way to Prisma.
+    const entry = {
+      ...CREATED_ENTRY,
+      voucherNo: 'LY/5',
+      account: CUSTOMER,
+      branch: BRANCH,
+      items: [],
+      payments: [],
+      statusHistory: [],
+    };
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(entry);
+
+    const res = await request(app)
+      .get('/api/layaway/by-voucher')
+      .query({ voucherNo: 'LY/5' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.voucherNo).toBe('LY/5');
+    const where = mockPrisma.layawayEntry.findFirst.mock.calls[0][0].where;
+    expect(where.voucherNo).toBe('LY/5');
+    // And it must NOT have fallen through to the /:id handler.
+    expect(where.id).toBeUndefined();
+  });
+
+  it('does not collide with /:id route when voucherNo contains slashes', async () => {
+    // If `/by-voucher` was wrongly registered after `/:id`, Express
+    // would try to coerce "by-voucher" into an id. Confirm the lookup
+    // never happens against the id field.
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(null);
+
+    await request(app).get('/api/layaway/by-voucher').query({ voucherNo: 'LY/5' });
+
+    const where = mockPrisma.layawayEntry.findFirst.mock.calls[0][0].where;
+    expect(where).toMatchObject({ voucherNo: 'LY/5' });
+    expect(where.id).toBeUndefined();
+  });
 });

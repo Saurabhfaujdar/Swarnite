@@ -156,6 +156,31 @@ router.post('/salesmen', async (req: Request, res: Response) => {
   }
 });
 
+router.delete('/salesmen/:id', async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid salesman id' });
+    }
+
+    const existing = await prisma.salesman.findFirst({
+      where: { id, companyId: req.companyId },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'Salesman not found' });
+    }
+
+    // Soft-delete to preserve referential integrity with historical sales vouchers
+    await prisma.salesman.update({
+      where: { id },
+      data: { isActive: false },
+    });
+    res.json({ message: 'Salesman deactivated' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete salesman' });
+  }
+});
+
 // ============================================================
 // COUNTERS
 // ============================================================
