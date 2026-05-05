@@ -38,7 +38,7 @@ router.get('/', async (req: Request, res: Response) => {
     } : undefined;
 
     // Determine which sources to query based on type filter
-    const queryPayments = typeFilter === 'ALL' || typeFilter === 'ADVANCE' || typeFilter === 'DUE_PAYMENT';
+    const queryPayments = typeFilter === 'ALL' || typeFilter === 'ADVANCE' || typeFilter === 'DUE_PAYMENT' || typeFilter === 'REFUND';
     const querySales = typeFilter === 'ALL' || typeFilter === 'SALE';
     const queryLayaway = typeFilter === 'ALL' || typeFilter === 'LAYAWAY';
 
@@ -51,6 +51,7 @@ router.get('/', async (req: Request, res: Response) => {
       if (accountId) where.accountId = Number(accountId);
       if (typeFilter === 'ADVANCE') where.paymentType = 'ADVANCE';
       if (typeFilter === 'DUE_PAYMENT') where.paymentType = 'DUE_PAYMENT';
+      if (typeFilter === 'REFUND') where.paymentType = 'REFUND';
       if (statusFilter !== 'ALL') where.status = statusFilter as any;
       if (dateFilter) where.paymentDate = dateFilter;
       if (searchStr) {
@@ -144,6 +145,7 @@ router.get('/', async (req: Request, res: Response) => {
         layawayPayWhere.OR = [
           { layaway: { voucherNo: { contains: searchStr, mode: 'insensitive' } } },
           { layaway: { account: { name: { contains: searchStr, mode: 'insensitive' } } } },
+          { layaway: { convertedToSaleId: { contains: searchStr, mode: 'insensitive' } } },
           { narration: { contains: searchStr, mode: 'insensitive' } },
         ];
       }
@@ -154,6 +156,8 @@ router.get('/', async (req: Request, res: Response) => {
           layaway: {
             select: {
               voucherNo: true,
+              status: true,
+              convertedToSaleId: true,
               accountId: true,
               account: { select: accountSelect },
             },
@@ -164,9 +168,13 @@ router.get('/', async (req: Request, res: Response) => {
       for (const lp of layawayPayments) {
         const mode = lp.paymentMode || 'Cash';
         const amt = Number(lp.amount);
+        // After conversion, the layaway booking is folded into a fresh
+        // JGI sales voucher. Re-key historical payments to that new
+        // voucher number so customers see one consistent series.
+        const displayVoucherNo = lp.layaway.convertedToSaleId || lp.layaway.voucherNo;
         allResults.push({
           id: lp.id,
-          receiptNo: lp.layaway.voucherNo,
+          receiptNo: displayVoucherNo,
           paymentDate: lp.paymentDate,
           source: 'LAYAWAY',
           paymentType: 'LAYAWAY',
@@ -185,13 +193,20 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     // 4. Query SchemeInstallment payments (PAID installments)
+    //
+    // Display rule: every scheme — regardless of status (ACTIVE, MATURED,
+    // REDEEMED, CANCELLED) — is collapsed into a single consolidated row
+    // per scheme. Individual installments are tucked under `children` so
+    // the UI can expand them on demand. This keeps the Customer Payments
+    // page tidy when a customer has paid many installments and behaves
+    // identically across all customers regardless of where their scheme
+    // is in its lifecycle.
     const queryScheme = typeFilter === 'ALL' || typeFilter === 'SCHEME';
     if (queryScheme && (statusFilter === 'ALL' || statusFilter === 'ACTIVE')) {
       const schemeInstWhere: Prisma.SchemeInstallmentWhereInput = {
         status: 'PAID',
         scheme: {
           companyId: req.companyId,
-          status: { notIn: ['CANCELLED'] },
         },
       };
       if (accountId) schemeInstWhere.scheme = { ...schemeInstWhere.scheme as any, accountId: Number(accountId) };
@@ -209,7 +224,9 @@ router.get('/', async (req: Request, res: Response) => {
         include: {
           scheme: {
             select: {
+              id: true,
               schemeNo: true,
+              status: true,
               accountId: true,
               account: { select: accountSelect },
             },
@@ -217,15 +234,25 @@ router.get('/', async (req: Request, res: Response) => {
         },
       });
 
+      // Bucket installments by scheme so we can decide per-scheme whether
+      // to emit a consolidated row or individual ones.
+      type Installment = (typeof schemePayments)[number];
+      const bySchemeId = new Map<number, Installment[]>();
       for (const si of schemePayments) {
+        const list = bySchemeId.get(si.scheme.id) ?? [];
+        list.push(si);
+        bySchemeId.set(si.scheme.id, list);
+      }
+
+      const toRow = (si: Installment) => {
         const mode = si.paymentMode || 'Cash';
         const amt = Number(si.amount);
-        allResults.push({
+        return {
           id: si.id,
           receiptNo: si.scheme.schemeNo,
           paymentDate: si.paidDate || si.dueDate,
-          source: 'SCHEME',
-          paymentType: 'SCHEME',
+          source: 'SCHEME' as const,
+          paymentType: 'SCHEME' as const,
           account: si.scheme.account,
           cashAmount: mode === 'Cash' ? amt : 0,
           bankAmount: mode === 'Bank' ? amt : 0,
@@ -236,6 +263,57 @@ router.get('/', async (req: Request, res: Response) => {
           balanceAfter: 0,
           status: 'ACTIVE',
           narration: si.narration || `Scheme ${si.scheme.schemeNo} installment #${si.installmentNo}`,
+          installmentNo: si.installmentNo,
+        };
+      };
+
+      for (const [, installments] of bySchemeId) {
+        const schemeStatus = installments[0].scheme.status; // same scheme → same status
+
+        // Always emit a single consolidated row per scheme so every
+        // customer's payments view stays uniform.
+        const sortedInst = [...installments].sort(
+          (a, b) =>
+            new Date(a.paidDate || a.dueDate).getTime() -
+            new Date(b.paidDate || b.dueDate).getTime(),
+        );
+        const children = sortedInst.map(toRow);
+        const totals = children.reduce(
+          (acc, c) => ({
+            cash: acc.cash + Number(c.cashAmount),
+            bank: acc.bank + Number(c.bankAmount),
+            card: acc.card + Number(c.cardAmount),
+            upi: acc.upi + Number(c.upiAmount),
+            total: acc.total + Number(c.totalAmount),
+          }),
+          { cash: 0, bank: 0, card: 0, upi: 0, total: 0 },
+        );
+        const latest = sortedInst[sortedInst.length - 1];
+        const scheme = latest.scheme;
+
+        allResults.push({
+          // Prefix with `scheme-` so React keys never collide with raw
+          // installment ids and so the FE can detect consolidated rows.
+          id: `scheme-${scheme.id}`,
+          receiptNo: scheme.schemeNo,
+          paymentDate: latest.paidDate || latest.dueDate,
+          source: 'SCHEME' as const,
+          paymentType: 'SCHEME' as const,
+          account: scheme.account,
+          cashAmount: totals.cash,
+          bankAmount: totals.bank,
+          cardAmount: totals.card,
+          upiAmount: totals.upi,
+          totalAmount: totals.total,
+          balanceBefore: 0,
+          balanceAfter: 0,
+          status: 'ACTIVE',
+          narration: `Scheme ${scheme.schemeNo} ${schemeStatus.toLowerCase()} — ${children.length} installment${children.length === 1 ? '' : 's'}`,
+          isConsolidated: true,
+          schemeId: scheme.id,
+          schemeStatus, // 'REDEEMED' | 'CANCELLED'
+          installmentCount: children.length,
+          children,
         });
       }
     }
@@ -360,15 +438,23 @@ router.get('/balance/:accountId', async (req: Request, res: Response) => {
       }
     }
 
-    // Customer payments → credit (customer pays, balance decreases)
+    // Customer payments → credit by default (customer pays us). REFUND
+    // is the inverse — we paid the customer, so it increases what they
+    // owe / reduces their CR balance, i.e. a debit on the ledger.
     for (const p of payments) {
+      const isRefund = p.paymentType === 'REFUND';
+      const amt = Number(p.totalAmount);
       history.push({
         date: new Date(p.paymentDate),
         type: p.paymentType,
         voucherNo: p.receiptNo,
-        debit: 0,
-        credit: Number(p.totalAmount),
-        details: p.narration || `${p.paymentType === 'ADVANCE' ? 'Advance' : 'Due'} payment${Number(p.oldGoldAmount) > 0 ? ` (incl. Old Gold ₹${Number(p.oldGoldAmount).toLocaleString('en-IN')})` : ''}`,
+        debit: isRefund ? amt : 0,
+        credit: isRefund ? 0 : amt,
+        details: p.narration || (
+          isRefund
+            ? `Refund paid to customer${Number(p.oldGoldAmount) > 0 ? ` (incl. Old Gold ₹${Number(p.oldGoldAmount).toLocaleString('en-IN')})` : ''}`
+            : `${p.paymentType === 'ADVANCE' ? 'Advance' : 'Due'} payment${Number(p.oldGoldAmount) > 0 ? ` (incl. Old Gold ₹${Number(p.oldGoldAmount).toLocaleString('en-IN')})` : ''}`
+        ),
       });
     }
 
@@ -446,9 +532,10 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Payment amount must be greater than zero' });
     }
 
-    if (!data.paymentType || !['ADVANCE', 'DUE_PAYMENT'].includes(data.paymentType)) {
-      return res.status(400).json({ error: 'Payment type must be ADVANCE or DUE_PAYMENT' });
+    if (!data.paymentType || !['ADVANCE', 'DUE_PAYMENT', 'REFUND'].includes(data.paymentType)) {
+      return res.status(400).json({ error: 'Payment type must be ADVANCE, DUE_PAYMENT, or REFUND' });
     }
+    const isRefund = data.paymentType === 'REFUND';
 
     const payment = await prisma.$transaction(async (tx) => {
       // Generate receipt number inside transaction to ensure rollback on failure
@@ -482,9 +569,13 @@ router.post('/', async (req: Request, res: Response) => {
 
       const balanceBefore = Number(account.closingBalance);
 
-      // For ADVANCE: customer is paying before a purchase → closingBalance decreases (goes negative = credit)
-      // For DUE_PAYMENT: customer is paying outstanding → closingBalance decreases
-      const balanceAfter = balanceBefore - totalAmount;
+      // For ADVANCE / DUE_PAYMENT: customer is paying us, balance decreases
+      // (CR / advance grows). For REFUND: we are paying the customer back
+      // (e.g. cancelled layaway advance), so balance increases
+      // (CR shrinks toward zero, or moves toward DR if we overpay).
+      const balanceAfter = isRefund
+        ? balanceBefore + totalAmount
+        : balanceBefore - totalAmount;
 
       // Create the payment record
       const paymentRecord = await tx.customerPayment.create({
@@ -560,13 +651,18 @@ router.delete('/:id', async (req: Request, res: Response) => {
       if (!payment) throw new Error('NOT_FOUND');
       if (payment.status !== 'ACTIVE') throw new Error('ALREADY_CANCELLED');
 
-      // Reverse the balance change: add back the payment amount
+      // Reverse the balance change. A REFUND originally INCREASED the
+      // balance (we paid the customer back), so cancelling it must
+      // decrement the balance. Other payment types decreased the balance
+      // and are reversed by incrementing.
+      const reverseDelta = Number(payment.totalAmount);
+      const isRefund = payment.paymentType === 'REFUND';
       await tx.account.update({
         where: { id: payment.accountId },
         data: {
-          closingBalance: {
-            increment: Number(payment.totalAmount),
-          },
+          closingBalance: isRefund
+            ? { decrement: reverseDelta }
+            : { increment: reverseDelta },
         },
       });
 

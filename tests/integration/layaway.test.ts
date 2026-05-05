@@ -369,6 +369,66 @@ describe('GET /api/layaway/:id', () => {
     const res = await request(app).get('/api/layaway/1');
     expect(res.status).toBe(500);
   });
+
+  // ──────────────────────────────────────────────────────────
+  // Voucher-print contract: the layaway list page now opens the
+  // shared VoucherPrintDialog (mode="layaway") which calls
+  // GET /api/layaway/:id. The response must surface every field
+  // the dialog reads (header, items, GST, payment breakdown) so
+  // that the printed invoice and the WhatsApp message both work
+  // without falling back to zeros.
+  // ──────────────────────────────────────────────────────────
+  it('returns every field required by the shared VoucherPrintDialog', async () => {
+    const entry = {
+      ...CREATED_ENTRY,
+      cashAmount: 5000,
+      bankAmount: 2000,
+      cardAmount: 0,
+      upiAmount: 1000,
+      oldGoldAmount: 500,
+      paymentAmount: 8500,
+      dueAmount: 3296,
+      account: { ...CUSTOMER, gstin: '09ABCDE1234F1Z5', pan: 'ABCDE1234F', address: 'Mall Road' },
+      branch: BRANCH,
+      items: [{
+        ...CREATED_ITEM,
+        label: { ...LABEL_1, item: { hsnCode: '711311', purity: { name: '22K' }, metalType: { name: 'Gold' }, itemGroup: { name: 'Bracelet' } } },
+      }],
+      payments: [],
+      statusHistory: [],
+    };
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(entry);
+
+    const res = await request(app).get('/api/layaway/1');
+    expect(res.status).toBe(200);
+
+    // Header / customer info that the dialog banner + invoice header read.
+    expect(res.body.voucherNo).toBe('LY/1');
+    expect(res.body.voucherDate).toBeDefined();
+    expect(Number(res.body.voucherAmount)).toBe(11796);
+    expect(res.body.account?.name).toBe(CUSTOMER.name);
+    expect(res.body.account?.gstin).toBe('09ABCDE1234F1Z5');
+
+    // Tax breakdown
+    expect(Number(res.body.taxableAmount)).toBe(11532);
+    expect(Number(res.body.cgstAmount)).toBe(172);
+    expect(Number(res.body.sgstAmount)).toBe(172);
+
+    // Payment-mode breakdown the dialog renders as separate lines.
+    expect(Number(res.body.cashAmount)).toBe(5000);
+    expect(Number(res.body.bankAmount)).toBe(2000);
+    expect(Number(res.body.upiAmount)).toBe(1000);
+    expect(Number(res.body.oldGoldAmount)).toBe(500);
+    expect(Number(res.body.dueAmount)).toBe(3296);
+
+    // Item rows for the printed table.
+    expect(res.body.items).toHaveLength(1);
+    const it0 = res.body.items[0];
+    expect(it0.itemName).toBe('Bracelet Diamond');
+    expect(Number(it0.totalAmount)).toBe(11796);
+    expect(it0.label?.item?.purity?.name).toBe('22K');
+    expect(it0.label?.item?.hsnCode).toBe('711311');
+  });
 });
 
 // ════════════════════════════════════════════════════════════
@@ -1067,12 +1127,13 @@ describe('POST /api/layaway/:id/convert', () => {
       labourRate: 650, labourAmount: 2082, otherCharge: 0 }],
   };
 
-  it('converts layaway to sale reusing the layaway voucher number', async () => {
+  it('converts layaway to a sale on the JGI sales-voucher series (fresh number, not the LY booking number)', async () => {
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
     mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(convertedLayaway);
     mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 0 });
     mockPrisma.label.update.mockResolvedValue({});
-    mockPrisma.salesVoucher.create.mockResolvedValueOnce({ id: 1, voucherNo: 'LY/1' });
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 42 });
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce({ id: 1, voucherNo: 'JGI/42' });
     mockPrisma.salesItem.create.mockResolvedValue({});
     mockPrisma.layawayEntry.update.mockResolvedValue({});
     mockPrisma.layawayStatusHistory.create.mockResolvedValue({});
@@ -1080,11 +1141,57 @@ describe('POST /api/layaway/:id/convert', () => {
     const res = await request(app).post('/api/layaway/1/convert').send({});
 
     expect(res.status).toBe(200);
-    // Verify SalesVoucher was created with the layaway's voucher number (not a new JGI/ number)
+    // Sales voucher must use the new JGI series, NOT the LY booking number.
     const salesData = mockPrisma.salesVoucher.create.mock.calls[0][0].data;
-    expect(salesData.voucherNo).toBe('LY/1');
-    expect(salesData.voucherPrefix).toBe('LY');
-    expect(salesData.voucherNumber).toBe(1);
+    expect(salesData.voucherNo).toBe('JGI/42');
+    expect(salesData.voucherPrefix).toBe('JGI');
+    expect(salesData.voucherNumber).toBe(42);
+
+    // The voucher sequence upsert must target the SALES entity on the JGI prefix.
+    const seqArgs = mockPrisma.voucherSequence.upsert.mock.calls[0][0];
+    expect(seqArgs.where.companyId_prefix_entityType_financialYear.prefix).toBe('JGI');
+    expect(seqArgs.where.companyId_prefix_entityType_financialYear.entityType).toBe('SALES');
+
+    // The LY booking should be marked CONVERTED with convertedToSaleId
+    // pointing to the new sale voucher number so historical layaway
+    // payments can re-key against it on read.
+    const layawayUpdate = mockPrisma.layawayEntry.update.mock.calls[0][0];
+    expect(layawayUpdate.data.status).toBe('CONVERTED');
+    expect(layawayUpdate.data.convertedToSaleId).toBe('JGI/42');
+
+    // Response also surfaces the new voucher number to the client.
+    expect(res.body.saleVoucherNo).toBe('JGI/42');
+  });
+
+  // Regression: the convert endpoint previously fell back to a hardcoded
+  // financial year ('2025-2026') when the client didn't supply one, which
+  // collided with the live JGI/N series of the *current* FY and threw
+  // "Unique constraint failed on the fields: (`voucherNo`)" at
+  // tx.salesVoucher.create. The client now sends the active FY; the server
+  // must scope the sequence upsert to that FY.
+  it('scopes the sales-voucher sequence to the financial year supplied by the client', async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(convertedLayaway);
+    mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 0 });
+    mockPrisma.label.update.mockResolvedValue({});
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 1115 });
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce({ id: 5, voucherNo: 'JGI/1115' });
+    mockPrisma.salesItem.create.mockResolvedValue({});
+    mockPrisma.layawayEntry.update.mockResolvedValue({});
+    mockPrisma.layawayStatusHistory.create.mockResolvedValue({});
+
+    const res = await request(app).post('/api/layaway/1/convert').send({
+      finalPaymentAmount: 0,
+      finalPaymentMode: 'Cash',
+      financialYear: '2026-2027',
+    });
+
+    expect(res.status).toBe(200);
+    const seqArgs = mockPrisma.voucherSequence.upsert.mock.calls[0][0];
+    expect(seqArgs.where.companyId_prefix_entityType_financialYear.financialYear)
+      .toBe('2026-2027');
+    expect(seqArgs.create.financialYear).toBe('2026-2027');
+    expect(res.body.saleVoucherNo).toBe('JGI/1115');
   });
 
   it('returns 400 for CANCELLED layaway', async () => {
@@ -1123,7 +1230,8 @@ describe('POST /api/layaway/:id/convert', () => {
     mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(partialLay);
     mockPrisma.layawayPayment.create.mockResolvedValue({});
     mockPrisma.account.update.mockResolvedValue({});
-    mockPrisma.salesVoucher.create.mockResolvedValueOnce({ id: 1, voucherNo: 'LY/1' });
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 9 });
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce({ id: 1, voucherNo: 'JGI/9' });
     mockPrisma.layawayEntry.update.mockResolvedValue({});
     mockPrisma.layawayStatusHistory.create.mockResolvedValue({});
 
@@ -1144,7 +1252,8 @@ describe('POST /api/layaway/:id/convert', () => {
     mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(convertedLayaway);
     mockPrisma.label.findUnique.mockResolvedValueOnce({ pcsCount: 0 });
     mockPrisma.label.update.mockResolvedValue({});
-    mockPrisma.salesVoucher.create.mockResolvedValueOnce({ id: 77, voucherNo: 'LY/1' });
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 11 });
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce({ id: 77, voucherNo: 'JGI/11' });
     mockPrisma.salesItem.create.mockResolvedValue({});
     mockPrisma.layawayEntry.update.mockResolvedValue({});
     mockPrisma.layawayStatusHistory.create.mockResolvedValue({});
@@ -1152,7 +1261,7 @@ describe('POST /api/layaway/:id/convert', () => {
     const res = await request(app).post('/api/layaway/1/convert').send({});
 
     expect(res.status).toBe(200);
-    expect(res.body.saleVoucherNo).toBe('LY/1');
+    expect(res.body.saleVoucherNo).toBe('JGI/11');
     expect(res.body.saleVoucherId).toBe(77);
   });
 });

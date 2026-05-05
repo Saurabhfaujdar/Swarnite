@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customerPaymentsAPI, accountsAPI } from '../../lib/api';
 import { formatIndianNumber, getToday, getFinancialYear } from '../../lib/utils';
@@ -17,12 +17,24 @@ export default function CustomerPaymentList() {
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [cancelId, setCancelId] = useState<number | null>(null);
+  // Tracks which consolidated scheme rows are currently expanded.
+  // Default = all collapsed (per requirement: "by default it should be hidden").
+  const [expandedSchemes, setExpandedSchemes] = useState<Set<string>>(new Set());
+
+  const toggleScheme = (rowId: string) => {
+    setExpandedSchemes((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  };
 
   // --- Entry form state ---
   const [showForm, setShowForm] = useState(false);
   const cashRef = useRef<HTMLInputElement>(null);
   const [paymentDate, setPaymentDate] = useState(getToday());
-  const [entryPaymentType, setEntryPaymentType] = useState<'ADVANCE' | 'DUE_PAYMENT'>('ADVANCE');
+  const [entryPaymentType, setEntryPaymentType] = useState<'ADVANCE' | 'DUE_PAYMENT' | 'REFUND'>('ADVANCE');
   const [customerId, setCustomerId] = useState<number | null>(null);
   const [customerData, setCustomerData] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState('');
@@ -39,7 +51,9 @@ export default function CustomerPaymentList() {
 
   const totalAmount = cashAmount + bankAmount + cardAmount + upiAmount;
   const currentBalance = customerData ? Number(customerData.closingBalance || 0) : 0;
-  const balanceAfter = currentBalance - totalAmount;
+  const balanceAfter = entryPaymentType === 'REFUND'
+    ? currentBalance + totalAmount
+    : currentBalance - totalAmount;
 
   // --- Queries ---
   const { data, isLoading } = useQuery({
@@ -207,6 +221,7 @@ export default function CustomerPaymentList() {
                     >
                       <option value="ADVANCE">Advance Payment</option>
                       <option value="DUE_PAYMENT">Due Payment</option>
+                      <option value="REFUND">Refund (Store → Customer)</option>
                     </select>
                   </div>
                   <div className="col-span-2">
@@ -421,8 +436,8 @@ export default function CustomerPaymentList() {
                 <div className="space-y-1">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Type:</span>
-                    <span className={`font-medium ${entryPaymentType === 'ADVANCE' ? 'text-green-700' : 'text-blue-700'}`}>
-                      {entryPaymentType === 'ADVANCE' ? '⬤ Advance' : '⬤ Due Payment'}
+                    <span className={`font-medium ${entryPaymentType === 'ADVANCE' ? 'text-green-700' : entryPaymentType === 'REFUND' ? 'text-red-700' : 'text-blue-700'}`}>
+                      {entryPaymentType === 'ADVANCE' ? '⬤ Advance' : entryPaymentType === 'REFUND' ? '⬤ Refund (Out)' : '⬤ Due Payment'}
                     </span>
                   </div>
                   {customerData && (
@@ -528,6 +543,7 @@ export default function CustomerPaymentList() {
             <option value="ALL">All Types</option>
             <option value="ADVANCE">Advance</option>
             <option value="DUE_PAYMENT">Due Payment</option>
+            <option value="REFUND">Refund (Out)</option>
             <option value="SALE">Sale Payment</option>
             <option value="LAYAWAY">Layaway Payment</option>
             <option value="SCHEME">Scheme Payment</option>
@@ -598,12 +614,46 @@ export default function CustomerPaymentList() {
               ) : payments.length === 0 ? (
                 <tr><td colSpan={12} className="p-8 text-center text-gray-400">No payments found</td></tr>
               ) : (
-                payments.map((p: any) => (
+                payments.map((p: any) => {
+                  const isExpanded = p.isConsolidated && expandedSchemes.has(String(p.id));
+                  return (
+                  <Fragment key={p.id}>
                   <tr
-                    key={p.id}
-                    className={`border-b hover:bg-gray-50 ${p.status === 'CANCELLED' ? 'opacity-50 bg-red-50' : ''}`}
+                    data-testid={p.isConsolidated ? `scheme-consolidated-${p.schemeId}` : undefined}
+                    onClick={p.isConsolidated ? () => toggleScheme(String(p.id)) : undefined}
+                    className={`border-b hover:bg-gray-50 ${p.status === 'CANCELLED' ? 'opacity-50 bg-red-50' : ''} ${p.isConsolidated ? 'cursor-pointer bg-teal-50/40' : ''}`}
                   >
-                    <td className="p-2 font-mono font-medium">{p.receiptNo}</td>
+                    <td className="p-2 font-mono font-medium">
+                      {p.isConsolidated && (
+                        <span
+                          aria-label={isExpanded ? 'Collapse installments' : 'Expand installments'}
+                          className="inline-block w-3 mr-1 text-gray-500"
+                        >
+                          {isExpanded ? '▾' : '▸'}
+                        </span>
+                      )}
+                      {p.receiptNo}
+                      {p.isConsolidated && (
+                        <span
+                          className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            p.schemeStatus === 'REDEEMED'
+                              ? 'bg-purple-100 text-purple-700'
+                              : p.schemeStatus === 'CANCELLED'
+                              ? 'bg-red-100 text-red-700'
+                              : p.schemeStatus === 'MATURED'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-green-100 text-green-700'
+                          }`}
+                        >
+                          {p.schemeStatus}
+                        </span>
+                      )}
+                      {p.isConsolidated && (
+                        <span className="ml-1 text-[10px] text-gray-500">
+                          ({p.installmentCount} inst.)
+                        </span>
+                      )}
+                    </td>
                     <td className="p-2">{new Date(p.paymentDate).toLocaleDateString('en-IN')}</td>
                     <td className="p-2">
                       <span className="font-medium">{p.account?.name}</span>
@@ -614,15 +664,18 @@ export default function CustomerPaymentList() {
                         p.source === 'SALE' ? 'bg-orange-100 text-orange-700' :
                         p.source === 'LAYAWAY' ? 'bg-purple-100 text-purple-700' :
                         p.source === 'SCHEME' ? 'bg-teal-100 text-teal-700' :
+                        p.paymentType === 'REFUND' ? 'bg-red-100 text-red-700' :
                         p.paymentType === 'ADVANCE' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
                       }`}>
-                        {p.source === 'SALE' ? 'Sale' : p.source === 'LAYAWAY' ? 'Layaway' : p.source === 'SCHEME' ? 'Scheme' : p.paymentType === 'ADVANCE' ? 'Advance' : 'Due Payment'}
+                        {p.source === 'SALE' ? 'Sale' : p.source === 'LAYAWAY' ? 'Layaway' : p.source === 'SCHEME' ? 'Scheme' : p.paymentType === 'REFUND' ? 'Refund (Out)' : p.paymentType === 'ADVANCE' ? 'Advance' : 'Due Payment'}
                       </span>
                     </td>
                     <td className="p-2 text-right">{Number(p.cashAmount) > 0 ? formatIndianNumber(Number(p.cashAmount)) : '-'}</td>
                     <td className="p-2 text-right">{Number(p.bankAmount) > 0 ? formatIndianNumber(Number(p.bankAmount)) : '-'}</td>
                     <td className="p-2 text-right">{Number(p.cardAmount) > 0 ? formatIndianNumber(Number(p.cardAmount)) : '-'}</td>
-                    <td className="p-2 text-right font-bold text-green-700">{formatIndianNumber(Number(p.totalAmount))}</td>
+                    <td className={`p-2 text-right font-bold ${p.paymentType === 'REFUND' ? 'text-red-700' : 'text-green-700'}`}>
+                      {p.paymentType === 'REFUND' ? '−' : ''}{formatIndianNumber(Number(p.totalAmount))}
+                    </td>
                     <td className={`p-2 text-right ${Number(p.balanceBefore) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatIndianNumber(Math.abs(Number(p.balanceBefore)))} {Number(p.balanceBefore) > 0 ? 'DR' : 'CR'}
                     </td>
@@ -639,7 +692,7 @@ export default function CustomerPaymentList() {
                     <td className="p-2 text-center">
                       {p.status === 'ACTIVE' && p.source === 'PAYMENT' && (
                         <button
-                          onClick={() => setCancelId(p.id)}
+                          onClick={(e) => { e.stopPropagation(); setCancelId(p.id); }}
                           className="text-red-500 hover:text-red-700 font-bold"
                           title="Cancel payment"
                         >
@@ -648,7 +701,33 @@ export default function CustomerPaymentList() {
                       )}
                     </td>
                   </tr>
-                ))
+                  {isExpanded && Array.isArray(p.children) && p.children.map((c: any) => (
+                    <tr
+                      key={`${p.id}-child-${c.id}`}
+                      data-testid={`scheme-child-${p.schemeId}-${c.installmentNo}`}
+                      className="border-b bg-gray-50/60 text-gray-700"
+                    >
+                      <td className="p-2 pl-8 font-mono text-[11px]">
+                        ┗ #{c.installmentNo}
+                      </td>
+                      <td className="p-2">{new Date(c.paymentDate).toLocaleDateString('en-IN')}</td>
+                      <td className="p-2 text-gray-500 italic">{c.narration}</td>
+                      <td className="p-2 text-center">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-teal-100 text-teal-700">Installment</span>
+                      </td>
+                      <td className="p-2 text-right">{Number(c.cashAmount) > 0 ? formatIndianNumber(Number(c.cashAmount)) : '-'}</td>
+                      <td className="p-2 text-right">{Number(c.bankAmount) > 0 ? formatIndianNumber(Number(c.bankAmount)) : '-'}</td>
+                      <td className="p-2 text-right">{Number(c.cardAmount) > 0 ? formatIndianNumber(Number(c.cardAmount)) : '-'}</td>
+                      <td className="p-2 text-right text-green-700">{formatIndianNumber(Number(c.totalAmount))}</td>
+                      <td className="p-2 text-right text-gray-400">-</td>
+                      <td className="p-2 text-right text-gray-400">-</td>
+                      <td className="p-2 text-center text-gray-400">-</td>
+                      <td className="p-2"></td>
+                    </tr>
+                  ))}
+                  </Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>

@@ -1,14 +1,24 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { salesAPI } from '../lib/api';
+import { salesAPI, layawayAPI } from '../lib/api';
 import { formatIndianNumber, formatWeight, calculateGST, numberToWords } from '../lib/utils';
 import TaxInvoice, { type InvoiceData, type InvoiceItem } from './TaxInvoice';
 import FileAttachments from './FileAttachments';
 import toast from 'react-hot-toast';
 
+export type VoucherPrintMode = 'sales' | 'layaway';
+
 interface VoucherPrintDialogProps {
-  /** Sales voucher ID to load and print */
+  /** Voucher / layaway ID to load and print */
   voucherId: number;
+  /**
+   * Source of the record. Defaults to 'sales' to preserve existing
+   * call-sites; pass 'layaway' to print a LayawayEntry through the
+   * same dialog (its DB shape — voucherNo / voucherDate / voucherAmount
+   * / taxableAmount / cgst / sgst / cash|bank|card|upi|oldGold|due — is
+   * identical to a SalesVoucher for printing purposes).
+   */
+  mode?: VoucherPrintMode;
   onClose: () => void;
 }
 
@@ -42,7 +52,7 @@ const TEMPLATES = [
  * Voucher Format, No of Copies, Template, WhatsApp Text,
  * and action buttons: Setup, Upload Doc, WhatsApp, View, Print, Close
  */
-export default function VoucherPrintDialog({ voucherId, onClose }: VoucherPrintDialogProps) {
+export default function VoucherPrintDialog({ voucherId, mode = 'sales', onClose }: VoucherPrintDialogProps) {
   const [voucherFormat, setVoucherFormat] = useState(VOUCHER_FORMATS[0]);
   const [copies, setCopies] = useState(1);
   const [template, setTemplate] = useState(TEMPLATES[0]);
@@ -51,10 +61,16 @@ export default function VoucherPrintDialog({ voucherId, onClose }: VoucherPrintD
   const [showAttachments, setShowAttachments] = useState(false);
   const invoiceRef = useRef<HTMLDivElement>(null);
 
+  // Source-specific bindings; everything else is shared.
+  const isLayaway = mode === 'layaway';
+  const queryKey = isLayaway ? ['layaway-entry', voucherId] : ['sales-voucher', voucherId];
+  const attachmentsEntityType = isLayaway ? 'LayawayEntry' : 'SalesVoucher';
+  const dialogTitle = isLayaway ? '\uD83D\uDDA8\uFE0F Layaway Print' : '\uD83D\uDDA8\uFE0F Voucher Print';
+
   // Fetch voucher data
   const { data: voucher, isLoading, error } = useQuery({
-    queryKey: ['sales-voucher', voucherId],
-    queryFn: () => salesAPI.get(voucherId).then((r) => r.data),
+    queryKey,
+    queryFn: () => (isLayaway ? layawayAPI.get(voucherId) : salesAPI.get(voucherId)).then((r) => r.data),
     enabled: voucherId > 0,
   });
 
@@ -345,7 +361,7 @@ export default function VoucherPrintDialog({ voucherId, onClose }: VoucherPrintD
         <div className="bg-white rounded-lg shadow-2xl w-[520px] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-2 bg-gray-100 border-b rounded-t-lg">
-            <h3 className="text-sm font-semibold">🖨️ Voucher Print</h3>
+            <h3 className="text-sm font-semibold">{dialogTitle}</h3>
             <button onClick={onClose} className="text-gray-500 hover:text-red-500 text-lg leading-none">&times;</button>
           </div>
 
@@ -479,7 +495,7 @@ export default function VoucherPrintDialog({ voucherId, onClose }: VoucherPrintD
           {showAttachments && voucher && (
             <div className="px-5 pb-4 border-t">
               <div className="text-xs font-semibold mb-2 mt-3">📎 Attached Documents</div>
-              <FileAttachments entityType="SalesVoucher" entityId={voucherId} category="document" />
+              <FileAttachments entityType={attachmentsEntityType} entityId={voucherId} category="document" />
             </div>
           )}
         </div>

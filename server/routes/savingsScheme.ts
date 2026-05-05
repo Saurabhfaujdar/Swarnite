@@ -6,6 +6,31 @@ const router = Router();
 
 router.use(authenticate);
 
+// Cancelling a non-matured scheme forfeits the shop bonus. Older records
+// in the DB still carry the original bonusAmount + bonus-inflated
+// maturityValue; normalize them on the read path so any historical row
+// renders consistently with the new rule. New cancels are also persisted
+// this way (see DELETE /:id), making this idempotent.
+function stripBonusIfCancelled<T extends { status: string; bonusAmount: any; maturityValue: any; totalPaidAmount: any } | null | undefined>(s: T): T {
+  if (!s || s.status !== 'CANCELLED') return s;
+  return { ...(s as any), bonusAmount: 0, maturityValue: Number(s.totalPaidAmount) } as T;
+}
+
+// Maturity value should only include the shop bonus once the scheme
+// has actually matured (every installment paid) or has been redeemed.
+// Older rows were created with the projected bonus baked into
+// maturityValue from day one — normalise them here so the UI never
+// shows a misleading number for ACTIVE schemes.
+function normalizeMaturityValue<T extends { status: string; bonusAmount: any; maturityValue: any; totalPaidAmount: any } | null | undefined>(s: T): T {
+  if (!s) return s;
+  if (s.status === 'MATURED' || s.status === 'REDEEMED') return s;
+  return { ...(s as any), maturityValue: Number(s.totalPaidAmount) } as T;
+}
+
+function normalizeScheme<T extends { status: string; bonusAmount: any; maturityValue: any; totalPaidAmount: any } | null | undefined>(s: T): T {
+  return normalizeMaturityValue(stripBonusIfCancelled(s));
+}
+
 // ============================================================
 // GET /api/savings-scheme - List savings schemes
 // ============================================================
@@ -42,15 +67,100 @@ router.get('/', async (req: Request, res: Response) => {
       orderBy: { startDate: 'desc' },
     });
 
-    const totalMaturityValue = schemes.reduce(
+    const normalized = schemes.map(normalizeScheme);
+    const totalMaturityValue = normalized.reduce(
       (sum, s) => sum + Number(s.maturityValue),
       0,
     );
 
-    res.json({ schemes, totalMaturityValue });
+    res.json({ schemes: normalized, totalMaturityValue });
   } catch (error) {
     console.error('Error fetching savings schemes:', error);
     res.status(500).json({ error: 'Failed to fetch savings schemes' });
+  }
+});
+
+// ============================================================
+// GET /api/savings-scheme/reminders/due - Installments needing a WhatsApp reminder
+// ============================================================
+// Returns PENDING installments whose dueDate falls in the configurable
+// window [today - daysBefore, today + daysAfter] (defaults: 2 / 2).
+// Designed to be cheap & idempotent so an external cron / scheduled
+// task (Cloud Scheduler, Windows Task Scheduler, GitHub Action, etc.)
+// can hit it daily and the UI can show a live "due reminders" badge.
+//
+// MUST be declared before the `/:id` handler so it isn't swallowed
+// by the dynamic route.
+router.get('/reminders/due', async (req: Request, res: Response) => {
+  try {
+    const daysBefore = Math.max(0, Math.min(30, Number(req.query.daysBefore ?? 2)));
+    const daysAfter = Math.max(0, Math.min(30, Number(req.query.daysAfter ?? 2)));
+
+    // Today at 00:00 in server local time. Window is inclusive on both ends.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const windowStart = new Date(today);
+    windowStart.setDate(windowStart.getDate() - daysBefore);
+    const windowEnd = new Date(today);
+    windowEnd.setDate(windowEnd.getDate() + daysAfter);
+    windowEnd.setHours(23, 59, 59, 999);
+
+    const installments = await prisma.schemeInstallment.findMany({
+      where: {
+        status: 'PENDING',
+        dueDate: { gte: windowStart, lte: windowEnd },
+        scheme: {
+          status: 'ACTIVE',
+          ...tenantScope(req),
+        },
+      },
+      orderBy: { dueDate: 'asc' },
+      include: {
+        scheme: {
+          include: {
+            account: { select: { id: true, name: true, mobile: true } },
+          },
+        },
+      },
+    });
+
+    // Bucket by relative due date so the UI can highlight overdue rows.
+    const todayMs = today.getTime();
+    const items = installments.map((inst: any) => {
+      const due = new Date(inst.dueDate);
+      due.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((due.getTime() - todayMs) / 86_400_000);
+      const bucket =
+        diffDays > 0 ? 'upcoming' : diffDays === 0 ? 'today' : 'overdue';
+      return {
+        installmentId: inst.id,
+        installmentNo: inst.installmentNo,
+        dueDate: inst.dueDate,
+        amount: inst.amount,
+        daysFromToday: diffDays,
+        bucket,
+        schemeId: inst.scheme.id,
+        schemeNo: inst.scheme.schemeNo,
+        schemeName: inst.scheme.schemeName,
+        monthlyAmount: inst.scheme.monthlyAmount,
+        customerId: inst.scheme.account?.id ?? null,
+        customerName: inst.scheme.account?.name ?? null,
+        customerMobile: inst.scheme.account?.mobile ?? null,
+      };
+    });
+
+    res.json({
+      window: { daysBefore, daysAfter, from: windowStart, to: windowEnd },
+      total: items.length,
+      counts: {
+        upcoming: items.filter((i) => i.bucket === 'upcoming').length,
+        today: items.filter((i) => i.bucket === 'today').length,
+        overdue: items.filter((i) => i.bucket === 'overdue').length,
+      },
+      items,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch due reminders' });
   }
 });
 
@@ -73,7 +183,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Savings scheme not found' });
     }
 
-    res.json(scheme);
+    res.json(normalizeScheme(scheme));
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch savings scheme' });
   }
@@ -146,7 +256,11 @@ router.post('/', async (req: Request, res: Response) => {
           monthlyAmount,
           bonusMonths,
           bonusAmount,
-          maturityValue: (durationMonths * monthlyAmount) + bonusAmount,
+          // Maturity value reflects the amount currently realisable by the
+          // customer. The shop bonus is only credited once every
+          // installment is paid (status MATURED), so a freshly created
+          // scheme starts at 0.
+          maturityValue: 0,
           narration: data.narration || null,
           reference: data.reference || null,
         },
@@ -178,7 +292,7 @@ router.post('/', async (req: Request, res: Response) => {
       },
     });
 
-    res.status(201).json(fullScheme);
+    res.status(201).json(normalizeScheme(fullScheme));
   } catch (error) {
     console.error('Error creating savings scheme:', error);
     res.status(500).json({ error: 'Failed to create savings scheme' });
@@ -238,15 +352,19 @@ router.post('/:id/installment', async (req: Request, res: Response) => {
       const paidInstallments = scheme.paidInstallments + 1;
       const totalPaidAmount = Number(scheme.totalPaidAmount) + Number(data.amount);
       const bonusAmount = Number(scheme.bonusAmount);
+      const isMatured = paidInstallments >= scheme.durationMonths;
 
       const updateData: any = {
         paidInstallments,
         totalPaidAmount,
-        maturityValue: totalPaidAmount + bonusAmount,
+        // Bonus is only credited when the scheme matures (every
+        // installment paid). Until then, maturityValue tracks the
+        // realisable amount = totalPaidAmount.
+        maturityValue: totalPaidAmount + (isMatured ? bonusAmount : 0),
       };
 
       // Check if all installments are paid → MATURED
-      if (paidInstallments >= scheme.durationMonths) {
+      if (isMatured) {
         updateData.status = 'MATURED';
       }
 
@@ -266,7 +384,7 @@ router.post('/:id/installment', async (req: Request, res: Response) => {
       },
     });
 
-    res.status(201).json(fullScheme);
+    res.status(201).json(normalizeScheme(fullScheme));
   } catch (error: any) {
     console.error('Error paying installment:', error);
     res.status(400).json({ error: error.message || 'Failed to pay installment' });
@@ -382,9 +500,18 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
 
     await prisma.$transaction(async (tx) => {
+      // Cancelling a non-matured scheme forfeits the shop bonus: the customer
+      // only gets back what they actually paid in. Persist this so the
+      // scheme record itself reflects the no-bonus state going forward
+      // (avoids the detail page showing a stale ₹X bonus / inflated
+      // maturity value after cancellation).
       await tx.savingsScheme.update({
         where: { id },
-        data: { status: 'CANCELLED' },
+        data: {
+          status: 'CANCELLED',
+          bonusAmount: 0,
+          maturityValue: Number(scheme.totalPaidAmount),
+        },
       });
 
       // If any amount was paid, credit it back to customer as advance

@@ -407,9 +407,9 @@ export default function LayawayEntry() {
   useKeyboardShortcuts(shortcuts);
 
   return (
-    <div className="flex gap-2 h-[calc(100vh-80px)]">
+    <div className="flex gap-2 flex-1 min-h-0 min-w-0">
       {/* Main Content */}
-      <div className="flex-1 flex flex-col gap-2">
+      <div className="flex-1 min-w-0 flex flex-col gap-2">
         {/* Header */}
         <div className="panel">
           <div className="panel-header flex items-center justify-between">

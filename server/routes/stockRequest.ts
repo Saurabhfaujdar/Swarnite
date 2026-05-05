@@ -152,6 +152,28 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// ── GET /pending-count — Quick badge count for the sidebar ───────────────────
+// Returns the number of PENDING requests addressed to the caller's branch
+// (i.e. requests this branch needs to approve / reject), plus their own
+// outstanding outgoing requests. Cheap by design: two count() calls only.
+// MUST be declared before `/:id` so it isn't swallowed by the dynamic route.
+router.get('/pending-count', async (req: Request, res: Response) => {
+  try {
+    const baseWhere: any = { companyId: req.companyId, status: 'PENDING' };
+    const [incoming, outgoing] = await Promise.all([
+      prisma.stockRequest.count({
+        where: { ...baseWhere, sourceBranchId: req.branchId },
+      }),
+      prisma.stockRequest.count({
+        where: { ...baseWhere, requestingBranchId: req.branchId },
+      }),
+    ]);
+    res.json({ incoming, outgoing });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch pending count' });
+  }
+});
+
 // ── GET /:id — Single request detail ─────────────────────────────────────────
 router.get('/:id', async (req: Request, res: Response) => {
   try {

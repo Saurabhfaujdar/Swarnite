@@ -4,6 +4,7 @@ import { layawayAPI, mastersAPI } from '../../lib/api';
 import { formatIndianNumber, formatDate, getToday } from '../../lib/utils';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import VoucherPrintDialog from '../../components/VoucherPrintDialog';
 
 const STATUS_COLORS: Record<string, string> = {
   ACTIVE: 'bg-green-100 text-green-800',
@@ -25,6 +26,7 @@ export default function LayawayList() {
   const [dateTo, setDateTo] = useState(getToday());
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [printLayawayId, setPrintLayawayId] = useState<number | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['layaways', customerFilter, salesmanFilter, dateFrom, dateTo, statusFilter],
@@ -147,12 +149,13 @@ export default function LayawayList() {
               <th>Pricing Model</th>
               <th>Salesman</th>
               <th>Status</th>
+              <th className="text-center">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={11} className="text-center py-8">Loading...</td></tr>}
+            {isLoading && <tr><td colSpan={12} className="text-center py-8">Loading...</td></tr>}
             {!isLoading && entries.length === 0 && (
-              <tr><td colSpan={11} className="text-center py-8 text-gray-400">No layaway entries found</td></tr>
+              <tr><td colSpan={12} className="text-center py-8 text-gray-400">No layaway entries found</td></tr>
             )}
             {entries.map((entry: any) => {
               const paid = Number(entry.paymentAmount);
@@ -193,6 +196,16 @@ export default function LayawayList() {
                       {entry.status?.replace(/_/g, ' ')}
                     </span>
                   </td>
+                  <td className="text-center">
+                    <button
+                      className="btn-outline text-xs px-2 py-0.5"
+                      onClick={(e) => { e.stopPropagation(); setPrintLayawayId(entry.id); }}
+                      title="Print Layaway"
+                      data-testid={`print-layaway-${entry.id}`}
+                    >
+                      🖨️
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -207,6 +220,15 @@ export default function LayawayList() {
           <span className="font-bold text-blue-700">Total Booking Value: {formatIndianNumber(totalAmount)}</span>
         </div>
       </div>
+
+      {/* Layaway Print Dialog */}
+      {printLayawayId && (
+        <VoucherPrintDialog
+          mode="layaway"
+          voucherId={printLayawayId}
+          onClose={() => setPrintLayawayId(null)}
+        />
+      )}
 
     </div>
   );

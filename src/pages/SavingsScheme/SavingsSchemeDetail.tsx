@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { savingsSchemeAPI } from '../../lib/api';
 import { formatIndianNumber, formatDate } from '../../lib/utils';
+import { buildInstallmentReminder } from '../../lib/installmentReminder';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -99,6 +100,38 @@ export default function SavingsSchemeDetail() {
     return styles[status] || 'bg-gray-100 text-gray-800';
   };
 
+  // A pending installment is "reminder-eligible" when its due date is
+  // within the auto-reminder window: 2 days before, day-of, or already
+  // past (and not yet paid). MISSED rows are always eligible too.
+  const REMINDER_DAYS_BEFORE = 2;
+  const isReminderEligible = (inst: any): boolean => {
+    if (inst.status === 'MISSED') return true;
+    if (inst.status !== 'PENDING') return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(inst.dueDate);
+    due.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((due.getTime() - today.getTime()) / 86_400_000);
+    return diffDays <= REMINDER_DAYS_BEFORE;
+  };
+
+  const handleSendReminder = (inst: any) => {
+    const customerName = scheme.account?.name || 'Customer';
+    const mobile = scheme.account?.mobile;
+    const { url } = buildInstallmentReminder({
+      customerName,
+      mobile,
+      schemeNo: scheme.schemeNo,
+      installmentNo: inst.installmentNo,
+      dueDate: inst.dueDate,
+      amount: Number(scheme.monthlyAmount) || Number(inst.amount) || 0,
+    });
+    window.open(url, '_blank', 'noopener,noreferrer');
+    if (!mobile) {
+      toast('Customer has no mobile number — pick the contact in WhatsApp.', { icon: 'ℹ️' });
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3 h-full">
       {/* Header */}
@@ -178,12 +211,16 @@ export default function SavingsSchemeDetail() {
               <div className="text-xs text-gray-500">Total Paid</div>
               <div className="font-bold text-blue-700">₹ {formatIndianNumber(scheme.totalPaidAmount)}</div>
             </div>
-            <div className="bg-purple-50 p-3 rounded text-center">
-              <div className="text-xs text-gray-500">Bonus ({scheme.bonusMonths} mo)</div>
-              <div className="font-bold text-purple-700">₹ {formatIndianNumber(scheme.bonusAmount)}</div>
-            </div>
+            {scheme.status !== 'CANCELLED' && (
+              <div className="bg-purple-50 p-3 rounded text-center">
+                <div className="text-xs text-gray-500">Bonus ({scheme.bonusMonths} mo)</div>
+                <div className="font-bold text-purple-700">₹ {formatIndianNumber(scheme.bonusAmount)}</div>
+              </div>
+            )}
             <div className="bg-emerald-50 p-3 rounded text-center">
-              <div className="text-xs text-gray-500">Maturity Value</div>
+              <div className="text-xs text-gray-500">
+                {scheme.status === 'CANCELLED' ? 'Refund Amount' : 'Maturity Value'}
+              </div>
               <div className="font-bold text-emerald-700">₹ {formatIndianNumber(scheme.maturityValue)}</div>
             </div>
           </div>
@@ -222,17 +259,30 @@ export default function SavingsSchemeDetail() {
                     </span>
                   </td>
                   <td>
-                    {(inst.status === 'PENDING' || inst.status === 'MISSED') && scheme.status === 'ACTIVE' && (
-                      <button
-                        className="text-blue-600 hover:underline text-xs"
-                        onClick={() => {
-                          setPayInstNo(inst.installmentNo);
-                          setPayAmount(String(scheme.monthlyAmount));
-                        }}
-                      >
-                        Pay
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {(inst.status === 'PENDING' || inst.status === 'MISSED') && scheme.status === 'ACTIVE' && (
+                        <button
+                          className="text-blue-600 hover:underline text-xs"
+                          onClick={() => {
+                            setPayInstNo(inst.installmentNo);
+                            setPayAmount(String(scheme.monthlyAmount));
+                          }}
+                        >
+                          Pay
+                        </button>
+                      )}
+                      {isReminderEligible(inst) && scheme.status === 'ACTIVE' && (
+                        <button
+                          type="button"
+                          data-testid={`send-reminder-${inst.installmentNo}`}
+                          className="text-green-700 hover:underline text-xs"
+                          title="Send WhatsApp reminder for this installment"
+                          onClick={() => handleSendReminder(inst)}
+                        >
+                          💬 Remind
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

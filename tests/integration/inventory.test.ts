@@ -309,6 +309,66 @@ describe('GET /api/inventory/labels/search', () => {
     expect(res.status).toBe(200);
     expect(res.body.labelNo).toBe('GB/13');
   });
+
+  it('exposes activeLayaway link when the label is currently held by an active layaway', async () => {
+    const label = {
+      id: 77,
+      labelNo: 'GN/77',
+      status: 'LAYAWAY',
+      item: ITEM_GOLD_NECKLACE,
+      branch: DUMMY_BRANCH,
+      counter: DUMMY_COUNTER,
+    };
+    mockPrisma.label.findFirst.mockResolvedValueOnce(label);
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce({
+      id: 5,
+      voucherNo: 'LY/5',
+      status: 'ACTIVE',
+    });
+
+    const res = await request(app).get('/api/inventory/labels/search?labelNo=GN/77');
+    expect(res.status).toBe(200);
+    expect(res.body.activeLayaway).toEqual({ id: 5, voucherNo: 'LY/5', status: 'ACTIVE' });
+    // Lookup must filter to non-finalised statuses and key off labelId.
+    const args = mockPrisma.layawayEntry.findFirst.mock.calls[0][0];
+    expect(args.where.items.some.labelId).toBe(77);
+    expect(args.where.status.notIn).toEqual(expect.arrayContaining(['CANCELLED', 'CONVERTED', 'EXPIRED']));
+  });
+
+  it('returns activeLayaway=null when a LAYAWAY-status label has no active booking (orphaned)', async () => {
+    const label = {
+      id: 78,
+      labelNo: 'GN/78',
+      status: 'LAYAWAY',
+      item: ITEM_GOLD_NECKLACE,
+      branch: DUMMY_BRANCH,
+      counter: DUMMY_COUNTER,
+    };
+    mockPrisma.label.findFirst.mockResolvedValueOnce(label);
+    mockPrisma.layawayEntry.findFirst.mockResolvedValueOnce(null);
+
+    const res = await request(app).get('/api/inventory/labels/search?labelNo=GN/78');
+    expect(res.status).toBe(200);
+    expect(res.body.activeLayaway).toBeNull();
+  });
+
+  it('does not look up layawayEntry when the label is not in LAYAWAY status', async () => {
+    const label = {
+      id: 79,
+      labelNo: 'GN/79',
+      status: 'IN_STOCK',
+      item: ITEM_GOLD_NECKLACE,
+      branch: DUMMY_BRANCH,
+      counter: DUMMY_COUNTER,
+    };
+    mockPrisma.label.findFirst.mockResolvedValueOnce(label);
+    mockPrisma.layawayEntry.findFirst.mockClear();
+
+    const res = await request(app).get('/api/inventory/labels/search?labelNo=GN/79');
+    expect(res.status).toBe(200);
+    expect(res.body.activeLayaway).toBeNull();
+    expect(mockPrisma.layawayEntry.findFirst).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/inventory/labels/:id', () => {
@@ -894,15 +954,98 @@ describe('Tag ID feature for label creation', () => {
           grossWeight: 12.5,
           netWeight: 11.8,
           branchId: 1,
-          pcsCount: 5, // Should be overridden to 1 when tagId is provided
+          // pcsCount omitted → defaults to 1
         });
 
       expect(res.status).toBe(201);
       expect(res.body.labelNo).toBe('GN/A001');
       expect(res.body.tagId).toBe('A001');
-      expect(res.body.pcsCount).toBe(1); // Enforced to 1
+      expect(res.body.pcsCount).toBe(1); // Defaulted to 1 when not supplied
+      // Persisted pcsCount must be 1
+      const createArgs = mockPrisma.label.create.mock.calls.at(-1)![0];
+      expect(createArgs.data.pcsCount).toBe(1);
       // Should NOT increment prefix lastNumber when tagId is used
       expect(mockPrisma.labelPrefix.update).not.toHaveBeenCalled();
+    });
+
+    // Regression: tagged labels were previously force-collapsed to pcs=1
+    // even when the user explicitly entered a higher pcs count. Tagged
+    // multi-pc lots are now allowed (e.g. a tagged set of bangles); the
+    // sales side scales weights by pcs ratio when only some pcs are sold.
+    it('honors caller-supplied pcsCount > 1 when tagId is provided', async () => {
+      mockPrisma.item.findUnique.mockResolvedValueOnce(ITEM_GOLD_NECKLACE);
+      mockPrisma.labelPrefix.findUnique.mockResolvedValueOnce(PREFIX_GN);
+      mockPrisma.label.findFirst.mockResolvedValueOnce(null);
+      mockPrisma.label.create.mockResolvedValueOnce({
+        id: 610,
+        labelNo: 'GN/SET01',
+        tagId: 'SET01',
+        prefixId: 1,
+        itemId: 1,
+        grossWeight: 30,
+        netWeight: 28,
+        pcsCount: 4,
+        status: 'IN_STOCK',
+        item: ITEM_GOLD_NECKLACE,
+        branch: DUMMY_BRANCH,
+      });
+
+      const res = await request(app)
+        .post('/api/inventory/labels')
+        .send({
+          prefixId: 1,
+          itemId: 1,
+          tagId: 'SET01',
+          grossWeight: 30,
+          netWeight: 28,
+          branchId: 1,
+          pcsCount: 4, // Tagged set of 4 bangles
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.tagId).toBe('SET01');
+      expect(res.body.pcsCount).toBe(4);
+      const createArgs = mockPrisma.label.create.mock.calls.at(-1)![0];
+      expect(createArgs.data.pcsCount).toBe(4);
+
+      // Per-piece weights derivable for partial-pcs sales:
+      //   per-pc gross = 30 / 4 = 7.5 gm,  per-pc net = 28 / 4 = 7 gm
+      // Selling x pcs => gross = 7.5 * x, net = 7 * x
+      const perPcGross = res.body.grossWeight / res.body.pcsCount;
+      const perPcNet = res.body.netWeight / res.body.pcsCount;
+      expect(perPcGross).toBeCloseTo(7.5, 6);
+      expect(perPcNet).toBeCloseTo(7, 6);
+    });
+
+    it('defaults pcsCount to 1 when not supplied alongside tagId', async () => {
+      mockPrisma.item.findUnique.mockResolvedValueOnce(ITEM_GOLD_NECKLACE);
+      mockPrisma.labelPrefix.findUnique.mockResolvedValueOnce(PREFIX_GN);
+      mockPrisma.label.findFirst.mockResolvedValueOnce(null);
+      mockPrisma.label.create.mockResolvedValueOnce({
+        id: 611,
+        labelNo: 'GN/SOLO',
+        tagId: 'SOLO',
+        pcsCount: 1,
+        status: 'IN_STOCK',
+        item: ITEM_GOLD_NECKLACE,
+        branch: DUMMY_BRANCH,
+      });
+
+      const res = await request(app)
+        .post('/api/inventory/labels')
+        .send({
+          prefixId: 1,
+          itemId: 1,
+          tagId: 'SOLO',
+          grossWeight: 8,
+          netWeight: 7.5,
+          branchId: 1,
+          // pcsCount omitted
+        });
+
+      expect(res.status).toBe(201);
+      const createArgs = mockPrisma.label.create.mock.calls.at(-1)![0];
+      expect(createArgs.data.pcsCount).toBe(1);
     });
 
     it('fails when tagId is missing for item group that requires it', async () => {
@@ -1002,7 +1145,7 @@ describe('Tag ID feature for label creation', () => {
         id: 700,
         labelNo: 'GN/B002',
         tagId: 'B002',
-        pcsCount: 1,
+        pcsCount: 3,
         status: 'IN_STOCK',
       });
 
@@ -1018,7 +1161,11 @@ describe('Tag ID feature for label creation', () => {
       expect(res.body.count).toBe(1);
       expect(res.body.labels[0].labelNo).toBe('GN/B002');
       expect(res.body.labels[0].tagId).toBe('B002');
-      expect(res.body.labels[0].pcsCount).toBe(1); // Enforced to 1
+      // Tagged labels can hold multiple pcs (e.g. a tagged set of bangles).
+      // Sales will scale weights by pcs ratio: per-pc = grossWt / pcsCount.
+      expect(res.body.labels[0].pcsCount).toBe(3);
+      const createArgs = mockPrisma.label.create.mock.calls.at(-1)![0];
+      expect(createArgs.data.pcsCount).toBe(3);
     });
 
     it('fails batch when item requires tagId but none provided', async () => {

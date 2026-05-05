@@ -80,8 +80,10 @@ export default function LabelPreparation() {
       return toast.error(`Tag ID is required for ${item?.itemGroup?.name} items`);
     }
 
-    // Enforce pcs = 1 when tagId is provided
-    const pcsCount = entry.tagId.trim() ? 1 : entry.pcsCount;
+    // pcsCount defaults to 1 but the user may edit it even when a Tag ID
+    // is supplied (e.g. a tagged set of bangles). Sales scale weights
+    // proportionally per pc, so multi-pc tagged labels are valid.
+    const pcsCount = Math.max(1, Number(entry.pcsCount) || 1);
 
     setItems([
       ...items,
@@ -248,11 +250,10 @@ export default function LabelPreparation() {
             <label className="form-label block text-xs">Pcs</label>
             <input
               type="number"
+              min={1}
               className="form-input w-16 text-right"
-              value={entry.tagId ? 1 : entry.pcsCount}
+              value={entry.pcsCount}
               onChange={(e) => setEntry({ ...entry, pcsCount: Number(e.target.value) })}
-              disabled={!!entry.tagId}
-              title={entry.tagId ? 'Pcs is fixed to 1 when Tag ID is provided' : ''}
             />
           </div>
           <div>

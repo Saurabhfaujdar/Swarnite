@@ -105,9 +105,10 @@ describe('CustomerPaymentEntry', () => {
     expect(paymentSelect).toBeTruthy();
 
     const options = paymentSelect!.querySelectorAll('option');
-    expect(options).toHaveLength(2);
+    expect(options).toHaveLength(3);
     expect(options[0].textContent).toBe('Advance Payment');
     expect(options[1].textContent).toBe('Due Payment');
+    expect(options[2].textContent).toMatch(/^Refund/);
   });
 
   it('has cash, bank, card, and UPI amount inputs', () => {
@@ -249,6 +250,57 @@ describe('CustomerPaymentEntry', () => {
     await userEvent.selectOptions(paymentSelect, 'DUE_PAYMENT');
 
     expect(screen.getByText('⬤ Due Payment')).toBeInTheDocument();
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // REFUND — store pays customer back. UI must:
+  //   • surface the option in the payment-type dropdown,
+  //   • show the "Refund (Out)" badge in the summary,
+  //   • forward paymentType: 'REFUND' to the API on save.
+  // ──────────────────────────────────────────────────────────
+  it('exposes a Refund option that forwards paymentType=REFUND on save', async () => {
+    // Customer with prior advance — the typical refund scenario.
+    mockAccountsGet.mockResolvedValue({
+      data: { id: 11, name: 'Priya', mobile: '9999999999', closingBalance: -8000, balanceType: 'CR' },
+    });
+    mockAccountsList.mockResolvedValue({
+      data: { accounts: [{ id: 11, name: 'Priya', mobile: '9999999999', closingBalance: -8000, balanceType: 'CR' }] },
+    });
+    mockCreate.mockResolvedValue({ data: { id: 50, receiptNo: 'CPR/50', account: { closingBalance: 0, balanceType: 'NONE' } } });
+
+    renderWithQuery(<CustomerPaymentEntry />);
+
+    // Pick the payment-type dropdown by its options.
+    const selects = screen.getAllByRole('combobox');
+    const paymentSelect = selects.find((s) =>
+      Array.from(s.querySelectorAll('option')).some((o) => o.textContent?.startsWith('Refund'))
+    )!;
+    expect(paymentSelect).toBeDefined();
+    await userEvent.selectOptions(paymentSelect, 'REFUND');
+
+    // Summary badge flips to the refund label.
+    expect(screen.getByText(/Refund \(Out\)/)).toBeInTheDocument();
+
+    // Pick a customer via the search box → option list.
+    const searchBox = screen.getByPlaceholderText(/Search customer/i);
+    await userEvent.type(searchBox, 'Pr');
+    const customerOption = await screen.findByText(/Priya/);
+    await userEvent.click(customerOption);
+
+    // Enter a cash amount.
+    const cashInputs = screen.getAllByRole('spinbutton');
+    await userEvent.clear(cashInputs[0]);
+    await userEvent.type(cashInputs[0], '8000');
+
+    // Save.
+    const saveBtn = screen.getByRole('button', { name: /Save Payment/i });
+    await userEvent.click(saveBtn);
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalled());
+    const payload = mockCreate.mock.calls[0][0];
+    expect(payload.paymentType).toBe('REFUND');
+    expect(payload.cashAmount).toBe(8000);
+    expect(payload.accountId).toBe(11);
   });
 });
 

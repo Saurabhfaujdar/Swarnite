@@ -982,6 +982,7 @@ model CustomerPayment {
 enum PaymentType {
   ADVANCE
   DUE_PAYMENT
+  REFUND
 }
 
 // ============================================================

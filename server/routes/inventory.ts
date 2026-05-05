@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { Prisma } from '@prisma/client';
-import { authenticate, branchWhere, canAccessBranch } from '../middleware/branchAccess';
+import { authenticate, branchWhere, canAccessBranch, tenantScope } from '../middleware/branchAccess';
 
 const router = Router();
 
@@ -93,7 +93,27 @@ router.get('/labels/search', async (req: Request, res: Response) => {
       },
     });
     if (!label) return res.status(404).json({ error: 'Label not found' });
-    res.json(label);
+
+    // When the label is locked to a layaway, surface the booking that
+    // currently holds it so the Sales Entry page can auto-load the
+    // layaway and convert it instead of showing a dead-end "not in
+    // stock" error. We look for any layaway whose items include this
+    // label and whose status hasn't already been finalised.
+    let activeLayaway: { id: number; voucherNo: string; status: string } | null = null;
+    if (label.status === 'LAYAWAY') {
+      const entry = await prisma.layawayEntry.findFirst({
+        where: {
+          ...tenantScope(req),
+          status: { notIn: ['CANCELLED', 'CONVERTED', 'EXPIRED'] },
+          items: { some: { labelId: label.id } },
+        },
+        select: { id: true, voucherNo: true, status: true },
+        orderBy: { voucherDate: 'desc' },
+      });
+      if (entry) activeLayaway = entry;
+    }
+
+    res.json({ ...label, activeLayaway });
   } catch (error) {
     res.status(500).json({ error: 'Failed to search label' });
   }
@@ -141,8 +161,11 @@ router.post('/labels', async (req: Request, res: Response) => {
       return res.status(400).json({ error: `Tag ID is required for ${item.itemGroup.name} items` });
     }
 
-    // If tagId is provided, enforce pcs = 1
-    const pcsCount = tagId ? 1 : (data.pcsCount || 1);
+    // pcsCount defaults to 1 (typical for tagged single items) but is
+    // editable; tagged labels may legitimately represent multi-pc lots
+    // (e.g. a tagged set of bangles) where downstream sales scale weights
+    // by pcs ratio.
+    const pcsCount = Math.max(1, Number(data.pcsCount) || 1);
 
     let labelNo: string;
     let prefixRecord;
@@ -249,8 +272,9 @@ router.post('/labels/batch', async (req: Request, res: Response) => {
         return res.status(400).json({ error: `Tag ID is required for ${item.itemGroup.name} items` });
       }
 
-      // If tagId is provided, enforce pcs = 1
-      const pcsCount = tagId ? 1 : (data.pcsCount || 1);
+      // pcsCount defaults to 1 but is editable even when tagId is set;
+      // sales scale weights proportionally by pcs ratio.
+      const pcsCount = Math.max(1, Number(data.pcsCount) || 1);
 
       // Resolve counterId: use top-level counterId, per-item counterId, or look up by counterCode
       let itemCounterId = counterId || data.counterId;

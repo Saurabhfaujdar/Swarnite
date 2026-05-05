@@ -585,10 +585,34 @@ router.post('/:id/convert', async (req: Request, res: Response) => {
         }
       }
 
-      // Reuse the layaway voucher number for consistency across payments
-      const saleVoucherNo = layaway.voucherNo;
-      const voucherPrefix = layaway.voucherPrefix;
-      const voucherNumber = layaway.voucherNumber;
+      // Generate a fresh JGI sales voucher number so the converted
+      // sale joins the regular sales-voucher series instead of reusing
+      // the LY/N booking number. Customer payments + ledger entries
+      // can then be re-keyed against this number for a single source
+      // of truth across the lifecycle.
+      const salesPrefix = 'JGI';
+      const financialYear = data.financialYear || '2025-2026';
+      const saleSeq = await tx.voucherSequence.upsert({
+        where: {
+          companyId_prefix_entityType_financialYear: {
+            companyId: req.companyId!,
+            prefix: salesPrefix,
+            entityType: 'SALES',
+            financialYear,
+          },
+        },
+        update: { lastNumber: { increment: 1 } },
+        create: {
+          companyId: req.companyId!,
+          prefix: salesPrefix,
+          entityType: 'SALES',
+          financialYear,
+          lastNumber: 1,
+        },
+      });
+      const saleVoucherNo = `${salesPrefix}/${saleSeq.lastNumber}`;
+      const voucherPrefix = salesPrefix;
+      const voucherNumber = saleSeq.lastNumber;
 
       // Calculate total payment amount including final payment
       const finalAmt = Number(data.finalPaymentAmount) || 0;

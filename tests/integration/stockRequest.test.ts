@@ -171,6 +171,61 @@ describe('GET /api/stock-requests', () => {
 });
 
 // ══════════════════════════════════════════════════════════
+// GET /api/stock-requests/pending-count
+// ══════════════════════════════════════════════════════════
+describe('GET /api/stock-requests/pending-count', () => {
+  it('returns separate incoming + outgoing PENDING counts for the caller branch', async () => {
+    mockPrisma.stockRequest.count
+      .mockResolvedValueOnce(3) // incoming → sourceBranchId == req.branchId
+      .mockResolvedValueOnce(1); // outgoing → requestingBranchId == req.branchId
+
+    const res = await request(app).get('/api/stock-requests/pending-count');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ incoming: 3, outgoing: 1 });
+    expect(mockPrisma.stockRequest.count).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.stockRequest.count).toHaveBeenNthCalledWith(1, {
+      where: { companyId: 1, status: 'PENDING', sourceBranchId: 1 },
+    });
+    expect(mockPrisma.stockRequest.count).toHaveBeenNthCalledWith(2, {
+      where: { companyId: 1, status: 'PENDING', requestingBranchId: 1 },
+    });
+  });
+
+  it('returns zeros when nothing is pending (does not 404)', async () => {
+    mockPrisma.stockRequest.count.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
+
+    const res = await request(app).get('/api/stock-requests/pending-count');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ incoming: 0, outgoing: 0 });
+  });
+
+  it('is matched as a literal route, not as /:id (regression)', async () => {
+    // If /pending-count were registered after /:id, Express would route this
+    // to the :id handler, which calls findUnique (not count) and would 404
+    // because Number('pending-count') is NaN. Asserting count was called
+    // proves the literal route wins.
+    mockPrisma.stockRequest.count.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
+
+    const res = await request(app).get('/api/stock-requests/pending-count');
+
+    expect(res.status).toBe(200);
+    expect(mockPrisma.stockRequest.count).toHaveBeenCalled();
+    expect(mockPrisma.stockRequest.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 when prisma throws', async () => {
+    mockPrisma.stockRequest.count.mockRejectedValueOnce(new Error('db down'));
+
+    const res = await request(app).get('/api/stock-requests/pending-count');
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toMatch(/pending count/i);
+  });
+});
+
+// ══════════════════════════════════════════════════════════
 // GET /api/stock-requests/:id
 // ══════════════════════════════════════════════════════════
 describe('GET /api/stock-requests/:id', () => {

@@ -178,6 +178,7 @@ export const stockRequestAPI = {
   branches: () => api.get('/stock-requests/branches'),
   browse: (params?: any) => api.get('/stock-requests/browse', { params }),
   list: (params?: any) => api.get('/stock-requests', { params }),
+  pendingCount: () => api.get('/stock-requests/pending-count'),
   get: (id: number) => api.get(`/stock-requests/${id}`),
   create: (data: any) => api.post('/stock-requests', data),
   approve: (id: number) => api.put(`/stock-requests/${id}/approve`),
@@ -249,6 +250,8 @@ export const savingsSchemeAPI = {
   markMissed: (id: number) => api.put(`/savings-scheme/${id}/mark-missed`),
   redeem: (id: number) => api.put(`/savings-scheme/${id}/redeem`),
   cancel: (id: number) => api.delete(`/savings-scheme/${id}`),
+  dueReminders: (params?: { daysBefore?: number; daysAfter?: number }) =>
+    api.get('/savings-scheme/reminders/due', { params }),
 };
 
 // Files / Attachments

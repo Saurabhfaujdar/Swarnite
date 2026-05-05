@@ -93,11 +93,27 @@ export default function RetailSalesEntry() {
   const gst = calculateGST(taxableAmount);
   const totalAmountBeforeDisc = taxableAmount + gst.total;
   const voucherAmount = Math.round(totalAmountBeforeDisc - discountAmount - roundingDiscount);
-  const paymentAmount = cashAmount + bankAmount + cardAmount + upiAmount + oldGoldAmount + advanceAmount;
+  // Money the cashier is collecting in THIS session (not counting any
+  // amount already paid into the layaway before conversion).
+  const newPaymentAmount = cashAmount + bankAmount + cardAmount + upiAmount + oldGoldAmount + advanceAmount;
+  // Total payment recorded against the voucher = what was already paid
+  // via the layaway booking + what the cashier collects now.
+  const paymentAmount = newPaymentAmount + (layawayId ? layawayPaidAmount : 0);
   const dueAmount = voucherAmount - paymentAmount;
   const previousOs = customerData ? Number(customerData.closingBalance || 0) : 0;
   const availableAdvance = previousOs < 0 ? Math.abs(previousOs) : 0;
-  const finalDue = dueAmount + previousOs + advanceAmount;
+  // For a normal sale: customer's outstanding after this sale =
+  //   (this sale's due) + (their prior O/S) + (advance applied — which we
+  //   add back because it was already counted as payment but it actually
+  //   came from the customer's existing CR balance).
+  // For a layaway conversion: previousOs ALREADY contains the unpaid
+  // portion of this layaway (the layaway creation incremented
+  // closingBalance by its dueAmount, and each layaway payment
+  // decremented it). So we don't add the voucher's dueAmount again —
+  // we just net the cashier's new collection against previousOs.
+  const finalDue = layawayId
+    ? previousOs - newPaymentAmount
+    : dueAmount + previousOs + advanceAmount;
 
   // Queries
   const { data: customers } = useQuery({
@@ -306,6 +322,29 @@ export default function RetailSalesEntry() {
       const res = await inventoryAPI.searchLabel(raw);
       const label = res.data;
 
+      // If the label is currently held by an active layaway, treat the
+      // scan as "load that layaway for conversion" instead of erroring
+      // out with a "not in stock" message. The label-search response
+      // includes `activeLayaway` for exactly this case (see
+      // /api/inventory/labels/search).
+      if (label.status === 'LAYAWAY' && label.activeLayaway?.id) {
+        try {
+          const lay = await layawayAPI.get(label.activeLayaway.id);
+          loadFromLayaway(lay.data);
+          setLabelNo('');
+          labelInputRef.current?.focus();
+          toast.success(
+            `Loaded layaway ${label.activeLayaway.voucherNo} for label ${label.labelNo}`,
+          );
+          return;
+        } catch {
+          toast.error(
+            `Could not load layaway ${label.activeLayaway.voucherNo} for label ${label.labelNo}`,
+          );
+          return;
+        }
+      }
+
       if (label.status !== 'IN_STOCK') {
         toast.error(`Label ${labelNo} is not in stock (${label.status})`);
         return;
@@ -507,15 +546,26 @@ export default function RetailSalesEntry() {
     F5: () => cashInputRef.current?.focus(),
     F6: () => bankInputRef.current?.focus(),
     F7: () => cardInputRef.current?.focus(),
-    F10: () => { setCashAmount(voucherAmount); cashInputRef.current?.focus(); },
+    F10: () => {
+      // Cash Effect — F10 dumps the remaining DUE into the cash bucket.
+      // For a normal sale that's the full voucher amount; for a layaway
+      // conversion it's only the unpaid portion (voucher − already
+      // paid via the layaway), since the rest was already collected
+      // when the booking was opened.
+      const remaining = layawayId
+        ? Math.max(0, voucherAmount - layawayPaidAmount)
+        : voucherAmount;
+      setCashAmount(remaining);
+      cashInputRef.current?.focus();
+    },
     F12: () => handleSaveRef.current(),
   }), [voucherAmount]);
   useKeyboardShortcuts(shortcuts);
 
   return (
-    <div className="flex gap-2 h-[calc(100vh-80px)]">
+    <div className="flex gap-2 flex-1 min-h-0 min-w-0">
       {/* Main Content */}
-      <div className="flex-1 flex flex-col gap-2">
+      <div className="flex-1 min-w-0 flex flex-col gap-2">
         {/* Header: Item Name / Bar Code */}
         <div className="panel">
           <div className="panel-header flex items-center justify-between">
@@ -608,8 +658,10 @@ export default function RetailSalesEntry() {
           </div>
         )}
 
-        {/* Items Table */}
-        <div className="panel flex-1 overflow-auto">
+        {/* Items Table — wrapper scrolls vertically; inner div scrolls
+            horizontally so narrow laptops get an honest scrollbar instead
+            of crushed columns. */}
+        <div className="panel flex-1 min-h-0 overflow-y-auto">
           {layawayId && layawayVoucherNo && (
             <div
               data-testid="layaway-banner"
@@ -630,7 +682,8 @@ export default function RetailSalesEntry() {
               </button>
             </div>
           )}
-          <table className="data-table">
+          <div className="overflow-x-auto">
+          <table className="data-table min-w-[1100px]">
             <thead>
               <tr>
                 <th>Label No.</th>
@@ -681,6 +734,7 @@ export default function RetailSalesEntry() {
               )}
             </tbody>
           </table>
+          </div>
 
           {/* Totals row */}
           {items.length > 0 && (
@@ -759,8 +813,9 @@ export default function RetailSalesEntry() {
           </div>
         </div>
 
-        {/* Function Keys */}
-        <div className="flex gap-1 flex-wrap">
+        {/* Function Keys — single horizontally-scrollable strip so narrow
+             laptops don't push the bottom row behind the status bar. */}
+        <div className="flex gap-1 flex-nowrap overflow-x-auto pb-1">
           {[
             { label: 'Customer', key: 'F2', action: () => setShowCustomerModal(true) },
             { label: 'Voucher No', key: 'F3' },
@@ -771,7 +826,13 @@ export default function RetailSalesEntry() {
             { label: 'Narration', key: '' },
             { label: 'Quotation', key: 'F8' },
             { label: 'Quotation Print', key: 'F9' },
-            { label: 'Cash Effect', key: 'F10', action: () => { setCashAmount(voucherAmount); cashInputRef.current?.focus(); } },
+            { label: 'Cash Effect', key: 'F10', action: () => {
+              const remaining = layawayId
+                ? Math.max(0, voucherAmount - layawayPaidAmount)
+                : voucherAmount;
+              setCashAmount(remaining);
+              cashInputRef.current?.focus();
+            } },
             { label: 'Extra Charge', key: '' },
             { label: 'Void Line', key: '' },
             { label: 'Discount', key: '' },
@@ -920,13 +981,21 @@ export default function RetailSalesEntry() {
             <span>Voucher Amt</span>
             <span className="text-blue-700">{formatIndianNumber(voucherAmount)}</span>
           </div>
+          {layawayId && layawayPaidAmount > 0 && (
+            <div className="voucher-detail-row" data-testid="layaway-already-paid-row">
+              <span>Layaway Paid</span>
+              <span className="text-green-700">{formatIndianNumber(layawayPaidAmount)}</span>
+            </div>
+          )}
           <div className="voucher-detail-row font-medium">
             <span>Payment Amt</span>
             <span className="text-green-700">{formatIndianNumber(paymentAmount)}</span>
           </div>
           <div className="voucher-detail-row font-medium">
             <span>Due Amt</span>
-            <span className="text-red-600">-{formatIndianNumber(Math.abs(dueAmount))}</span>
+            <span className={dueAmount < 0 ? 'text-green-700' : 'text-red-600'}>
+              {dueAmount < 0 ? '-' : ''}{formatIndianNumber(Math.abs(dueAmount))}
+            </span>
           </div>
           <div className="voucher-detail-row">
             <span>Previous O/S</span>

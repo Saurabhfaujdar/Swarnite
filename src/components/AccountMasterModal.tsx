@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, Fragment } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { accountsAPI, customerPaymentsAPI } from '../lib/api';
 import { formatIndianNumber } from '../lib/utils';
@@ -136,6 +136,19 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
   const [gstSearchInput, setGstSearchInput] = useState('');
   const [gstResult, setGstResult] = useState<GSTSearchResult | null>(null);
   const [activeTab, setActiveTab] = useState<'address' | 'tds' | 'metal' | 'bill' | 'payments' | 'history' | 'whatsapp'>('address');
+
+  // Tracks which consolidated scheme rows are currently expanded in the
+  // Payments tab. Mirrors the behaviour of the standalone Customer
+  // Payments page so the in-modal view stays consistent.
+  const [expandedSchemes, setExpandedSchemes] = useState<Set<string>>(new Set());
+  const toggleScheme = (rowId: string) => {
+    setExpandedSchemes((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  };
 
   // Reset form when modal opens
   useEffect(() => {
@@ -653,27 +666,87 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                           </tr>
                         </thead>
                         <tbody>
-                          {paymentsQuery.data.payments.map((p: any) => (
-                            <tr key={`${p.source}-${p.id}`} className="border-b hover:bg-gray-50">
-                              <td className="p-1.5 font-mono">{p.receiptNo}</td>
+                          {paymentsQuery.data.payments.map((p: any) => {
+                            const isExpanded = p.isConsolidated && expandedSchemes.has(String(p.id));
+                            return (
+                            <Fragment key={`${p.source}-${p.id}`}>
+                            <tr
+                              data-testid={p.isConsolidated ? `modal-scheme-consolidated-${p.schemeId}` : undefined}
+                              onClick={p.isConsolidated ? () => toggleScheme(String(p.id)) : undefined}
+                              className={`border-b hover:bg-gray-50 ${p.isConsolidated ? 'cursor-pointer bg-teal-50/40' : ''}`}
+                            >
+                              <td className="p-1.5 font-mono">
+                                {p.isConsolidated && (
+                                  <span
+                                    aria-label={isExpanded ? 'Collapse installments' : 'Expand installments'}
+                                    className="inline-block w-3 mr-1 text-gray-500"
+                                  >
+                                    {isExpanded ? '▾' : '▸'}
+                                  </span>
+                                )}
+                                {p.receiptNo}
+                                {p.isConsolidated && (
+                                  <span
+                                    className={`ml-2 px-1 py-0.5 rounded text-[9px] font-semibold ${
+                                      p.schemeStatus === 'REDEEMED'
+                                        ? 'bg-purple-100 text-purple-700'
+                                        : p.schemeStatus === 'CANCELLED'
+                                        ? 'bg-red-100 text-red-700'
+                                        : p.schemeStatus === 'MATURED'
+                                        ? 'bg-blue-100 text-blue-700'
+                                        : 'bg-green-100 text-green-700'
+                                    }`}
+                                  >
+                                    {p.schemeStatus}
+                                  </span>
+                                )}
+                                {p.isConsolidated && (
+                                  <span className="ml-1 text-[9px] text-gray-500">
+                                    ({p.installmentCount} inst.)
+                                  </span>
+                                )}
+                              </td>
                               <td className="p-1.5">{new Date(p.paymentDate).toLocaleDateString('en-IN')}</td>
                               <td className="p-1.5 text-center">
                                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                                   p.source === 'SALE' ? 'bg-orange-100 text-orange-700' :
                                   p.source === 'LAYAWAY' ? 'bg-purple-100 text-purple-700' :
                                   p.source === 'SCHEME' ? 'bg-teal-100 text-teal-700' :
+                                  p.paymentType === 'REFUND' ? 'bg-red-100 text-red-700' :
                                   p.paymentType === 'ADVANCE' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
                                 }`}>
-                                  {p.source === 'SALE' ? 'Sale' : p.source === 'LAYAWAY' ? 'Layaway' : p.source === 'SCHEME' ? 'Scheme' : p.paymentType === 'ADVANCE' ? 'Advance' : 'Due Payment'}
+                                  {p.source === 'SALE' ? 'Sale' : p.source === 'LAYAWAY' ? 'Layaway' : p.source === 'SCHEME' ? 'Scheme' : p.paymentType === 'REFUND' ? 'Refund (Out)' : p.paymentType === 'ADVANCE' ? 'Advance' : 'Due Payment'}
                                 </span>
                               </td>
                               <td className="p-1.5 text-right">{Number(p.cashAmount) > 0 ? formatIndianNumber(Number(p.cashAmount)) : '-'}</td>
                               <td className="p-1.5 text-right">{Number(p.bankAmount) > 0 ? formatIndianNumber(Number(p.bankAmount)) : '-'}</td>
                               <td className="p-1.5 text-right">{Number(p.cardAmount) > 0 ? formatIndianNumber(Number(p.cardAmount)) : '-'}</td>
                               <td className="p-1.5 text-right">{Number(p.upiAmount) > 0 ? formatIndianNumber(Number(p.upiAmount)) : '-'}</td>
-                              <td className="p-1.5 text-right font-bold text-green-700">{formatIndianNumber(Number(p.totalAmount))}</td>
+                              <td className={`p-1.5 text-right font-bold ${p.paymentType === 'REFUND' ? 'text-red-700' : 'text-green-700'}`}>
+                                {p.paymentType === 'REFUND' ? '−' : ''}{formatIndianNumber(Number(p.totalAmount))}
+                              </td>
                             </tr>
-                          ))}
+                            {isExpanded && Array.isArray(p.children) && p.children.map((c: any) => (
+                              <tr
+                                key={`${p.id}-child-${c.id}`}
+                                data-testid={`modal-scheme-child-${p.schemeId}-${c.installmentNo}`}
+                                className="border-b bg-gray-50/60 text-gray-700"
+                              >
+                                <td className="p-1.5 pl-6 font-mono text-[10px]">┗ #{c.installmentNo}</td>
+                                <td className="p-1.5">{new Date(c.paymentDate).toLocaleDateString('en-IN')}</td>
+                                <td className="p-1.5 text-center">
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-teal-100 text-teal-700">Installment</span>
+                                </td>
+                                <td className="p-1.5 text-right">{Number(c.cashAmount) > 0 ? formatIndianNumber(Number(c.cashAmount)) : '-'}</td>
+                                <td className="p-1.5 text-right">{Number(c.bankAmount) > 0 ? formatIndianNumber(Number(c.bankAmount)) : '-'}</td>
+                                <td className="p-1.5 text-right">{Number(c.cardAmount) > 0 ? formatIndianNumber(Number(c.cardAmount)) : '-'}</td>
+                                <td className="p-1.5 text-right">{Number(c.upiAmount) > 0 ? formatIndianNumber(Number(c.upiAmount)) : '-'}</td>
+                                <td className="p-1.5 text-right text-green-700">{formatIndianNumber(Number(c.totalAmount))}</td>
+                              </tr>
+                            ))}
+                            </Fragment>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { layawayAPI } from '../../lib/api';
-import { formatIndianNumber, formatDate, formatWeight } from '../../lib/utils';
+import { formatIndianNumber, formatDate, formatWeight, getFinancialYear } from '../../lib/utils';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -102,6 +102,7 @@ export default function LayawayDetail() {
       finalPaymentAmount: Number(finalPaymentAmount) || 0,
       finalPaymentMode,
       saleVoucherNo: saleVoucherNo || null,
+      financialYear: getFinancialYear(),
     });
   };
 

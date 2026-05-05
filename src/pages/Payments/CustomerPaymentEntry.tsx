@@ -14,7 +14,7 @@ export default function CustomerPaymentEntry() {
 
   // Form state
   const [paymentDate, setPaymentDate] = useState(getToday());
-  const [paymentType, setPaymentType] = useState<'ADVANCE' | 'DUE_PAYMENT'>('ADVANCE');
+  const [paymentType, setPaymentType] = useState<'ADVANCE' | 'DUE_PAYMENT' | 'REFUND'>('ADVANCE');
   const [customerId, setCustomerId] = useState<number | null>(null);
   const [customerData, setCustomerData] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState('');
@@ -32,7 +32,9 @@ export default function CustomerPaymentEntry() {
   // Totals
   const totalAmount = cashAmount + bankAmount + cardAmount + upiAmount;
   const currentBalance = customerData ? Number(customerData.closingBalance || 0) : 0;
-  const balanceAfter = currentBalance - totalAmount;
+  // REFUND is store → customer (pay-out), so balance moves the other way.
+  const isRefund = paymentType === 'REFUND';
+  const balanceAfter = isRefund ? currentBalance + totalAmount : currentBalance - totalAmount;
 
   // Customer search / fetch
   const { data: customers } = useQuery({
@@ -156,6 +158,7 @@ export default function CustomerPaymentEntry() {
                 >
                   <option value="ADVANCE">Advance Payment</option>
                   <option value="DUE_PAYMENT">Due Payment</option>
+                  <option value="REFUND">Refund (Store → Customer)</option>
                 </select>
               </div>
               <div className="col-span-2">
@@ -373,8 +376,8 @@ export default function CustomerPaymentEntry() {
             <div className="space-y-1">
               <div className="flex justify-between">
                 <span className="text-gray-500">Type:</span>
-                <span className={`font-medium ${paymentType === 'ADVANCE' ? 'text-green-700' : 'text-blue-700'}`}>
-                  {paymentType === 'ADVANCE' ? '⬤ Advance' : '⬤ Due Payment'}
+                <span className={`font-medium ${paymentType === 'ADVANCE' ? 'text-green-700' : paymentType === 'REFUND' ? 'text-red-700' : 'text-blue-700'}`}>
+                  {paymentType === 'ADVANCE' ? '⬤ Advance' : paymentType === 'REFUND' ? '⬤ Refund (Out)' : '⬤ Due Payment'}
                 </span>
               </div>
               {customerData && (

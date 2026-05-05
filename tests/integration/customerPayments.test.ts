@@ -176,7 +176,7 @@ describe('GET /api/customer-payments', () => {
       id: 1, paymentDate: new Date('2026-03-15'), amount: 5000,
       paymentMode: 'Cash', narration: 'Inst 1', reference: null,
       layaway: {
-        voucherNo: 'LY/1', accountId: 10,
+        voucherNo: 'LY/1', status: 'ACTIVE', convertedToSaleId: null, accountId: 10,
         account: { id: 10, name: 'Test', mobile: '9999', closingBalance: 0, balanceType: 'NONE' },
       },
     };
@@ -192,13 +192,62 @@ describe('GET /api/customer-payments', () => {
     expect(layPmt.totalAmount).toBe(5000);
   });
 
+  it('re-keys layaway payments to the converted sale voucher number once the booking is CONVERTED', async () => {
+    // After conversion, the LayawayEntry stores the new JGI sale
+    // voucher number in convertedToSaleId. Customer payments should
+    // surface that JGI/N receipt for every historical layaway payment
+    // so the customer sees a single uniform sale voucher series.
+    const lp1 = {
+      id: 1, paymentDate: new Date('2026-04-15'), amount: 6000,
+      paymentMode: 'Cash', narration: null, reference: null,
+      layaway: {
+        voucherNo: 'LY/5', status: 'CONVERTED', convertedToSaleId: 'JGI/42', accountId: 10,
+        account: { id: 10, name: 'Priya', mobile: '999', closingBalance: 0, balanceType: 'NONE' },
+      },
+    };
+    const lp2 = {
+      id: 2, paymentDate: new Date('2026-04-20'), amount: 4000,
+      paymentMode: 'Bank', narration: null, reference: null,
+      layaway: {
+        voucherNo: 'LY/5', status: 'CONVERTED', convertedToSaleId: 'JGI/42', accountId: 10,
+        account: { id: 10, name: 'Priya', mobile: '999', closingBalance: 0, balanceType: 'NONE' },
+      },
+    };
+    mockPrisma.layawayPayment.findMany.mockResolvedValue([lp1, lp2]);
+
+    const res = await request(app).get('/api/customer-payments?accountId=10');
+    expect(res.status).toBe(200);
+
+    const layRows = res.body.payments.filter((p: any) => p.source === 'LAYAWAY');
+    expect(layRows).toHaveLength(2);
+    for (const row of layRows) {
+      expect(row.receiptNo).toBe('JGI/42');
+    }
+  });
+
+  it('keeps the LY voucher number on layaway payments while the booking is still ACTIVE', async () => {
+    const lp = {
+      id: 9, paymentDate: new Date('2026-04-15'), amount: 1000,
+      paymentMode: 'Cash', narration: null, reference: null,
+      layaway: {
+        voucherNo: 'LY/7', status: 'ACTIVE', convertedToSaleId: null, accountId: 10,
+        account: { id: 10, name: 'Priya', mobile: '999', closingBalance: 0, balanceType: 'NONE' },
+      },
+    };
+    mockPrisma.layawayPayment.findMany.mockResolvedValue([lp]);
+
+    const res = await request(app).get('/api/customer-payments?accountId=10');
+    const layRow = res.body.payments.find((p: any) => p.source === 'LAYAWAY');
+    expect(layRow.receiptNo).toBe('LY/7');
+  });
+
   it('returns scheme installments with source=SCHEME', async () => {
     const si = {
       id: 1, installmentNo: 3, dueDate: new Date('2026-03-10'),
       paidDate: new Date('2026-03-10'), amount: 2000,
       paymentMode: 'UPI', status: 'PAID', narration: null,
       scheme: {
-        schemeNo: 'SS/1', accountId: 10,
+        id: 1, schemeNo: 'SS/1', status: 'ACTIVE', accountId: 10,
         account: { id: 10, name: 'Test', mobile: '9999', closingBalance: 0, balanceType: 'NONE' },
       },
     };
@@ -232,7 +281,7 @@ describe('GET /api/customer-payments', () => {
       id: 1, installmentNo: 1, dueDate: new Date('2026-03-05'),
       paidDate: new Date('2026-03-05'), amount: 1000,
       paymentMode: 'Cash', status: 'PAID', narration: null,
-      scheme: { schemeNo: 'SS/1', accountId: 10,
+      scheme: { id: 1, schemeNo: 'SS/1', status: 'ACTIVE', accountId: 10,
         account: { id: 10, name: 'Test', mobile: '9999', closingBalance: 0, balanceType: 'NONE' } },
     }]);
 
@@ -279,6 +328,160 @@ describe('GET /api/customer-payments', () => {
     expect(mockPrisma.salesVoucher.findMany).not.toHaveBeenCalled();
     expect(mockPrisma.layawayPayment.findMany).not.toHaveBeenCalled();
     expect(mockPrisma.schemeInstallment.findMany).toHaveBeenCalled();
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // Consolidation behaviour for REDEEMED / CANCELLED schemes.
+  //
+  // When a scheme is closed out (REDEEMED on maturity, or CANCELLED),
+  // the customer-payments list must surface ONE row per scheme with
+  // summed totals + a `children` array of the underlying installments,
+  // instead of N installment rows that no longer affect the running
+  // customer balance.
+  // ──────────────────────────────────────────────────────────
+  describe('consolidation of closed-out schemes', () => {
+    const mkInst = (
+      installmentNo: number,
+      paidDate: string,
+      amount: number,
+      mode: string,
+      schemeStatus: 'ACTIVE' | 'REDEEMED' | 'CANCELLED',
+      schemeId = 7,
+    ) => ({
+      id: 100 + installmentNo,
+      installmentNo,
+      dueDate: new Date(paidDate),
+      paidDate: new Date(paidDate),
+      amount,
+      paymentMode: mode,
+      status: 'PAID' as const,
+      narration: null,
+      scheme: {
+        id: schemeId,
+        schemeNo: `SS/${schemeId}`,
+        status: schemeStatus,
+        accountId: 10,
+        account: { id: 10, name: 'Test', mobile: '9999', closingBalance: 0, balanceType: 'NONE' },
+      },
+    });
+
+    it('returns a single consolidated row per REDEEMED scheme with summed totals + children', async () => {
+      mockPrisma.schemeInstallment.findMany.mockResolvedValue([
+        mkInst(1, '2026-01-05', 1000, 'Cash', 'REDEEMED'),
+        mkInst(2, '2026-02-05', 1000, 'Cash', 'REDEEMED'),
+        mkInst(3, '2026-03-05', 1000, 'UPI', 'REDEEMED'),
+      ]);
+
+      const res = await request(app).get('/api/customer-payments?paymentType=SCHEME');
+      expect(res.status).toBe(200);
+
+      // Three installments, but only ONE row in the response.
+      expect(res.body.payments).toHaveLength(1);
+      const row = res.body.payments[0];
+
+      expect(row.isConsolidated).toBe(true);
+      expect(row.schemeId).toBe(7);
+      expect(row.schemeStatus).toBe('REDEEMED');
+      expect(row.id).toBe('scheme-7');
+      expect(row.receiptNo).toBe('SS/7');
+      expect(row.installmentCount).toBe(3);
+      expect(row.cashAmount).toBe(2000);
+      expect(row.upiAmount).toBe(1000);
+      expect(row.totalAmount).toBe(3000);
+
+      // paymentDate = latest installment's paidDate
+      expect(new Date(row.paymentDate).toISOString().slice(0, 10)).toBe('2026-03-05');
+
+      // Children are the original installment rows, in chronological order.
+      expect(row.children).toHaveLength(3);
+      expect(row.children.map((c: any) => c.installmentNo)).toEqual([1, 2, 3]);
+      expect(row.children[2].upiAmount).toBe(1000);
+    });
+
+    it('returns a consolidated row for CANCELLED schemes too (previously hidden)', async () => {
+      mockPrisma.schemeInstallment.findMany.mockResolvedValue([
+        mkInst(1, '2026-01-05', 500, 'Cash', 'CANCELLED', 9),
+        mkInst(2, '2026-02-05', 500, 'Bank', 'CANCELLED', 9),
+      ]);
+
+      const res = await request(app).get('/api/customer-payments?paymentType=SCHEME');
+      expect(res.status).toBe(200);
+      expect(res.body.payments).toHaveLength(1);
+      const row = res.body.payments[0];
+      expect(row.isConsolidated).toBe(true);
+      expect(row.schemeStatus).toBe('CANCELLED');
+      expect(row.totalAmount).toBe(1000);
+      expect(row.cashAmount).toBe(500);
+      expect(row.bankAmount).toBe(500);
+      expect(row.children).toHaveLength(2);
+    });
+
+    it('also consolidates ACTIVE / MATURED schemes into a single row (uniform UX)', async () => {
+      mockPrisma.schemeInstallment.findMany.mockResolvedValue([
+        mkInst(1, '2026-01-05', 1000, 'Cash', 'ACTIVE'),
+        mkInst(2, '2026-02-05', 1000, 'Cash', 'ACTIVE'),
+      ]);
+
+      const res = await request(app).get('/api/customer-payments?paymentType=SCHEME');
+      expect(res.status).toBe(200);
+      // Two installments under the same ACTIVE scheme should still
+      // collapse into one consolidated row with two children — the
+      // standalone Customer Payments page and the in-modal Payments tab
+      // both depend on this for a consistent expandable UX.
+      expect(res.body.payments).toHaveLength(1);
+      const row = res.body.payments[0];
+      expect(row.isConsolidated).toBe(true);
+      expect(row.schemeStatus).toBe('ACTIVE');
+      expect(row.installmentCount).toBe(2);
+      expect(row.totalAmount).toBe(2000);
+      expect(row.children).toHaveLength(2);
+    });
+
+    it('consolidates per-scheme regardless of mixed statuses (every scheme = one row)', async () => {
+      mockPrisma.schemeInstallment.findMany.mockResolvedValue([
+        // Scheme 1 — REDEEMED, 2 installments → one consolidated row
+        mkInst(1, '2026-01-05', 1000, 'Cash', 'REDEEMED', 1),
+        mkInst(2, '2026-02-05', 1000, 'Cash', 'REDEEMED', 1),
+        // Scheme 2 — CANCELLED, 1 installment → one consolidated row
+        mkInst(1, '2026-01-10', 500, 'Cash', 'CANCELLED', 2),
+        // Scheme 3 — ACTIVE, 2 installments → also one consolidated row
+        mkInst(1, '2026-01-15', 750, 'Bank', 'ACTIVE', 3),
+        mkInst(2, '2026-02-15', 750, 'Bank', 'ACTIVE', 3),
+      ]);
+
+      const res = await request(app).get('/api/customer-payments?paymentType=SCHEME');
+      expect(res.status).toBe(200);
+
+      const rows = res.body.payments;
+      // Three schemes → three consolidated rows, regardless of status.
+      expect(rows).toHaveLength(3);
+
+      const consolidated = rows.filter((r: any) => r.isConsolidated);
+      expect(consolidated).toHaveLength(3);
+      const consolidatedById = Object.fromEntries(consolidated.map((r: any) => [r.schemeId, r]));
+      expect(consolidatedById[1].schemeStatus).toBe('REDEEMED');
+      expect(consolidatedById[1].totalAmount).toBe(2000);
+      expect(consolidatedById[1].children).toHaveLength(2);
+      expect(consolidatedById[2].schemeStatus).toBe('CANCELLED');
+      expect(consolidatedById[2].totalAmount).toBe(500);
+      expect(consolidatedById[2].children).toHaveLength(1);
+      expect(consolidatedById[3].schemeStatus).toBe('ACTIVE');
+      expect(consolidatedById[3].totalAmount).toBe(1500);
+      expect(consolidatedById[3].children).toHaveLength(2);
+    });
+
+    it('queries all scheme statuses, not only non-CANCELLED (regression)', async () => {
+      // Earlier the route filtered { status: { notIn: ['CANCELLED'] } } in the
+      // Prisma where, which made cancelled schemes invisible. The consolidated
+      // row depends on those rows being fetched, so the filter must be gone.
+      mockPrisma.schemeInstallment.findMany.mockResolvedValue([]);
+
+      await request(app).get('/api/customer-payments?paymentType=SCHEME');
+
+      const where = mockPrisma.schemeInstallment.findMany.mock.calls[0][0].where;
+      expect(where.scheme.companyId).toBe(1);
+      expect(where.scheme.status).toBeUndefined(); // no exclusion of CANCELLED
+    });
   });
 
   it('filters to only ADVANCE type (standard payment)', async () => {
@@ -545,7 +748,7 @@ describe('POST /api/customer-payments', () => {
     });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Payment type must be ADVANCE or DUE_PAYMENT');
+    expect(res.body.error).toBe('Payment type must be ADVANCE, DUE_PAYMENT, or REFUND');
   });
 
   it('returns 404 when account not found in transaction', async () => {
@@ -691,6 +894,149 @@ describe('POST /api/customer-payments', () => {
     const createCall = mockPrisma.customerPayment.create.mock.calls[0][0].data;
     expect(createCall.totalAmount).toBe(129500);
     expect(createCall.oldGoldAmount).toBe(129500);
+  });
+
+  // ────────────────────────────────────────────────────────
+  // REFUND — store pays the customer back (e.g. after a layaway
+  // is cancelled). Money flows OUT of the store, so the balance
+  // math is the inverse of an ADVANCE / DUE_PAYMENT.
+  // ────────────────────────────────────────────────────────
+  describe('REFUND payment type', () => {
+    const REFUND_CUSTOMER = {
+      ...CUSTOMER_ADVANCE,
+      closingBalance: -8000, // 8000 advance held by store
+      balanceType: 'CR',
+    };
+
+    const REFUND_PAYMENT = {
+      ...PAYMENT_1,
+      id: 50,
+      receiptNo: 'CPR/50',
+      receiptNumber: 50,
+      accountId: REFUND_CUSTOMER.id,
+      paymentType: 'REFUND',
+      cashAmount: 8000, bankAmount: 0, cardAmount: 0, upiAmount: 0,
+      totalAmount: 8000,
+      balanceBefore: -8000,
+      balanceAfter: 0,
+      narration: 'Refund of layaway advance',
+    };
+
+    it('creates a REFUND payment and INCREMENTS the customer balance', async () => {
+      mockPrisma.voucherSequence.upsert.mockResolvedValue({ ...SEQUENCE, lastNumber: 50 });
+      mockPrisma.account.findUnique.mockResolvedValue(REFUND_CUSTOMER);
+      mockPrisma.customerPayment.create.mockResolvedValue(REFUND_PAYMENT);
+      mockPrisma.account.update.mockResolvedValue({ ...REFUND_CUSTOMER, closingBalance: 0, balanceType: 'NONE' });
+      mockPrisma.customerPayment.findUnique.mockResolvedValue({
+        ...REFUND_PAYMENT,
+        account: { id: REFUND_CUSTOMER.id, name: REFUND_CUSTOMER.name, mobile: REFUND_CUSTOMER.mobile, closingBalance: 0, balanceType: 'NONE' },
+      });
+
+      const res = await request(app).post('/api/customer-payments').send({
+        paymentDate: '2026-05-02',
+        paymentType: 'REFUND',
+        accountId: REFUND_CUSTOMER.id,
+        cashAmount: 8000,
+        narration: 'Refund of layaway advance',
+      });
+
+      expect(res.status).toBe(201);
+
+      // Persisted record
+      const createCall = mockPrisma.customerPayment.create.mock.calls[0][0].data;
+      expect(createCall.paymentType).toBe('REFUND');
+      expect(createCall.totalAmount).toBe(8000);
+      // balanceBefore = -8000 (CR), balanceAfter = -8000 + 8000 = 0
+      expect(createCall.balanceBefore).toBe(-8000);
+      expect(createCall.balanceAfter).toBe(0);
+
+      // Account update reflects the new balance
+      const accountUpdate = mockPrisma.account.update.mock.calls[0][0].data;
+      expect(accountUpdate.closingBalance).toBe(0);
+      expect(accountUpdate.balanceType).toBe('NONE');
+    });
+
+    it('moves a customer with no advance INTO DR when refunded', async () => {
+      // Edge case: refund issued without prior advance — customer ends up owing.
+      const noAdvance = { closingBalance: 0, balanceType: 'NONE' };
+      mockPrisma.voucherSequence.upsert.mockResolvedValue({ ...SEQUENCE, lastNumber: 51 });
+      mockPrisma.account.findUnique.mockResolvedValue(noAdvance);
+      mockPrisma.customerPayment.create.mockResolvedValue({ ...REFUND_PAYMENT, id: 51, receiptNo: 'CPR/51' });
+      mockPrisma.account.update.mockResolvedValue({});
+      mockPrisma.customerPayment.findUnique.mockResolvedValue({ ...REFUND_PAYMENT, id: 51, receiptNo: 'CPR/51' });
+
+      await request(app).post('/api/customer-payments').send({
+        paymentType: 'REFUND',
+        accountId: 99,
+        cashAmount: 1000,
+      });
+
+      const accountUpdate = mockPrisma.account.update.mock.calls[0][0].data;
+      expect(accountUpdate.closingBalance).toBe(1000);
+      expect(accountUpdate.balanceType).toBe('DR');
+    });
+
+    it('cancelling a REFUND DECREMENTS the balance back', async () => {
+      mockPrisma.customerPayment.findFirst.mockResolvedValue(REFUND_PAYMENT);
+      mockPrisma.account.update.mockResolvedValue({});
+      mockPrisma.account.findUnique.mockResolvedValue({ closingBalance: -8000 });
+      mockPrisma.customerPayment.update.mockResolvedValue({ ...REFUND_PAYMENT, status: 'CANCELLED' });
+      mockPrisma.$transaction.mockImplementation(async (fn: Function) => fn(mockPrisma));
+
+      const res = await request(app).delete('/api/customer-payments/50');
+      expect(res.status).toBe(200);
+
+      // First update reverses the refund — must DECREMENT (other types increment)
+      const reversal = mockPrisma.account.update.mock.calls[0][0].data;
+      expect(reversal.closingBalance).toEqual({ decrement: 8000 });
+    });
+
+    it('REFUND filter narrows the list query to paymentType=REFUND', async () => {
+      mockPrisma.customerPayment.findMany.mockResolvedValue([]);
+      const res = await request(app).get('/api/customer-payments?paymentType=REFUND');
+      expect(res.status).toBe(200);
+
+      // Sales / layaway / scheme branches must be skipped.
+      expect(mockPrisma.salesVoucher.findMany).not.toHaveBeenCalled();
+      expect(mockPrisma.layawayPayment.findMany).not.toHaveBeenCalled();
+      expect(mockPrisma.schemeInstallment.findMany).not.toHaveBeenCalled();
+
+      const where = mockPrisma.customerPayment.findMany.mock.calls[0][0].where;
+      expect(where.paymentType).toBe('REFUND');
+    });
+
+    it('list response surfaces REFUND rows with paymentType set', async () => {
+      mockPrisma.customerPayment.findMany.mockResolvedValue([{
+        ...REFUND_PAYMENT,
+        account: { id: REFUND_CUSTOMER.id, name: REFUND_CUSTOMER.name, mobile: REFUND_CUSTOMER.mobile, closingBalance: 0, balanceType: 'NONE' },
+      }]);
+
+      const res = await request(app).get('/api/customer-payments?paymentType=REFUND');
+      expect(res.status).toBe(200);
+      expect(res.body.payments).toHaveLength(1);
+      const row = res.body.payments[0];
+      expect(row.source).toBe('PAYMENT');
+      expect(row.paymentType).toBe('REFUND');
+      expect(Number(row.totalAmount)).toBe(8000);
+    });
+
+    it('balance history records a REFUND as a DEBIT (not a credit)', async () => {
+      mockPrisma.account.findFirst.mockResolvedValue(REFUND_CUSTOMER);
+      mockPrisma.salesVoucher.findMany.mockResolvedValue([]);
+      mockPrisma.customerPayment.findMany.mockResolvedValue([REFUND_PAYMENT]);
+      if (mockPrisma.cashEntryLine?.findMany) {
+        mockPrisma.cashEntryLine.findMany.mockResolvedValue([]);
+      }
+
+      const res = await request(app).get(`/api/customer-payments/balance/${REFUND_CUSTOMER.id}`);
+      expect(res.status).toBe(200);
+
+      const refundRow = res.body.history.find((h: any) => h.voucherNo === 'CPR/50');
+      expect(refundRow).toBeDefined();
+      expect(refundRow.type).toBe('REFUND');
+      expect(refundRow.debit).toBe(8000);
+      expect(refundRow.credit).toBe(0);
+    });
   });
 });
 
