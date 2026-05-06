@@ -64,7 +64,10 @@ export default function StockRequestPage() {
       const res = await stockRequestAPI.browse({ branchId: selectedBranchId, search: browseSearch || undefined });
       setBrowseLabels(res.data.labels || []);
       setBrowseTotal(res.data.total || 0);
-    } catch { toast.error('Failed to load stock'); }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Failed to load stock';
+      toast.error(`Failed to load stock: ${msg}`);
+    }
     setBrowseLoading(false);
   }, [selectedBranchId, browseSearch]);
 
