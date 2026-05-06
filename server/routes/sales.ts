@@ -263,33 +263,59 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     const voucher = await prisma.$transaction(async (tx) => {
-      // Generate voucher number inside transaction to avoid orphaned sequence on rollback
-      const sequence = await tx.voucherSequence.upsert({
+      const prefix = data.voucherPrefix || 'JGI';
+      const financialYear = data.financialYear || '2025-2026';
+
+      // Self-healing allocation: bump the sequence past any existing
+      // SalesVoucher.voucherNumber so we never collide with rows that
+      // were created before the sequence was introduced (legacy imports,
+      // seeds, or other code paths).
+      const maxExisting = await tx.salesVoucher.aggregate({
+        where: { companyId: req.companyId!, voucherPrefix: prefix },
+        _max: { voucherNumber: true },
+      });
+      const maxNumber = maxExisting._max.voucherNumber ?? 0;
+
+      let sequence = await tx.voucherSequence.upsert({
         where: {
           companyId_prefix_entityType_financialYear: {
             companyId: req.companyId!,
-            prefix: data.voucherPrefix || 'JGI',
+            prefix,
             entityType: 'SALES',
-            financialYear: data.financialYear || '2025-2026',
+            financialYear,
           },
         },
         update: { lastNumber: { increment: 1 } },
         create: {
           companyId: req.companyId!,
-          prefix: data.voucherPrefix || 'JGI',
+          prefix,
           entityType: 'SALES',
-          financialYear: data.financialYear || '2025-2026',
-          lastNumber: 1,
+          financialYear,
+          lastNumber: Math.max(1, maxNumber + 1),
         },
       });
 
-      const voucherNo = `${data.voucherPrefix || 'JGI'}/${sequence.lastNumber}`;
+      if (sequence.lastNumber <= maxNumber) {
+        sequence = await tx.voucherSequence.update({
+          where: {
+            companyId_prefix_entityType_financialYear: {
+              companyId: req.companyId!,
+              prefix,
+              entityType: 'SALES',
+              financialYear,
+            },
+          },
+          data: { lastNumber: maxNumber + 1 },
+        });
+      }
+
+      const voucherNo = `${prefix}/${sequence.lastNumber}`;
 
       // Create the sales voucher
       const salesVoucher = await tx.salesVoucher.create({
         data: {
           voucherNo,
-          voucherPrefix: data.voucherPrefix || 'JGI',
+          voucherPrefix: prefix,
           voucherNumber: sequence.lastNumber,
           voucherDate: new Date(data.voucherDate),
           accountId: data.accountId,
@@ -360,7 +386,7 @@ router.post('/', async (req: Request, res: Response) => {
 
           // Validate label is IN_STOCK and belongs to user's branch before selling
           if (item.labelId) {
-            const label = await tx.label.findUnique({ where: { id: item.labelId }, select: { branchId: true, status: true, labelNo: true, pcsCount: true } });
+            const label = await tx.label.findUnique({ where: { id: item.labelId }, select: { branchId: true, status: true, labelNo: true, pcsCount: true, grossWeight: true, netWeight: true } });
             if (!label || !canAccessBranch(req, label.branchId)) {
               throw new Error(`Label ${item.labelId} not accessible from your branch`);
             }
@@ -375,14 +401,33 @@ router.post('/', async (req: Request, res: Response) => {
               throw new Error(`Invalid pcs count: ${salePcs}. Must sell at least 1 pc.`);
             }
             const remainingPcs = label.pcsCount - salePcs;
-            // Only mark as SOLD when ALL pieces are sold (pcsCount becomes 0)
-            const newStatus = remainingPcs === 0 ? 'SOLD' : 'IN_STOCK';
+            // Decrement weights by the actual sold weights so partial-pcs
+            // sales leave the correct remaining weight on the label. Only
+            // applied when both the label and the sold item carry positive
+            // weights (test fixtures omit weight fields).
+            const soldGross = Number(item.grossWeight) || 0;
+            const soldNet = Number(item.netWeight) || 0;
+            const labelGross = Number(label.grossWeight) || 0;
+            const labelNet = Number(label.netWeight) || 0;
+            const updateData: any = {
+              pcsCount: remainingPcs,
+              status: remainingPcs === 0 ? 'SOLD' : 'IN_STOCK',
+            };
+            if (labelGross > 0 && soldGross > 0) {
+              if (soldGross > labelGross + 1e-6) {
+                throw new Error(`Label ${label.labelNo || item.labelNo} has only ${labelGross}g gross available, cannot sell ${soldGross}g`);
+              }
+              updateData.grossWeight = remainingPcs === 0 ? 0 : Math.max(0, labelGross - soldGross);
+            }
+            if (labelNet > 0 && soldNet > 0) {
+              if (soldNet > labelNet + 1e-6) {
+                throw new Error(`Label ${label.labelNo || item.labelNo} has only ${labelNet}g net available, cannot sell ${soldNet}g`);
+              }
+              updateData.netWeight = remainingPcs === 0 ? 0 : Math.max(0, labelNet - soldNet);
+            }
             await tx.label.update({
               where: { id: item.labelId },
-              data: {
-                pcsCount: remainingPcs,
-                status: newStatus,
-              },
+              data: updateData,
             });
           }
         }

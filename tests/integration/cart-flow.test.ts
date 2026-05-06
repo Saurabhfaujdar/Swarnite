@@ -351,6 +351,130 @@ describe('Cart → Sales: multi-item creation', () => {
     );
   });
 
+  // Regression: when a multi-pc label is sold partially with custom per-pc
+  // weights (e.g. 3 of 10 pcs at 12g + 10g + 10g out of a 120g label), the
+  // server must decrement label.grossWeight and label.netWeight by the
+  // actually sold weights so the remaining 7 pcs reflect 88g.
+  it('decrements label gross/net by the sold weights on partial-pcs sale', async () => {
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 21 });
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce({
+      id: 21, voucherNo: 'JGI/21', status: 'ACTIVE',
+    });
+    mockPrisma.salesItem.create.mockResolvedValueOnce({ id: 1 });
+    mockPrisma.label.findUnique.mockResolvedValueOnce({
+      branchId: 1,
+      status: 'IN_STOCK',
+      labelNo: 'GE/35',
+      pcsCount: 10,
+      grossWeight: 120,
+      netWeight: 120,
+    });
+    mockPrisma.label.update.mockResolvedValueOnce({});
+    mockPrisma.account.update.mockResolvedValueOnce({});
+    mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce({
+      id: 21, voucherNo: 'JGI/21', status: 'ACTIVE',
+      items: [], account: CUSTOMER, salesman: { name: 'Amit' }, branch: { name: 'Main' },
+    });
+
+    const payload = makeCartSalesPayload([{
+      ...CART_LABEL_MULTI_PCS,
+      id: 200,
+      pcs: 3,
+      grossWeight: 32, // 12 + 10 + 10
+      netWeight: 32,
+    }]);
+
+    const res = await request(app).post('/api/sales').send(payload);
+    expect(res.status).toBe(201);
+
+    expect(mockPrisma.label.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 200 },
+        data: expect.objectContaining({
+          pcsCount: 7,
+          status: 'IN_STOCK',
+          grossWeight: 88, // 120 - 32
+          netWeight: 88,
+        }),
+      }),
+    );
+  });
+
+  it('rejects partial sale when sold gross exceeds label gross', async () => {
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 22 });
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce({
+      id: 22, voucherNo: 'JGI/22', status: 'ACTIVE',
+    });
+    mockPrisma.salesItem.create.mockResolvedValueOnce({ id: 1 });
+    mockPrisma.label.findUnique.mockResolvedValueOnce({
+      branchId: 1,
+      status: 'IN_STOCK',
+      labelNo: 'GE/35',
+      pcsCount: 10,
+      grossWeight: 120,
+      netWeight: 120,
+    });
+
+    const payload = makeCartSalesPayload([{
+      ...CART_LABEL_MULTI_PCS,
+      id: 201,
+      pcs: 3,
+      grossWeight: 200, // exceeds label's 120g
+      netWeight: 32,
+    }]);
+
+    const res = await request(app).post('/api/sales').send(payload);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/only 120g gross available/);
+  });
+
+  it('zeroes label gross/net when all pcs are sold', async () => {
+    mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 23 });
+    mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));
+    mockPrisma.salesVoucher.create.mockResolvedValueOnce({
+      id: 23, voucherNo: 'JGI/23', status: 'ACTIVE',
+    });
+    mockPrisma.salesItem.create.mockResolvedValueOnce({ id: 1 });
+    mockPrisma.label.findUnique.mockResolvedValueOnce({
+      branchId: 1,
+      status: 'IN_STOCK',
+      labelNo: 'GE/35',
+      pcsCount: 2,
+      grossWeight: 24,
+      netWeight: 24,
+    });
+    mockPrisma.label.update.mockResolvedValueOnce({});
+    mockPrisma.account.update.mockResolvedValueOnce({});
+    mockPrisma.salesVoucher.findUnique.mockResolvedValueOnce({
+      id: 23, voucherNo: 'JGI/23', status: 'ACTIVE',
+      items: [], account: CUSTOMER, salesman: { name: 'A' }, branch: { name: 'M' },
+    });
+
+    const payload = makeCartSalesPayload([{
+      ...CART_LABEL_MULTI_PCS,
+      id: 202,
+      pcs: 2,
+      grossWeight: 24,
+      netWeight: 24,
+    }]);
+
+    const res = await request(app).post('/api/sales').send(payload);
+    expect(res.status).toBe(201);
+    expect(mockPrisma.label.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 202 },
+        data: expect.objectContaining({
+          pcsCount: 0,
+          status: 'SOLD',
+          grossWeight: 0,
+          netWeight: 0,
+        }),
+      }),
+    );
+  });
+
   it('rejects cart sale when a label is already SOLD', async () => {
     mockPrisma.voucherSequence.upsert.mockResolvedValueOnce({ lastNumber: 12 });
     mockPrisma.$transaction.mockImplementationOnce(async (fn: Function) => fn(mockPrisma));

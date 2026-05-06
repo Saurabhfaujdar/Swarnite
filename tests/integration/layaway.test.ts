@@ -462,7 +462,10 @@ describe('POST /api/layaway', () => {
 
     // Verify label pcsCount was decremented and status set to LAYAWAY (all pcs consumed)
     expect(mockPrisma.label.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: LABEL_1.id }, select: { pcsCount: true } }),
+      expect.objectContaining({
+        where: { id: LABEL_1.id },
+        select: expect.objectContaining({ pcsCount: true }),
+      }),
     );
     expect(mockPrisma.label.update).toHaveBeenCalledWith(
       expect.objectContaining({

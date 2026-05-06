@@ -5,6 +5,7 @@ import { formatWeight, getToday } from '../../lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useCartStore, CartLabel } from '../../lib/cartStore';
 import CartDrawer from '../../components/CartDrawer';
+import AddToCartPartialModal, { PartialPickResult } from '../../components/AddToCartPartialModal';
 
 export default function LabelEntryList() {
   const navigate = useNavigate();
@@ -15,8 +16,12 @@ export default function LabelEntryList() {
   const [showCart, setShowCart] = useState(false);
 
   const cartItems = useCartStore((s) => s.items);
-  const toggleItem = useCartStore((s) => s.toggleItem);
+  const addItem = useCartStore((s) => s.addItem);
+  const removeItem = useCartStore((s) => s.removeItem);
   const isInCart = useCartStore((s) => s.isInCart);
+
+  // Label currently being configured for partial-pcs add-to-cart.
+  const [pendingPartial, setPendingPartial] = useState<any | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['labels-list', dateFrom, dateTo, search, statusFilter],
@@ -28,23 +33,57 @@ export default function LabelEntryList() {
   const totalGrossWt = labels.reduce((s: number, l: any) => s + Number(l.grossWeight || 0), 0);
   const totalNetWt = labels.reduce((s: number, l: any) => s + Number(l.netWeight || 0), 0);
 
-  const toCartLabel = (l: any): CartLabel => ({
-    id: l.id,
-    labelNo: l.labelNo,
-    itemId: l.itemId,
-    itemName: l.item?.name || '',
-    grossWeight: Number(l.grossWeight || 0),
-    netWeight: Number(l.netWeight || 0),
-    pcsCount: l.pcsCount ?? 1,
-    status: l.status,
-    huid: l.huid || undefined,
-    size: l.size || undefined,
-    counterCode: l.counterCode || undefined,
-    metalType: l.item?.metalType?.name || undefined,
-    purityCode: l.item?.purity?.code || undefined,
-    purityPercentage: Number(l.item?.purity?.percentage || 0) || undefined,
-    labourRate: Number(l.item?.labourRate || 0) || undefined,
-  });
+  const toCartLabel = (l: any, pick?: PartialPickResult): CartLabel => {
+    const fullGross = Number(l.grossWeight || 0);
+    const fullNet = Number(l.netWeight || 0);
+    const totalPcs = l.pcsCount ?? 1;
+    const selectedPcs = pick?.selectedPcs ?? totalPcs;
+    const selectedGross = pick?.selectedGrossWeight ?? fullGross;
+    const selectedNet = pick?.selectedNetWeight ?? fullNet;
+    return {
+      id: l.id,
+      labelNo: l.labelNo,
+      itemId: l.itemId,
+      itemName: l.item?.name || '',
+      grossWeight: selectedGross,
+      netWeight: selectedNet,
+      pcsCount: selectedPcs,
+      originalPcsCount: totalPcs,
+      originalGrossWeight: fullGross,
+      originalNetWeight: fullNet,
+      perPcGross: pick?.perPcGross,
+      perPcNet: pick?.perPcNet,
+      status: l.status,
+      huid: l.huid || undefined,
+      size: l.size || undefined,
+      counterCode: l.counterCode || undefined,
+      metalType: l.item?.metalType?.name || undefined,
+      purityCode: l.item?.purity?.code || undefined,
+      purityPercentage: Number(l.item?.purity?.percentage || 0) || undefined,
+      labourRate: Number(l.item?.labourRate || 0) || undefined,
+    };
+  };
+
+  // Single-pc labels go straight into the cart; multi-pc labels open the
+  // partial-pick modal so the user can choose pcs + per-pc weights.
+  const handleToggle = (l: any) => {
+    if (isInCart(l.id)) {
+      removeItem(l.id);
+      return;
+    }
+    const totalPcs = l.pcsCount ?? 1;
+    if (totalPcs <= 1) {
+      addItem(toCartLabel(l));
+      return;
+    }
+    setPendingPartial(l);
+  };
+
+  const handleConfirmPartial = (pick: PartialPickResult) => {
+    if (!pendingPartial) return;
+    addItem(toCartLabel(pendingPartial, pick));
+    setPendingPartial(null);
+  };
 
   return (
     <div className="flex flex-col gap-3 h-full">
@@ -118,7 +157,7 @@ export default function LabelEntryList() {
                     <input
                       type="checkbox"
                       checked={isInCart(l.id)}
-                      onChange={() => toggleItem(toCartLabel(l))}
+                      onChange={() => handleToggle(l)}
                       className="cursor-pointer"
                       data-testid={`cart-checkbox-${l.id}`}
                     />
@@ -177,6 +216,19 @@ export default function LabelEntryList() {
 
       {/* Cart Drawer */}
       {showCart && <CartDrawer onClose={() => setShowCart(false)} />}
+
+      {/* Partial-pcs add-to-cart modal */}
+      {pendingPartial && (
+        <AddToCartPartialModal
+          labelNo={pendingPartial.labelNo}
+          itemName={pendingPartial.item?.name || ''}
+          totalPcs={pendingPartial.pcsCount ?? 1}
+          totalGrossWeight={Number(pendingPartial.grossWeight || 0)}
+          totalNetWeight={Number(pendingPartial.netWeight || 0)}
+          onConfirm={handleConfirmPartial}
+          onClose={() => setPendingPartial(null)}
+        />
+      )}
     </div>
   );
 }

@@ -5,9 +5,21 @@ export interface CartLabel {
   labelNo: string;
   itemId: number;
   itemName: string;
+  // Effective values used for the sale = sum across selected pcs.
+  // For single-pc labels these equal the full label weights.
   grossWeight: number;
   netWeight: number;
   pcsCount: number;
+  // Original full-label values (snapshot at the moment of cart-add) so the
+  // UI can show "remaining on label = original - selected" and downstream
+  // sales code can validate against the source label.
+  originalPcsCount?: number;
+  originalGrossWeight?: number;
+  originalNetWeight?: number;
+  // Per-piece weights chosen by the user when partially picking from a
+  // multi-pc label. Length equals pcsCount.
+  perPcGross?: number[];
+  perPcNet?: number[];
   status: string;
   huid?: string;
   size?: string;

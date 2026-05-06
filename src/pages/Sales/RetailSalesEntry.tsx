@@ -177,11 +177,14 @@ export default function RetailSalesEntry() {
             (r: any) => r.metalType?.name === ci.metalType && r.purityCode === ci.purityCode
           );
           const rate = metalRate ? Number(metalRate.rate) : 0;
-          const totalPcsAvail = ci.pcsCount || 1;
-          const defaultPcs = 1;
-          const pcsRatio = defaultPcs / totalPcsAvail;
-          const grossWt = Number(ci.grossWeight) * pcsRatio;
-          const netWt = Number(ci.netWeight) * pcsRatio;
+          // Cart already carries the user-selected pcs and the matching
+          // gross/net for those pcs (set in AddToCartPartialModal). Use
+          // those values directly as the sale defaults; the row-edit
+          // modal can still scale down further if the user reduces pcs.
+          const defaultPcs = Number(ci.pcsCount) || 1;
+          const totalPcsAvail = defaultPcs;
+          const grossWt = Number(ci.grossWeight) || 0;
+          const netWt = Number(ci.netWeight) || 0;
           const purity = Number(ci.purityPercentage || 0);
           const fineWt = (netWt * purity) / 100;
           const metalAmt = fineWt * rate;
@@ -199,8 +202,8 @@ export default function RetailSalesEntry() {
             fineWeight: fineWt,
             pcs: defaultPcs,
             totalPcsAvailable: totalPcsAvail,
-            originalGrossWeight: Number(ci.grossWeight),
-            originalNetWeight: Number(ci.netWeight),
+            originalGrossWeight: grossWt,
+            originalNetWeight: netWt,
             metalRate: rate,
             metalAmount: metalAmt,
             diamondWeight: 0,

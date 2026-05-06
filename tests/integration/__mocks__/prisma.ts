@@ -17,7 +17,7 @@ function createMockModel(): Record<string, jest.Mock> {
     upsert: jest.fn().mockResolvedValue({}),
     deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
     updateMany: jest.fn().mockResolvedValue({ count: 0 }),
-    aggregate: jest.fn().mockResolvedValue({}),
+    aggregate: jest.fn().mockResolvedValue({ _max: {}, _min: {}, _sum: {}, _avg: {}, _count: {} }),
     groupBy: jest.fn().mockResolvedValue([]),
   };
 }

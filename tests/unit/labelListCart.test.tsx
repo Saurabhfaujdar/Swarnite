@@ -21,6 +21,8 @@ vi.mock('../../src/lib/api', () => ({
 // ── Cart store mocks ───────────────────────────────────────
 let mockCartItems: any[] = [];
 const mockToggleItem = vi.fn();
+const mockAddItem = vi.fn();
+const mockRemoveItem = vi.fn();
 const mockIsInCart = vi.fn(() => false);
 
 vi.mock('../../src/lib/cartStore', () => ({
@@ -28,6 +30,8 @@ vi.mock('../../src/lib/cartStore', () => ({
     const state = {
       items: mockCartItems,
       toggleItem: mockToggleItem,
+      addItem: mockAddItem,
+      removeItem: mockRemoveItem,
       isInCart: mockIsInCart,
     };
     return selector(state);
@@ -140,13 +144,13 @@ describe('LabelEntryList cart features', () => {
   });
 
   describe('checkbox interaction', () => {
-    it('calls toggleItem when checkbox clicked', async () => {
+    it('calls addItem directly when single-pc checkbox clicked', async () => {
       renderList();
       await waitFor(() => {
         expect(screen.getByTestId('cart-checkbox-1')).toBeDefined();
       });
       await userEvent.click(screen.getByTestId('cart-checkbox-1'));
-      expect(mockToggleItem).toHaveBeenCalledWith(
+      expect(mockAddItem).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 1,
           labelNo: 'GP/1',

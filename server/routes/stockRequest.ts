@@ -16,6 +16,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { authenticate } from '../middleware/branchAccess';
+import { logger } from '../logger';
 
 const router = Router();
 router.use(authenticate);
@@ -30,6 +31,7 @@ router.get('/branches', async (req: Request, res: Response) => {
     });
     res.json({ branches });
   } catch (error) {
+    logger.error('stockRequest.listBranches failed', { err: (error as Error)?.message, stack: (error as Error)?.stack, companyId: req.companyId });
     res.status(500).json({ error: 'Failed to list branches' });
   }
 });
@@ -106,6 +108,14 @@ router.get('/browse', async (req: Request, res: Response) => {
 
     res.json({ labels: labelsWithPending, total, branch: { id: branch.id, name: branch.name, code: branch.code } });
   } catch (error) {
+    logger.error('stockRequest.browse failed', {
+      err: (error as Error)?.message,
+      stack: (error as Error)?.stack,
+      companyId: req.companyId,
+      branchId: req.branchId,
+      targetBranchId: Number(req.query.branchId),
+      query: req.query,
+    });
     res.status(500).json({ error: 'Failed to browse stock' });
   }
 });
@@ -148,6 +158,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     res.json({ requests, total });
   } catch (error) {
+    logger.error('stockRequest.list failed', { err: (error as Error)?.message, stack: (error as Error)?.stack, companyId: req.companyId, branchId: req.branchId, query: req.query });
     res.status(500).json({ error: 'Failed to fetch stock requests' });
   }
 });
@@ -170,6 +181,7 @@ router.get('/pending-count', async (req: Request, res: Response) => {
     ]);
     res.json({ incoming, outgoing });
   } catch (error) {
+    logger.error('stockRequest.pendingCount failed', { err: (error as Error)?.message, stack: (error as Error)?.stack, companyId: req.companyId, branchId: req.branchId });
     res.status(500).json({ error: 'Failed to fetch pending count' });
   }
 });
@@ -201,6 +213,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     res.json(request);
   } catch (error) {
+    logger.error('stockRequest.detail failed', { err: (error as Error)?.message, stack: (error as Error)?.stack, id: req.params.id });
     res.status(500).json({ error: 'Failed to fetch stock request' });
   }
 });

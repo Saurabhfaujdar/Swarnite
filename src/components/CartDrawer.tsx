@@ -25,6 +25,11 @@ export default function CartDrawer({ onClose }: CartDrawerProps) {
       grossWeight: item.grossWeight,
       netWeight: item.netWeight,
       pcsCount: item.pcsCount,
+      originalPcsCount: item.originalPcsCount ?? item.pcsCount,
+      originalGrossWeight: item.originalGrossWeight ?? item.grossWeight,
+      originalNetWeight: item.originalNetWeight ?? item.netWeight,
+      perPcGross: item.perPcGross,
+      perPcNet: item.perPcNet,
       metalType: item.metalType,
       purityCode: item.purityCode,
       purityPercentage: item.purityPercentage,
@@ -60,24 +65,46 @@ export default function CartDrawer({ onClose }: CartDrawerProps) {
             <p className="text-center text-gray-400 py-8">Cart is empty</p>
           ) : (
             <div className="space-y-3">
-              {items.map((item) => (
-                <div key={item.id} className="border rounded-lg p-3 flex justify-between items-start" data-testid={`cart-item-${item.id}`}>
-                  <div>
-                    <div className="font-medium text-sm">{item.labelNo}</div>
-                    <div className="text-xs text-gray-600">{item.itemName}</div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {item.metalType} {item.purityCode && `• ${item.purityCode}`} • Gross: {formatWeight(item.grossWeight)} • Net: {formatWeight(item.netWeight)} • {item.pcsCount} pc{item.pcsCount > 1 ? 's' : ''}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => removeItem(item.id)}
-                    className="text-red-400 hover:text-red-600 text-sm ml-2"
-                    data-testid={`cart-remove-${item.id}`}
+              {items.map((item) => {
+                const isPartial =
+                  item.originalPcsCount != null && item.originalPcsCount > item.pcsCount;
+                return (
+                  <div
+                    key={item.id}
+                    className="border rounded-lg p-3 flex justify-between items-start"
+                    data-testid={`cart-item-${item.id}`}
                   >
-                    ✕
-                  </button>
-                </div>
-              ))}
+                    <div>
+                      <div className="font-medium text-sm">{item.labelNo}</div>
+                      <div className="text-xs text-gray-600">{item.itemName}</div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {item.metalType} {item.purityCode && `• ${item.purityCode}`} • Gross:{' '}
+                        {formatWeight(item.grossWeight)} • Net: {formatWeight(item.netWeight)} •{' '}
+                        {item.pcsCount} pc{item.pcsCount > 1 ? 's' : ''}
+                      </div>
+                      {isPartial && (
+                        <div
+                          className="text-[11px] text-amber-700 mt-1"
+                          data-testid={`cart-partial-${item.id}`}
+                        >
+                          Partial pick from {item.originalPcsCount} pcs (label total Gross{' '}
+                          {formatWeight(item.originalGrossWeight ?? 0)}). Remaining on label after sale:{' '}
+                          {(item.originalPcsCount ?? 0) - item.pcsCount} pc(s) • Gross{' '}
+                          {formatWeight((item.originalGrossWeight ?? 0) - item.grossWeight)} • Net{' '}
+                          {formatWeight((item.originalNetWeight ?? 0) - item.netWeight)}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => removeItem(item.id)}
+                      className="text-red-400 hover:text-red-600 text-sm ml-2"
+                      data-testid={`cart-remove-${item.id}`}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

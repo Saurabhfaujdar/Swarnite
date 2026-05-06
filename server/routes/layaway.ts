@@ -393,19 +393,40 @@ router.post('/', async (req: Request, res: Response) => {
         });
 
         if (item.labelId) {
-          const label = await tx.label.findUnique({ where: { id: item.labelId }, select: { pcsCount: true } });
+          const label = await tx.label.findUnique({ where: { id: item.labelId }, select: { pcsCount: true, grossWeight: true, netWeight: true } });
           if (!label) throw new Error(`Label not found: ${item.labelId}`);
           const layawayPcs = item.pcs || 1;
           if (layawayPcs > label.pcsCount) {
             throw new Error(`Label ${item.labelNo} has only ${label.pcsCount} pcs in stock`);
           }
           const remainingPcs = label.pcsCount - layawayPcs;
+          // Decrement weights by reserved weights so the label's remaining
+          // gross/net reflects what is still physically in stock. Only
+          // applied when both label and reserved item weights are positive
+          // (legacy fixtures may omit weight fields).
+          const reservedGross = Number(item.grossWeight) || 0;
+          const reservedNet = Number(item.netWeight) || 0;
+          const labelGross = Number(label.grossWeight) || 0;
+          const labelNet = Number(label.netWeight) || 0;
+          const updateData: any = {
+            pcsCount: remainingPcs,
+            ...(remainingPcs === 0 ? { status: 'LAYAWAY' } : {}),
+          };
+          if (labelGross > 0 && reservedGross > 0) {
+            if (reservedGross > labelGross + 1e-6) {
+              throw new Error(`Label ${item.labelNo} has only ${labelGross}g gross in stock`);
+            }
+            updateData.grossWeight = remainingPcs === 0 ? 0 : Math.max(0, labelGross - reservedGross);
+          }
+          if (labelNet > 0 && reservedNet > 0) {
+            if (reservedNet > labelNet + 1e-6) {
+              throw new Error(`Label ${item.labelNo} has only ${labelNet}g net in stock`);
+            }
+            updateData.netWeight = remainingPcs === 0 ? 0 : Math.max(0, labelNet - reservedNet);
+          }
           await tx.label.update({
             where: { id: item.labelId },
-            data: {
-              pcsCount: remainingPcs,
-              ...(remainingPcs === 0 ? { status: 'LAYAWAY' } : {}),
-            },
+            data: updateData,
           });
         }
       }
@@ -592,7 +613,19 @@ router.post('/:id/convert', async (req: Request, res: Response) => {
       // of truth across the lifecycle.
       const salesPrefix = 'JGI';
       const financialYear = data.financialYear || '2025-2026';
-      const saleSeq = await tx.voucherSequence.upsert({
+
+      // Allocate a collision-safe sales voucher number. Production data may
+      // contain SalesVoucher rows whose `voucherNumber` is ahead of the
+      // VoucherSequence row (legacy imports, seeds, or older code paths that
+      // bypassed the sequence). Bumping the sequence past MAX(voucherNumber)
+      // before incrementing prevents "Unique constraint failed (voucherNo)".
+      const maxExisting = await tx.salesVoucher.aggregate({
+        where: { companyId: req.companyId!, voucherPrefix: salesPrefix },
+        _max: { voucherNumber: true },
+      });
+      const maxNumber = maxExisting._max.voucherNumber ?? 0;
+
+      let saleSeq = await tx.voucherSequence.upsert({
         where: {
           companyId_prefix_entityType_financialYear: {
             companyId: req.companyId!,
@@ -607,9 +640,23 @@ router.post('/:id/convert', async (req: Request, res: Response) => {
           prefix: salesPrefix,
           entityType: 'SALES',
           financialYear,
-          lastNumber: 1,
+          lastNumber: Math.max(1, maxNumber + 1),
         },
       });
+
+      if (saleSeq.lastNumber <= maxNumber) {
+        saleSeq = await tx.voucherSequence.update({
+          where: {
+            companyId_prefix_entityType_financialYear: {
+              companyId: req.companyId!,
+              prefix: salesPrefix,
+              entityType: 'SALES',
+              financialYear,
+            },
+          },
+          data: { lastNumber: maxNumber + 1 },
+        });
+      }
       const saleVoucherNo = `${salesPrefix}/${saleSeq.lastNumber}`;
       const voucherPrefix = salesPrefix;
       const voucherNumber = saleSeq.lastNumber;
