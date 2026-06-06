@@ -15,6 +15,7 @@ function createMockModel(): Record<string, jest.Mock> {
     delete: jest.fn().mockResolvedValue({}),
     count: jest.fn().mockResolvedValue(0),
     upsert: jest.fn().mockResolvedValue({}),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
     deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
     updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     aggregate: jest.fn().mockResolvedValue({ _max: {}, _min: {}, _sum: {}, _avg: {}, _count: {} }),
@@ -44,6 +45,32 @@ const modelNames = [
   'auditLog',
   'stockRequest',
   'stockRequestItem',
+  // Repair module
+  'repairJob',
+  'repairItem',
+  'repairPhoto',
+  'repairStateHistory',
+  'repairKarigerAssignment',
+  'repairWeightAdjustment',
+  'repairCharge',
+  'repairInvoice',
+  'kariger',
+  'karigerMetalLedger',
+  'karigerMoneyLedger',
+  'attachment',
+  // Supplier Order module
+  'supplierOrder',
+  'supplierOrderItem',
+  'supplierOrderReceipt',
+  'supplierOrderReceiptItem',
+  'supplierOrderWeightAdjustment',
+  'supplierOrderInvoice',
+  'supplierOrderPayment',
+  'supplierOrderStateHistory',
+  'supplierMetalLedger',
+  'supplierMoneyLedger',
+  // Courier module
+  'courierShipment',
 ];
 
 for (const name of modelNames) {
@@ -54,5 +81,10 @@ for (const name of modelNames) {
 mockPrisma.$transaction = jest.fn(async (fn: Function) => {
   return fn(mockPrisma);
 });
+
+// Raw SQL helpers used by voucher allocators
+mockPrisma.$queryRawUnsafe = jest.fn().mockResolvedValue([{ max: 0 }]);
+mockPrisma.$executeRawUnsafe = jest.fn().mockResolvedValue(0);
+mockPrisma.$queryRaw = jest.fn().mockResolvedValue([]);
 
 export default mockPrisma;

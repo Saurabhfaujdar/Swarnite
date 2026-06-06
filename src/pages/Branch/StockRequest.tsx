@@ -4,10 +4,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { stockRequestAPI } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth';
-import { Eye, Send, CheckCircle, XCircle, RefreshCw, Search, Package, ArrowRight, Clock } from 'lucide-react';
+import { Eye, Send, CheckCircle, XCircle, RefreshCw, Search, Package, ArrowRight, Clock, Truck } from 'lucide-react';
 import toast from 'react-hot-toast';
+import CourierShipmentPanel from '../../components/CourierShipmentPanel';
+import CreateShipmentModal from '../../components/CreateShipmentModal';
 
-interface Branch { id: number; name: string; code: string; }
+interface Branch { id: number; name: string; code: string; phone?: string; address?: string; city?: string; state?: string; pincode?: string; }
 interface LabelItem {
   id: number; labelNo: string; grossWeight: number; netWeight: number; pcsCount: number;
   status: string; hasPendingRequest?: boolean;
@@ -121,7 +123,8 @@ export default function StockRequestPage() {
       toast.error(err.response?.data?.error || 'Failed to approve');
     }
   };
-
+  const [shipRequestId, setShipRequestId] = useState<number | null>(null);
+  const shipRequest = requests.find(r => r.id === shipRequestId);
   const handleReject = async () => {
     if (rejectId === null) return;
     try {
@@ -341,6 +344,14 @@ export default function StockRequestPage() {
                               </button>
                             </div>
                           )}
+                          {r.status === 'APPROVED' && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setShipRequestId(r.id); }}
+                              className="flex items-center gap-0.5 px-2 py-1 border border-blue-300 text-blue-700 rounded text-[10px] hover:bg-blue-50"
+                            >
+                              <Truck size={11} /> Ship
+                            </button>
+                          )}
                         </td>
                       )}
                     </tr>
@@ -378,6 +389,10 @@ export default function StockRequestPage() {
                               ))}
                             </tbody>
                           </table>
+                          {/* Courier tracking for this request */}
+                          <div className="mt-2">
+                            <CourierShipmentPanel entityType="StockRequest" entityId={r.id} />
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -404,6 +419,36 @@ export default function StockRequestPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Ship via courier modal */}
+      {shipRequestId && shipRequest && (
+        <CreateShipmentModal
+          open={!!shipRequestId}
+          onClose={() => setShipRequestId(null)}
+          shipmentType="STOCK_REQUEST"
+          entityType="StockRequest"
+          entityId={shipRequestId}
+          pickup={{
+            name: shipRequest.sourceBranch?.name || '',
+            phone: shipRequest.sourceBranch?.phone || '',
+            address: shipRequest.sourceBranch?.address || '',
+            city: shipRequest.sourceBranch?.city || '',
+            state: shipRequest.sourceBranch?.state || '',
+            pincode: shipRequest.sourceBranch?.pincode || '',
+          }}
+          delivery={{
+            name: shipRequest.requestingBranch?.name || '',
+            phone: shipRequest.requestingBranch?.phone || '',
+            address: shipRequest.requestingBranch?.address || '',
+            city: shipRequest.requestingBranch?.city || '',
+            state: shipRequest.requestingBranch?.state || '',
+            pincode: shipRequest.requestingBranch?.pincode || '',
+          }}
+          weightGrams={Number(shipRequest.totalGrossWeight) * 1000 || 100}
+          declaredValue={5000}
+          productName={`Stock Request #${shipRequest.requestNo}`}
+        />
       )}
     </div>
   );

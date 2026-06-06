@@ -192,37 +192,53 @@ describe('GET /api/customer-payments', () => {
     expect(layPmt.totalAmount).toBe(5000);
   });
 
-  it('re-keys layaway payments to the converted sale voucher number once the booking is CONVERTED', async () => {
-    // After conversion, the LayawayEntry stores the new JGI sale
-    // voucher number in convertedToSaleId. Customer payments should
-    // surface that JGI/N receipt for every historical layaway payment
-    // so the customer sees a single uniform sale voucher series.
+  it('folds CONVERTED layaway payments under the sale row as children, preserving original LY voucher numbers', async () => {
+    // After conversion the layaway payments are kept (LY/N), but they
+    // surface as `children` of the new SALE row in the consolidated view
+    // \u2014 NOT as standalone LAYAWAY rows. This avoids double-counting
+    // and preserves the original audit trail (each child still shows
+    // the LY/N voucher it was captured against).
     const lp1 = {
-      id: 1, paymentDate: new Date('2026-04-15'), amount: 6000,
-      paymentMode: 'Cash', narration: null, reference: null,
-      layaway: {
-        voucherNo: 'LY/5', status: 'CONVERTED', convertedToSaleId: 'JGI/42', accountId: 10,
-        account: { id: 10, name: 'Priya', mobile: '999', closingBalance: 0, balanceType: 'NONE' },
-      },
+      id: 1, paymentDate: new Date('2026-04-15'), amount: 6000, paymentMode: 'Cash',
+      narration: null, reference: null,
     };
     const lp2 = {
-      id: 2, paymentDate: new Date('2026-04-20'), amount: 4000,
-      paymentMode: 'Bank', narration: null, reference: null,
-      layaway: {
-        voucherNo: 'LY/5', status: 'CONVERTED', convertedToSaleId: 'JGI/42', accountId: 10,
-        account: { id: 10, name: 'Priya', mobile: '999', closingBalance: 0, balanceType: 'NONE' },
-      },
+      id: 2, paymentDate: new Date('2026-04-20'), amount: 4000, paymentMode: 'Bank',
+      narration: 'Final balance payment at conversion', reference: null,
     };
-    mockPrisma.layawayPayment.findMany.mockResolvedValue([lp1, lp2]);
+    const sale = {
+      id: 99, voucherNo: 'JGI/42', voucherDate: new Date('2026-04-25'),
+      paymentAmount: 10000, cashAmount: 6000, bankAmount: 4000, cardAmount: 0, upiAmount: 0,
+      previousOs: 0, finalDue: 0, status: 'ACTIVE', accountId: 10,
+      account: { id: 10, name: 'Priya', mobile: '999', closingBalance: 0, balanceType: 'NONE' },
+    };
+    const layawayEntry = {
+      id: 7, voucherNo: 'LY/5', status: 'CONVERTED', convertedToSaleId: 'JGI/42',
+      payments: [lp1, lp2],
+    };
+
+    mockPrisma.salesVoucher.findMany.mockResolvedValue([sale]);
+    mockPrisma.layawayEntry.findMany.mockResolvedValue([layawayEntry]);
+    // The standalone layawayPayment query also runs but should filter
+    // out lp1/lp2 because the route adds them to convertedLayawayPaymentIds.
+    mockPrisma.layawayPayment.findMany.mockResolvedValue([]);
 
     const res = await request(app).get('/api/customer-payments?accountId=10');
     expect(res.status).toBe(200);
 
-    const layRows = res.body.payments.filter((p: any) => p.source === 'LAYAWAY');
-    expect(layRows).toHaveLength(2);
-    for (const row of layRows) {
-      expect(row.receiptNo).toBe('JGI/42');
+    // Top-level: ONE row, the sale, with children
+    const saleRow = res.body.payments.find((p: any) => p.source === 'SALE' && p.receiptNo === 'JGI/42');
+    expect(saleRow).toBeDefined();
+    expect(saleRow.isConsolidated).toBe(true);
+    expect(saleRow.children).toHaveLength(2);
+    // Child rows preserve LY/N
+    for (const child of saleRow.children) {
+      expect(child.receiptNo).toBe('LY/5');
+      expect(child.source).toBe('LAYAWAY');
     }
+    // No duplicate top-level LAYAWAY rows for these payments
+    const standaloneLayRows = res.body.payments.filter((p: any) => p.source === 'LAYAWAY');
+    expect(standaloneLayRows).toHaveLength(0);
   });
 
   it('keeps the LY voucher number on layaway payments while the booking is still ACTIVE', async () => {

@@ -388,7 +388,7 @@ router.get('/:id/history', async (req: Request, res: Response) => {
       lte: new Date(dateTo as string + 'T23:59:59.999'),
     } : undefined;
 
-    const [sales, oldGoldPurchases, layaways] = await Promise.all([
+    const [sales, oldGoldPurchases, layaways, repairs] = await Promise.all([
       prisma.salesVoucher.findMany({
         where: {
           accountId,
@@ -455,21 +455,51 @@ router.get('/:id/history', async (req: Request, res: Response) => {
         },
         orderBy: { voucherDate: 'desc' },
       }),
+      prisma.repairJob.findMany({
+        where: {
+          customerAccountId: accountId,
+          companyId: req.companyId,
+          ...(dateFilter ? { intakeDate: dateFilter } : {}),
+        },
+        select: {
+          id: true, repairNo: true, intakeDate: true,
+          status: true, priority: true,
+          estimatedAmount: true, advanceReceived: true,
+          customerNotes: true, deliveredDate: true,
+          items: {
+            select: {
+              id: true, ornamentType: true, metalType: { select: { name: true } },
+              purity: true, grossWeight: true, issueDescription: true,
+            },
+          },
+          invoice: {
+            select: {
+              id: true, invoiceNo: true, totalAmount: true,
+              paidAmount: true, dueAmount: true, paymentStatus: true,
+            },
+          },
+        },
+        orderBy: { intakeDate: 'desc' },
+      }),
     ]);
 
     const totalSalesAmount = sales.reduce((s, v) => s + Number(v.voucherAmount), 0);
     const totalOGPurchaseAmount = oldGoldPurchases.reduce((s, v) => s + Number(v.finalAmount || v.totalAmount), 0);
+    const totalRepairAmount = repairs.reduce((s, r) => s + Number(r.invoice?.totalAmount || r.estimatedAmount || 0), 0);
 
     res.json({
       sales,
       oldGoldPurchases,
       layaways,
+      repairs,
       summary: {
         totalSalesCount: sales.length,
         totalSalesAmount,
         totalOGPurchaseCount: oldGoldPurchases.length,
         totalOGPurchaseAmount,
         totalLayawayCount: layaways.length,
+        totalRepairCount: repairs.length,
+        totalRepairAmount,
       },
     });
   } catch (error: any) {

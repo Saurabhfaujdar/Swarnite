@@ -67,6 +67,18 @@ export default function PurchaseURD() {
     queryFn: () => mastersAPI.purities().then((r) => r.data),
   });
 
+  // Latest auto-fetched metal rates per (metalType, purityCode). Used to
+  // prefill the rate field when the user picks a purity. Cashier can override.
+  const { data: latestRates } = useQuery({
+    queryKey: ['metal-rates-latest'],
+    queryFn: () => mastersAPI.latestRates().then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+  const rateForPurity = (code: string): number => {
+    const row = latestRates?.find((r: any) => r.purityCode === code);
+    return row ? Number(row.rate) : 0;
+  };
+
   // Purchase list query
   const { data: listData, isLoading: listLoading } = useQuery({
     queryKey: ['purchase-list', listDateFrom, listDateTo, listType],
@@ -418,7 +430,14 @@ export default function PurchaseURD() {
               value={newItem.purityCode}
               onChange={(e) => {
                 const p = purities?.find((p: any) => p.code === e.target.value);
-                setNewItem({ ...newItem, purityCode: e.target.value, purityPercent: p ? Number(p.percentage) : 0 });
+                const prefill = rateForPurity(e.target.value);
+                setNewItem({
+                  ...newItem,
+                  purityCode: e.target.value,
+                  purityPercent: p ? Number(p.percentage) : 0,
+                  // Only auto-fill if user hasn't typed a rate yet.
+                  metalRate: newItem.metalRate > 0 ? newItem.metalRate : prefill,
+                });
               }}
             >
               <option value="999">999 (99.9%)</option>

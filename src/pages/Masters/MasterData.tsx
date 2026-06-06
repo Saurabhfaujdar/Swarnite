@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { mastersAPI, inventoryAPI } from '../../lib/api';
 import toast from 'react-hot-toast';
+import KarigerList from './KarigerList';
 
-type Tab = 'items' | 'groups' | 'prefixes' | 'metalTypes' | 'purities' | 'counters' | 'salesmen' | 'rates';
+type Tab = 'items' | 'groups' | 'prefixes' | 'metalTypes' | 'purities' | 'counters' | 'salesmen' | 'rates' | 'karigers';
 
 const tabs: { key: Tab; label: string }[] = [
   { key: 'items', label: 'Items' },
@@ -14,6 +15,7 @@ const tabs: { key: Tab; label: string }[] = [
   { key: 'counters', label: 'Counters' },
   { key: 'salesmen', label: 'Salesmen' },
   { key: 'rates', label: 'Metal Rates' },
+  { key: 'karigers', label: 'Karigers' },
 ];
 
 export default function MasterData() {
@@ -51,6 +53,7 @@ export default function MasterData() {
         {activeTab === 'counters' && <CountersTab />}
         {activeTab === 'salesmen' && <SalesmenTab />}
         {activeTab === 'rates' && <MetalRatesTab />}
+        {activeTab === 'karigers' && <KarigerList />}
       </div>
     </div>
   );

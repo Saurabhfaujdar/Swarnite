@@ -10,6 +10,7 @@ import PurchaseURD from './pages/Purchase/PurchaseURD';
 import PurchaseEntryList from './pages/Purchase/PurchaseEntryList';
 import LabelPreparation from './pages/Inventory/LabelPreparation';
 import LabelEntryList from './pages/Inventory/LabelEntryList';
+import LabelPrint from './pages/Inventory/LabelPrint';
 import CashEntry from './pages/CashBank/CashEntry';
 import BranchIssue from './pages/Branch/BranchIssue';
 import BranchReceipt from './pages/Branch/BranchReceipt';
@@ -29,6 +30,16 @@ import StockReport from './pages/Reports/StockReport';
 import CounterWiseReport from './pages/Reports/CounterWiseReport';
 import ItemWiseSalesReport from './pages/Reports/ItemWiseSalesReport';
 import MasterData from './pages/Masters/MasterData';
+import KarigerList from './pages/Masters/KarigerList';
+import RepairDashboard from './pages/Repairs/RepairDashboard';
+import RepairList from './pages/Repairs/RepairList';
+import RepairIntake from './pages/Repairs/RepairIntake';
+import RepairDetail from './pages/Repairs/RepairDetail';
+import SupplierOrderDashboard from './pages/SupplierOrders/SupplierOrderDashboard';
+import SupplierOrderList from './pages/SupplierOrders/SupplierOrderList';
+import SupplierOrderCreate from './pages/SupplierOrders/SupplierOrderCreate';
+import SupplierOrderDetail from './pages/SupplierOrders/SupplierOrderDetail';
+import SupplierOrderReports from './pages/SupplierOrders/SupplierOrderReports';
 import Login from './pages/Login';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -60,6 +71,7 @@ function App() {
         <Route path="purchase/list" element={<PurchaseEntryList />} />
         {/* Inventory */}
         <Route path="inventory/labels/new" element={<LabelPreparation />} />
+        <Route path="inventory/labels/print" element={<LabelPrint />} />
         <Route path="inventory/labels" element={<LabelEntryList />} />
         {/* Cash/Bank */}
         <Route path="cash-bank/cash" element={<CashEntry />} />
@@ -86,8 +98,20 @@ function App() {
         <Route path="reports/stock" element={<StockReport />} />
         <Route path="reports/counter-wise" element={<CounterWiseReport />} />
         <Route path="reports/item-wise-sales" element={<ItemWiseSalesReport />} />
+        {/* Repairs */}
+        <Route path="repairs" element={<RepairList />} />
+        <Route path="repairs/dashboard" element={<RepairDashboard />} />
+        <Route path="repairs/new" element={<RepairIntake />} />
+        <Route path="repairs/:id" element={<RepairDetail />} />
+        {/* Supplier Orders */}
+        <Route path="supplier-orders" element={<SupplierOrderList />} />
+        <Route path="supplier-orders/dashboard" element={<SupplierOrderDashboard />} />
+        <Route path="supplier-orders/reports" element={<SupplierOrderReports />} />
+        <Route path="supplier-orders/new" element={<SupplierOrderCreate />} />
+        <Route path="supplier-orders/:id" element={<SupplierOrderDetail />} />
         {/* Masters */}
         <Route path="masters" element={<MasterData />} />
+        <Route path="masters/karigers" element={<KarigerList />} />
       </Route>
     </Routes>
   );

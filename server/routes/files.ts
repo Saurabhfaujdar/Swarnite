@@ -108,6 +108,7 @@ router.get('/entity/:type/:id', authenticate, async (req: Request, res: Response
         mimeType: true,
         sizeBytes: true,
         category: true,
+        storagePath: true,
         createdAt: true,
         uploadedBy: { select: { fullName: true } },
       },

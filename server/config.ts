@@ -104,4 +104,24 @@ export const config = {
   backupEnabled: envBool('BACKUP_ENABLED', false),
   backupCron: process.env.BACKUP_CRON || '0 2 * * *', // 2 AM daily
   backupRetentionDays: envInt('BACKUP_RETENTION_DAYS', 30),
+
+  // ─── Metal rate auto-refresh (GoldAPI.io) ────────────────
+  // Free tier: https://www.goldapi.io  — 100 req/month, returns per-gram
+  // prices for 24k/22k/21k/20k/18k/16k/14k/10k directly in INR.
+  goldApiKey: process.env.GOLD_API_KEY || '',
+  goldApiUrl: process.env.GOLD_API_URL || 'https://www.goldapi.io/api',
+  // % markup applied on top of spot to approximate retail rate.
+  // Each branch / shop should still review before saving the voucher.
+  metalRateMarkupPercent: parseFloat(process.env.METAL_RATE_MARKUP_PERCENT || '0'),
+  // Auto-fetch rates daily. Disabled in test, opt-in elsewhere via env.
+  metalRateAutoRefresh: envBool('METAL_RATE_AUTO_REFRESH', !isTest && !!process.env.GOLD_API_KEY),
+  // Hour (0-23) in server local time at which the daily fetch runs.
+  metalRateRefreshHour: envInt('METAL_RATE_REFRESH_HOUR', 9),
+
+  // ─── Shiprocket (courier aggregator) ─────────────────────
+  shiprocketEmail: process.env.SHIPROCKET_EMAIL || '',
+  shiprocketPassword: process.env.SHIPROCKET_PASSWORD || '',
+  shiprocketWebhookToken: process.env.SHIPROCKET_WEBHOOK_TOKEN || '',
+  shiprocketPickupPincode: process.env.SHIPROCKET_PICKUP_PINCODE || '',
+  shiprocketEnabled: envBool('SHIPROCKET_ENABLED', !!process.env.SHIPROCKET_EMAIL),
 };

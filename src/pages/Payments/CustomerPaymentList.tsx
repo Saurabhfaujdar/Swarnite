@@ -619,21 +619,21 @@ export default function CustomerPaymentList() {
                   return (
                   <Fragment key={p.id}>
                   <tr
-                    data-testid={p.isConsolidated ? `scheme-consolidated-${p.schemeId}` : undefined}
+                    data-testid={p.isConsolidated ? (p.source === 'SCHEME' ? `scheme-consolidated-${p.schemeId}` : `sale-consolidated-${p.id}`) : undefined}
                     onClick={p.isConsolidated ? () => toggleScheme(String(p.id)) : undefined}
                     className={`border-b hover:bg-gray-50 ${p.status === 'CANCELLED' ? 'opacity-50 bg-red-50' : ''} ${p.isConsolidated ? 'cursor-pointer bg-teal-50/40' : ''}`}
                   >
                     <td className="p-2 font-mono font-medium">
                       {p.isConsolidated && (
                         <span
-                          aria-label={isExpanded ? 'Collapse installments' : 'Expand installments'}
+                          aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
                           className="inline-block w-3 mr-1 text-gray-500"
                         >
                           {isExpanded ? '▾' : '▸'}
                         </span>
                       )}
                       {p.receiptNo}
-                      {p.isConsolidated && (
+                      {p.isConsolidated && p.schemeStatus && (
                         <span
                           className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                             p.schemeStatus === 'REDEEMED'
@@ -650,7 +650,7 @@ export default function CustomerPaymentList() {
                       )}
                       {p.isConsolidated && (
                         <span className="ml-1 text-[10px] text-gray-500">
-                          ({p.installmentCount} inst.)
+                          ({p.installmentCount} {p.consolidationLabel || 'inst.'})
                         </span>
                       )}
                     </td>
@@ -704,16 +704,20 @@ export default function CustomerPaymentList() {
                   {isExpanded && Array.isArray(p.children) && p.children.map((c: any) => (
                     <tr
                       key={`${p.id}-child-${c.id}`}
-                      data-testid={`scheme-child-${p.schemeId}-${c.installmentNo}`}
+                      data-testid={p.source === 'SCHEME' ? `scheme-child-${p.schemeId}-${c.installmentNo}` : `sale-child-${p.id}-${c.id}`}
                       className="border-b bg-gray-50/60 text-gray-700"
                     >
                       <td className="p-2 pl-8 font-mono text-[11px]">
-                        ┗ #{c.installmentNo}
+                        ┗ {c.childLabel || (c.installmentNo != null ? `#${c.installmentNo}` : c.receiptNo)}
                       </td>
                       <td className="p-2">{new Date(c.paymentDate).toLocaleDateString('en-IN')}</td>
                       <td className="p-2 text-gray-500 italic">{c.narration}</td>
                       <td className="p-2 text-center">
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-teal-100 text-teal-700">Installment</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          c.source === 'LAYAWAY' ? 'bg-purple-100 text-purple-700' : 'bg-teal-100 text-teal-700'
+                        }`}>
+                          {c.source === 'LAYAWAY' ? 'Layaway' : 'Installment'}
+                        </span>
                       </td>
                       <td className="p-2 text-right">{Number(c.cashAmount) > 0 ? formatIndianNumber(Number(c.cashAmount)) : '-'}</td>
                       <td className="p-2 text-right">{Number(c.bankAmount) > 0 ? formatIndianNumber(Number(c.bankAmount)) : '-'}</td>

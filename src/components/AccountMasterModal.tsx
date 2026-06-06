@@ -466,7 +466,7 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                 { key: 'metal', label: 'Metal Outstanding' },
                 { key: 'bill', label: 'Bill To Bill' },
                 { key: 'payments', label: 'Payments' },
-                ...(editData?.id ? [{ key: 'history' as const, label: 'Sales & OG History' }] : []),
+                ...(editData?.id ? [{ key: 'history' as const, label: 'History' }] : []),
                 ...(editData?.id && editData?.type === 'CUSTOMER' ? [{ key: 'whatsapp' as const, label: '💬 WhatsApp' }] : []),
               ] as const).map((tab) => (
                 <button
@@ -671,21 +671,21 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                             return (
                             <Fragment key={`${p.source}-${p.id}`}>
                             <tr
-                              data-testid={p.isConsolidated ? `modal-scheme-consolidated-${p.schemeId}` : undefined}
+                              data-testid={p.isConsolidated ? (p.source === 'SCHEME' ? `modal-scheme-consolidated-${p.schemeId}` : `modal-sale-consolidated-${p.id}`) : undefined}
                               onClick={p.isConsolidated ? () => toggleScheme(String(p.id)) : undefined}
                               className={`border-b hover:bg-gray-50 ${p.isConsolidated ? 'cursor-pointer bg-teal-50/40' : ''}`}
                             >
                               <td className="p-1.5 font-mono">
                                 {p.isConsolidated && (
                                   <span
-                                    aria-label={isExpanded ? 'Collapse installments' : 'Expand installments'}
+                                    aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
                                     className="inline-block w-3 mr-1 text-gray-500"
                                   >
                                     {isExpanded ? '▾' : '▸'}
                                   </span>
                                 )}
                                 {p.receiptNo}
-                                {p.isConsolidated && (
+                                {p.isConsolidated && p.schemeStatus && (
                                   <span
                                     className={`ml-2 px-1 py-0.5 rounded text-[9px] font-semibold ${
                                       p.schemeStatus === 'REDEEMED'
@@ -702,7 +702,7 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                                 )}
                                 {p.isConsolidated && (
                                   <span className="ml-1 text-[9px] text-gray-500">
-                                    ({p.installmentCount} inst.)
+                                    ({p.installmentCount} {p.consolidationLabel || 'inst.'})
                                   </span>
                                 )}
                               </td>
@@ -712,10 +712,11 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                                   p.source === 'SALE' ? 'bg-orange-100 text-orange-700' :
                                   p.source === 'LAYAWAY' ? 'bg-purple-100 text-purple-700' :
                                   p.source === 'SCHEME' ? 'bg-teal-100 text-teal-700' :
+                                  p.source === 'REPAIR' ? 'bg-amber-100 text-amber-700' :
                                   p.paymentType === 'REFUND' ? 'bg-red-100 text-red-700' :
                                   p.paymentType === 'ADVANCE' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
                                 }`}>
-                                  {p.source === 'SALE' ? 'Sale' : p.source === 'LAYAWAY' ? 'Layaway' : p.source === 'SCHEME' ? 'Scheme' : p.paymentType === 'REFUND' ? 'Refund (Out)' : p.paymentType === 'ADVANCE' ? 'Advance' : 'Due Payment'}
+                                  {p.source === 'SALE' ? 'Sale' : p.source === 'LAYAWAY' ? 'Layaway' : p.source === 'SCHEME' ? 'Scheme' : p.source === 'REPAIR' ? 'Repair' : p.paymentType === 'REFUND' ? 'Refund (Out)' : p.paymentType === 'ADVANCE' ? 'Advance' : 'Due Payment'}
                                 </span>
                               </td>
                               <td className="p-1.5 text-right">{Number(p.cashAmount) > 0 ? formatIndianNumber(Number(p.cashAmount)) : '-'}</td>
@@ -729,13 +730,17 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                             {isExpanded && Array.isArray(p.children) && p.children.map((c: any) => (
                               <tr
                                 key={`${p.id}-child-${c.id}`}
-                                data-testid={`modal-scheme-child-${p.schemeId}-${c.installmentNo}`}
+                                data-testid={p.source === 'SCHEME' ? `modal-scheme-child-${p.schemeId}-${c.installmentNo}` : `modal-sale-child-${p.id}-${c.id}`}
                                 className="border-b bg-gray-50/60 text-gray-700"
                               >
-                                <td className="p-1.5 pl-6 font-mono text-[10px]">┗ #{c.installmentNo}</td>
+                                <td className="p-1.5 pl-6 font-mono text-[10px]">┗ {c.childLabel || (c.installmentNo != null ? `#${c.installmentNo}` : c.receiptNo)}</td>
                                 <td className="p-1.5">{new Date(c.paymentDate).toLocaleDateString('en-IN')}</td>
                                 <td className="p-1.5 text-center">
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-teal-100 text-teal-700">Installment</span>
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                    c.source === 'LAYAWAY' ? 'bg-purple-100 text-purple-700' : 'bg-teal-100 text-teal-700'
+                                  }`}>
+                                    {c.source === 'LAYAWAY' ? 'Layaway' : 'Installment'}
+                                  </span>
                                 </td>
                                 <td className="p-1.5 text-right">{Number(c.cashAmount) > 0 ? formatIndianNumber(Number(c.cashAmount)) : '-'}</td>
                                 <td className="p-1.5 text-right">{Number(c.bankAmount) > 0 ? formatIndianNumber(Number(c.bankAmount)) : '-'}</td>
@@ -765,7 +770,7 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                   {historyQuery.data && (
                     <>
                       {/* Summary Cards */}
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-4 gap-3">
                         <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
                           <div className="text-lg font-bold text-blue-700">{historyQuery.data.summary.totalSalesCount}</div>
                           <div className="text-xs text-blue-600">Total Sales</div>
@@ -779,6 +784,11 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                         <div className="bg-purple-50 border border-purple-200 rounded p-3 text-center">
                           <div className="text-lg font-bold text-purple-700">{historyQuery.data.summary.totalLayawayCount}</div>
                           <div className="text-xs text-purple-600">Layaways</div>
+                        </div>
+                        <div className="bg-green-50 border border-green-200 rounded p-3 text-center">
+                          <div className="text-lg font-bold text-green-700">{historyQuery.data.summary.totalRepairCount || 0}</div>
+                          <div className="text-xs text-green-600">Repairs</div>
+                          <div className="text-sm font-semibold text-green-800 mt-1">₹{formatIndianNumber(historyQuery.data.summary.totalRepairAmount || 0)}</div>
                         </div>
                       </div>
 
@@ -881,7 +891,53 @@ export default function AccountMasterModal({ open, onClose, onSaved, editData, f
                         </div>
                       )}
 
-                      {historyQuery.data.sales.length === 0 && historyQuery.data.oldGoldPurchases.length === 0 && historyQuery.data.layaways.length === 0 && (
+                      {/* Repairs Table */}
+                      {(historyQuery.data.repairs || []).length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-bold text-gray-700 mb-1">Repairs</h4>
+                          <table className="w-full text-xs border border-gray-200">
+                            <thead className="bg-gray-100">
+                              <tr>
+                                <th className="border px-2 py-1 text-left">Repair#</th>
+                                <th className="border px-2 py-1 text-left">Date</th>
+                                <th className="border px-2 py-1 text-right">Items</th>
+                                <th className="border px-2 py-1 text-center">Status</th>
+                                <th className="border px-2 py-1 text-right">Amount</th>
+                                <th className="border px-2 py-1 text-right">Paid</th>
+                                <th className="border px-2 py-1 text-right">Due</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(historyQuery.data.repairs || []).map((r: any) => {
+                                const amount = Number(r.invoice?.totalAmount || r.estimatedAmount || 0);
+                                const paid = Number(r.invoice?.paidAmount || r.advanceReceived || 0);
+                                const due = Math.max(0, amount - paid);
+                                return (
+                                  <tr key={r.id} className="hover:bg-gray-50">
+                                    <td className="border px-2 py-1 font-mono">{r.repairNo}</td>
+                                    <td className="border px-2 py-1">{new Date(r.intakeDate).toLocaleDateString('en-IN')}</td>
+                                    <td className="border px-2 py-1 text-right">{r.items?.length ?? 0}</td>
+                                    <td className="border px-2 py-1 text-center">
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                        r.status === 'DELIVERED' ? 'bg-green-100 text-green-700' :
+                                        r.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
+                                        r.status === 'READY_FOR_DELIVERY' ? 'bg-emerald-100 text-emerald-700' :
+                                        r.status === 'IN_PROGRESS' || r.status === 'ASSIGNED_TO_KARIGER' ? 'bg-blue-100 text-blue-700' :
+                                        'bg-gray-100 text-gray-600'
+                                      }`}>{r.status.replace(/_/g, ' ')}</span>
+                                    </td>
+                                    <td className="border px-2 py-1 text-right">₹{formatIndianNumber(amount)}</td>
+                                    <td className="border px-2 py-1 text-right text-green-700">₹{formatIndianNumber(paid)}</td>
+                                    <td className="border px-2 py-1 text-right text-red-600">{due > 0 ? `₹${formatIndianNumber(due)}` : '-'}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {historyQuery.data.sales.length === 0 && historyQuery.data.oldGoldPurchases.length === 0 && historyQuery.data.layaways.length === 0 && (historyQuery.data.repairs || []).length === 0 && (
                         <div className="text-center text-gray-400 py-8 text-sm">No transaction history found</div>
                       )}
                     </>

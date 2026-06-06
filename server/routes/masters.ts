@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
 import { authenticate } from '../middleware/branchAccess';
+import { refreshMetalRates } from '../services/metalRates';
 
 const router = Router();
 
@@ -111,11 +112,11 @@ router.get('/metal-rates', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/metal-rates/latest', async (_req: Request, res: Response) => {
+router.get('/metal-rates/latest', async (req: Request, res: Response) => {
   try {
-    // Get latest rate for each metal type + purity combination
+    // Get latest rate for each metal type + purity combination, scoped to company
     const rates = await prisma.metalRate.findMany({
-      where: { isActive: true },
+      where: { isActive: true, companyId: req.companyId },
       orderBy: { date: 'desc' },
       distinct: ['metalTypeId', 'purityCode'],
       include: { metalType: true },
@@ -133,6 +134,18 @@ router.post('/metal-rates', async (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({ error: 'Failed to create metal rate' });
   }
+});
+
+// Manually trigger a fresh pull from GoldAPI.io (admin only).
+router.post('/metal-rates/refresh', async (req: Request, res: Response) => {
+  if (req.userRole !== 'ADMIN') {
+    return res.status(403).json({ error: 'Only admins can refresh metal rates' });
+  }
+  const result = await refreshMetalRates({ force: true });
+  if (!result.ok) {
+    return res.status(502).json({ error: result.error || 'Refresh failed', ...result });
+  }
+  res.json(result);
 });
 
 // ============================================================

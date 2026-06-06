@@ -90,6 +90,16 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     // 2. Query SalesVoucher payments (only ACTIVE sales with payment > 0)
+    //
+    // For sales that were converted from a layaway, fold the historical
+    // LayawayPayment rows in as `children` of the sale row (consolidated
+    // pattern, same as schemes below). The sale's own cash/bank/card/upi
+    // already equal sum(layaway payments + final payment) — see
+    // routes/layaway.ts convert flow — so the consolidated parent totals
+    // line up exactly with the sum of its children. The standalone
+    // LAYAWAY query (block 3) skips these payments so they don't appear
+    // twice on the page.
+    const convertedLayawayPaymentIds = new Set<number>();
     if (querySales && (statusFilter === 'ALL' || statusFilter === 'ACTIVE')) {
       const salesWhere: Prisma.SalesVoucherWhereInput = {
         companyId: req.companyId,
@@ -110,24 +120,98 @@ router.get('/', async (req: Request, res: Response) => {
         include: { account: { select: accountSelect } },
       });
 
+      // Look up any layaways that were converted into the sales we just
+      // fetched, keyed by the sale voucher number that the convert flow
+      // wrote into LayawayEntry.convertedToSaleId.
+      const saleVoucherNos = sales.map(s => s.voucherNo);
+      const convertedLayaways = saleVoucherNos.length > 0
+        ? await prisma.layawayEntry.findMany({
+            where: {
+              companyId: req.companyId,
+              status: 'CONVERTED',
+              convertedToSaleId: { in: saleVoucherNos },
+            },
+            include: {
+              payments: { orderBy: { paymentDate: 'asc' } },
+            },
+          })
+        : [];
+      const layawayBySaleVoucher = new Map<string, typeof convertedLayaways[number]>();
+      for (const ly of convertedLayaways) {
+        if (ly.convertedToSaleId) layawayBySaleVoucher.set(ly.convertedToSaleId, ly);
+      }
+
       for (const s of sales) {
-        allResults.push({
-          id: s.id,
-          receiptNo: s.voucherNo,
-          paymentDate: s.voucherDate,
-          source: 'SALE',
-          paymentType: 'SALE',
-          account: s.account,
-          cashAmount: s.cashAmount,
-          bankAmount: s.bankAmount,
-          cardAmount: s.cardAmount,
-          upiAmount: s.upiAmount,
-          totalAmount: s.paymentAmount,
-          balanceBefore: s.previousOs,
-          balanceAfter: s.finalDue,
-          status: s.status,
-          narration: `Payment against sale ${s.voucherNo}`,
-        });
+        const sourceLayaway = layawayBySaleVoucher.get(s.voucherNo);
+        if (sourceLayaway && sourceLayaway.payments.length > 0) {
+          // Build child rows from the original LayawayPayments. Keep their
+          // ORIGINAL layaway voucher number visible so audit trails stay
+          // tied to the LY/N booking they were captured against.
+          const children = sourceLayaway.payments.map((lp, idx) => {
+            const mode = lp.paymentMode || 'Cash';
+            const amt = Number(lp.amount);
+            convertedLayawayPaymentIds.add(lp.id);
+            const isFinal = lp.narration === 'Final balance payment at conversion';
+            return {
+              id: lp.id,
+              receiptNo: sourceLayaway.voucherNo, // original LY/N — not the sale
+              paymentDate: lp.paymentDate,
+              source: 'LAYAWAY' as const,
+              paymentType: 'LAYAWAY' as const,
+              account: s.account,
+              cashAmount: mode === 'Cash' ? amt : 0,
+              bankAmount: mode === 'Bank' ? amt : 0,
+              cardAmount: mode === 'Card' ? amt : 0,
+              upiAmount: mode === 'UPI' ? amt : 0,
+              totalAmount: amt,
+              balanceBefore: 0,
+              balanceAfter: 0,
+              status: 'ACTIVE',
+              narration: lp.narration || `Payment against layaway ${sourceLayaway.voucherNo}`,
+              childLabel: isFinal ? 'Final' : `L${idx + 1}`,
+            };
+          });
+
+          allResults.push({
+            id: s.id,
+            receiptNo: s.voucherNo,
+            paymentDate: s.voucherDate,
+            source: 'SALE',
+            paymentType: 'SALE',
+            account: s.account,
+            cashAmount: s.cashAmount,
+            bankAmount: s.bankAmount,
+            cardAmount: s.cardAmount,
+            upiAmount: s.upiAmount,
+            totalAmount: s.paymentAmount,
+            balanceBefore: s.previousOs,
+            balanceAfter: s.finalDue,
+            status: s.status,
+            narration: `Payment against sale ${s.voucherNo} (converted from layaway ${sourceLayaway.voucherNo})`,
+            isConsolidated: true,
+            consolidationLabel: 'pmts',
+            installmentCount: children.length,
+            children,
+          });
+        } else {
+          allResults.push({
+            id: s.id,
+            receiptNo: s.voucherNo,
+            paymentDate: s.voucherDate,
+            source: 'SALE',
+            paymentType: 'SALE',
+            account: s.account,
+            cashAmount: s.cashAmount,
+            bankAmount: s.bankAmount,
+            cardAmount: s.cardAmount,
+            upiAmount: s.upiAmount,
+            totalAmount: s.paymentAmount,
+            balanceBefore: s.previousOs,
+            balanceAfter: s.finalDue,
+            status: s.status,
+            narration: `Payment against sale ${s.voucherNo}`,
+          });
+        }
       }
     }
 
@@ -166,15 +250,21 @@ router.get('/', async (req: Request, res: Response) => {
       });
 
       for (const lp of layawayPayments) {
+        // Skip payments that have already been nested under their
+        // converted sale row (block 2). Avoids the audit double-count
+        // where a LayawayPayment appeared both as a standalone row AND
+        // inside the JGI/N sale total.
+        if (convertedLayawayPaymentIds.has(lp.id)) continue;
+
         const mode = lp.paymentMode || 'Cash';
         const amt = Number(lp.amount);
-        // After conversion, the layaway booking is folded into a fresh
-        // JGI sales voucher. Re-key historical payments to that new
-        // voucher number so customers see one consistent series.
-        const displayVoucherNo = lp.layaway.convertedToSaleId || lp.layaway.voucherNo;
+        // Always show the ORIGINAL layaway voucher number. The earlier
+        // approach of re-keying to the converted sale voucher made it
+        // impossible to trace a payment back to the LY/N booking it
+        // was captured against — a problem at audit time.
         allResults.push({
           id: lp.id,
-          receiptNo: displayVoucherNo,
+          receiptNo: lp.layaway.voucherNo,
           paymentDate: lp.paymentDate,
           source: 'LAYAWAY',
           paymentType: 'LAYAWAY',
@@ -315,6 +405,93 @@ router.get('/', async (req: Request, res: Response) => {
           installmentCount: children.length,
           children,
         });
+      }
+    }
+
+    // 5. Query Repair payments (advance + invoice payments)
+    const queryRepair = typeFilter === 'ALL' || typeFilter === 'REPAIR';
+    if (queryRepair && (statusFilter === 'ALL' || statusFilter === 'ACTIVE')) {
+      const repairWhere: Prisma.RepairJobWhereInput = {
+        companyId: req.companyId,
+      };
+      if (accountId) repairWhere.customerAccountId = Number(accountId);
+      if (searchStr) {
+        repairWhere.OR = [
+          { repairNo: { contains: searchStr, mode: 'insensitive' } },
+          { customerName: { contains: searchStr, mode: 'insensitive' } },
+        ];
+      }
+
+      const repairJobs = await prisma.repairJob.findMany({
+        where: {
+          ...repairWhere,
+          AND: [
+            { OR: [{ advanceReceived: { gt: 0 } }, { invoice: { paidAmount: { gt: 0 } } }] },
+          ],
+        },
+        include: {
+          invoice: true,
+        },
+      });
+
+      for (const rj of repairJobs) {
+        const acct = { id: rj.customerAccountId || 0, name: rj.customerName, mobile: rj.customerMobile || '', closingBalance: 0, balanceType: 'DR' };
+
+        // If there's an advance, add it as a payment row
+        if (Number(rj.advanceReceived) > 0) {
+          const amt = Number(rj.advanceReceived);
+          const withinDateRange = !dateFilter || (
+            rj.intakeDate >= (dateFilter.gte || new Date(0)) &&
+            rj.intakeDate <= (dateFilter.lte || new Date('9999-12-31'))
+          );
+          if (withinDateRange) {
+            allResults.push({
+              id: `repair-adv-${rj.id}`,
+              receiptNo: rj.repairNo,
+              paymentDate: rj.intakeDate,
+              source: 'REPAIR',
+              paymentType: 'REPAIR',
+              account: acct,
+              cashAmount: amt,
+              bankAmount: 0,
+              cardAmount: 0,
+              upiAmount: 0,
+              totalAmount: amt,
+              balanceBefore: 0,
+              balanceAfter: 0,
+              status: 'ACTIVE',
+              narration: `Advance for repair ${rj.repairNo}`,
+            });
+          }
+        }
+
+        // If there's an invoice with payment beyond the advance
+        if (rj.invoice && Number(rj.invoice.paidAmount) > Number(rj.advanceReceived)) {
+          const invoicePaid = Number(rj.invoice.paidAmount) - Number(rj.advanceReceived);
+          const withinDateRange = !dateFilter || (
+            rj.invoice.invoiceDate >= (dateFilter.gte || new Date(0)) &&
+            rj.invoice.invoiceDate <= (dateFilter.lte || new Date('9999-12-31'))
+          );
+          if (withinDateRange) {
+            allResults.push({
+              id: `repair-inv-${rj.invoice.id}`,
+              receiptNo: rj.invoice.invoiceNo,
+              paymentDate: rj.invoice.invoiceDate,
+              source: 'REPAIR',
+              paymentType: 'REPAIR',
+              account: acct,
+              cashAmount: Math.max(0, Number(rj.invoice.cashAmount) - Number(rj.advanceReceived)),
+              bankAmount: Number(rj.invoice.bankAmount),
+              cardAmount: Number(rj.invoice.cardAmount),
+              upiAmount: Number(rj.invoice.upiAmount),
+              totalAmount: invoicePaid,
+              balanceBefore: 0,
+              balanceAfter: 0,
+              status: 'ACTIVE',
+              narration: `Payment for repair invoice ${rj.invoice.invoiceNo}`,
+            });
+          }
+        }
       }
     }
 

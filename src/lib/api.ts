@@ -209,6 +209,7 @@ export const mastersAPI = {
   metalRates: (params?: any) => api.get('/masters/metal-rates', { params }),
   latestRates: () => api.get('/masters/metal-rates/latest'),
   createMetalRate: (data: any) => api.post('/masters/metal-rates', data),
+  refreshMetalRates: () => api.post('/masters/metal-rates/refresh'),
   salesmen: () => api.get('/masters/salesmen'),
   createSalesman: (data: any) => api.post('/masters/salesmen', data),
   deleteSalesman: (id: number) => api.delete(`/masters/salesmen/${id}`),
@@ -271,6 +272,72 @@ export const filesAPI = {
   getMeta: (id: number) => api.get(`/files/${id}`),
   getDownloadUrl: (id: number) => api.get(`/files/${id}/url`),
   remove: (id: number) => api.delete(`/files/${id}`),
+};
+
+// Repairs
+export const repairAPI = {
+  dashboard: () => api.get('/repairs/dashboard'),
+  list: (params?: any) => api.get('/repairs', { params }),
+  get: (id: number) => api.get(`/repairs/${id}`),
+  create: (data: any) => api.post('/repairs', data),
+  update: (id: number, data: any) => api.put(`/repairs/${id}`, data),
+  setStatus: (id: number, toState: string, remarks?: string) =>
+    api.patch(`/repairs/${id}/status`, { toState, remarks }),
+  addItem: (id: number, data: any) => api.post(`/repairs/${id}/items`, data),
+  addPhoto: (id: number, data: any) => api.post(`/repairs/${id}/photos`, data),
+  assignKariger: (id: number, data: any) => api.post(`/repairs/${id}/assign-kariger`, data),
+  returnFromKariger: (id: number, data: any) => api.post(`/repairs/${id}/return-from-kariger`, data),
+  weightAdjustment: (id: number, data: any) => api.post(`/repairs/${id}/weight-adjustment`, data),
+  addCharge: (id: number, data: any) => api.post(`/repairs/${id}/charges`, data),
+  generateInvoice: (id: number) => api.post(`/repairs/${id}/invoice`),
+  recordPayment: (id: number, data: any) => api.post(`/repairs/${id}/invoice/payment`, data),
+  approve: (id: number, remarks?: string) => api.post(`/repairs/${id}/approve`, { remarks }),
+  deliver: (id: number, data: any) => api.post(`/repairs/${id}/deliver`, data),
+  report: (type: string) => api.get(`/repairs/reports/${type}`),
+};
+
+// Supplier Orders
+export const supplierOrderAPI = {
+  dashboard: () => api.get('/supplier-orders/dashboard'),
+  list: (params?: any) => api.get('/supplier-orders', { params }),
+  get: (id: number) => api.get(`/supplier-orders/${id}`),
+  create: (data: any) => api.post('/supplier-orders', data),
+  update: (id: number, data: any) => api.put(`/supplier-orders/${id}`, data),
+  setStatus: (id: number, toStatus: string, reason?: string, managerOverride?: boolean) =>
+    api.patch(`/supplier-orders/${id}/status`, { toStatus, reason, managerOverride }),
+  send: (id: number, reason?: string) => api.post(`/supplier-orders/${id}/send`, { reason }),
+  acknowledge: (id: number, data: any) => api.post(`/supplier-orders/${id}/acknowledge`, data),
+  advancePayment: (id: number, data: any) => api.post(`/supplier-orders/${id}/advance-payment`, data),
+  receipt: (id: number, data: any) => api.post(`/supplier-orders/${id}/receipt`, data),
+  qc: (id: number, receiptId: number, data: any) => api.post(`/supplier-orders/${id}/receipt/${receiptId}/qc`, data),
+  invoice: (id: number, data: any) => api.post(`/supplier-orders/${id}/invoice`, data),
+  postPurchase: (id: number) => api.post(`/supplier-orders/${id}/post-purchase`),
+  payment: (id: number, data: any) => api.post(`/supplier-orders/${id}/payment`, data),
+  close: (id: number, reason?: string, managerOverride?: boolean) =>
+    api.post(`/supplier-orders/${id}/close`, { reason, managerOverride }),
+  cancel: (id: number, reason: string, managerOverride?: boolean) =>
+    api.post(`/supplier-orders/${id}/cancel`, { reason, managerOverride }),
+  report: (type: string, params?: any) => api.get(`/supplier-orders/reports/${type}`, { params }),
+};
+
+// Karigers
+export const karigerAPI = {
+  list: (params?: any) => api.get('/karigers', { params }),
+  get: (id: number) => api.get(`/karigers/${id}`),
+  create: (data: any) => api.post('/karigers', data),
+  update: (id: number, data: any) => api.put(`/karigers/${id}`, data),
+  metalLedger: (id: number) => api.get(`/karigers/${id}/metal-ledger`),
+  moneyLedger: (id: number) => api.get(`/karigers/${id}/money-ledger`),
+  pay: (id: number, data: any) => api.post(`/karigers/${id}/payment`, data),
+};
+
+// Courier
+export const courierAPI = {
+  rates: (params: any) => api.get('/courier/rates', { params }),
+  createShipment: (data: any) => api.post('/courier/shipments', data),
+  listShipments: (params?: any) => api.get('/courier/shipments', { params }),
+  getShipment: (id: number) => api.get(`/courier/shipments/${id}`),
+  cancelShipment: (id: number) => api.post(`/courier/shipments/${id}/cancel`),
 };
 
 // Auth

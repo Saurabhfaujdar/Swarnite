@@ -210,7 +210,10 @@ export default function LabelEntryList() {
         </span>
         <div className="flex gap-2">
           <button className="btn-outline text-xs" onClick={() => window.print()}>📋 Export Excel</button>
-          <button className="btn-outline text-xs" onClick={() => window.print()}>🖨️ Print</button>
+          <button className="btn-outline text-xs" onClick={() => navigate('/inventory/labels/print')}
+            disabled={cartItems.length === 0}
+            title={cartItems.length === 0 ? 'Add labels to cart first' : `Print ${cartItems.length} label(s)`}
+          >🖨️ Print Labels</button>
         </div>
       </div>
 

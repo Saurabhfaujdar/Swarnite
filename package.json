@@ -29,6 +29,7 @@
     "@tanstack/react-table": "^8.20.0",
     "axios": "^1.7.0",
     "bcryptjs": "^2.4.3",
+    "bwip-js": "^4.11.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",

@@ -87,6 +87,12 @@ model Company {
   auditLogs        AuditLog[]
   attachments      Attachment[]
   stockRequests    StockRequest[]
+  karigers         Kariger[]
+  repairJobs       RepairJob[]
+  supplierOrders       SupplierOrder[]
+  supplierReceipts     SupplierOrderReceipt[]
+  supplierMetalLedger  SupplierMetalLedger[]
+  supplierMoneyLedger  SupplierMoneyLedger[]
 
   @@map("companies")
 }
@@ -132,6 +138,12 @@ model Branch {
   auditLogs          AuditLog[]
   stockRequestsMade  StockRequest[]  @relation("RequestingBranch")
   stockRequestsFrom  StockRequest[]  @relation("SourceBranch")
+  karigers           Kariger[]
+  repairJobs         RepairJob[]
+  supplierOrders       SupplierOrder[]
+  supplierReceipts     SupplierOrderReceipt[]
+  supplierMetalLedger  SupplierMetalLedger[]
+  supplierMoneyLedger  SupplierMoneyLedger[]
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -170,6 +182,11 @@ model MetalType {
   itemGroups  ItemGroup[]
   metalRates  MetalRate[]
   items       Item[]
+  karigerMetalLedger KarigerMetalLedger[]
+  repairItems        RepairItem[]
+  supplierOrderItems       SupplierOrderItem[]
+  supplierWeightAdjustments SupplierOrderWeightAdjustment[]
+  supplierMetalLedger      SupplierMetalLedger[]
 
   @@map("metal_types")
 }
@@ -355,6 +372,9 @@ model Account {
   journalEntries   JournalEntryLine[]
   customerPayments CustomerPayment[]
   savingsSchemes   SavingsScheme[]
+  supplierOrders       SupplierOrder[]       @relation("SupplierOrders")
+  supplierMetalLedger  SupplierMetalLedger[] @relation("SupplierMetalLedger")
+  supplierMoneyLedger  SupplierMoneyLedger[] @relation("SupplierMoneyLedger")
 
   @@index([companyId])
   @@index([branchId])
@@ -1264,4 +1284,946 @@ model Attachment {
   @@index([entityType, entityId])
   @@index([uploadedById])
   @@map("attachments")
+}
+
+// ============================================================
+// REPAIR MANAGEMENT MODULE
+// ============================================================
+// Customer repair workflow with separate metal + money ledgers per
+// kariger (goldsmith). Repair items belong to the customer, NOT the
+// shop's sale inventory — so they are tracked entirely within this
+// module and never touch the Label / Item tables.
+//
+// Workflow is enforced by the state machine in
+// `server/services/repairWorkflow.ts`. Every transition is recorded
+// in RepairStateHistory; every weight change must be classified via
+// RepairWeightAdjustment (no auto-liability for karigers).
+// ============================================================
+
+model Kariger {
+  id              Int      @id @default(autoincrement())
+  code            String   // e.g. "K001"
+  name            String
+  mobile          String?
+  address         String?
+  city            String?
+  state           String?
+  pincode         String?
+  landmark        String?
+  idProof         String?  // Aadhar / PAN reference
+  specialization  String?  // "Gold filigree", "Stone setting", etc.
+  companyId       Int
+  company         Company  @relation(fields: [companyId], references: [id])
+  branchId        Int?     // Home branch (optional — karigers may be cross-branch)
+  branch          Branch?  @relation(fields: [branchId], references: [id])
+  // Snapshot balances kept in sync by the ledger services so the
+  // dashboard / list views don't have to sum every ledger row.
+  metalBalance    Decimal  @default(0)  // grams; +ve = kariger holds shop's gold
+  moneyBalance    Decimal  @default(0)  // INR; +ve = shop owes kariger labour
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  repairJobs      RepairJob[]              @relation("AssignedKariger")
+  assignments     RepairKarigerAssignment[]
+  metalLedger     KarigerMetalLedger[]
+  moneyLedger     KarigerMoneyLedger[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@index([branchId])
+  @@map("karigers")
+}
+
+model RepairJob {
+  id                    Int            @id @default(autoincrement())
+  repairNo              String         @unique  // "REP/1"
+  repairPrefix          String         @default("REP")
+  repairNumber          Int
+  // Customer is an Account row (accountType=CUSTOMER) — no FK because
+  // we want to allow ad-hoc repair customers without bloating the
+  // accounts ledger; we store accountId when the customer is on file
+  // and a denormalised name/mobile so receipts always print correctly.
+  customerAccountId     Int?
+  customerName          String
+  customerMobile        String?
+  branchId              Int
+  branch                Branch         @relation(fields: [branchId], references: [id])
+  companyId             Int
+  company               Company        @relation(fields: [companyId], references: [id])
+
+  status                RepairStatus   @default(RECEIVED)
+  priority              RepairPriority @default(NORMAL)
+
+  intakeDate            DateTime       @default(now())
+  expectedDeliveryDate  DateTime?
+  deliveredDate         DateTime?
+
+  assignedKarigerId     Int?
+  assignedKariger       Kariger?       @relation("AssignedKariger", fields: [assignedKarigerId], references: [id])
+
+  // Money snapshot
+  estimatedAmount       Decimal        @default(0)
+  advanceReceived       Decimal        @default(0)
+
+  customerNotes         String?
+  internalNotes         String?
+
+  // Approval gate — set true automatically when extra-gold cost
+  // crosses the configured threshold (see services/repairWorkflow).
+  approvalRequired      Boolean        @default(false)
+  approvedAt            DateTime?
+  approvedBy            Int?
+  approvalRemarks       String?
+
+  // Delivery acknowledgement (signature is a base64 PNG data URL,
+  // captured client-side; small enough to inline. OTP path deferred).
+  deliverySignature     String?
+  deliveredBy           Int?
+  receivedBy            String?    // name of person who collected the piece
+
+  createdBy             Int
+  updatedBy             Int?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  items                 RepairItem[]
+  photos                RepairPhoto[]
+  stateHistory          RepairStateHistory[]
+  assignments           RepairKarigerAssignment[]
+  weightAdjustments     RepairWeightAdjustment[]
+  charges               RepairCharge[]
+  invoice               RepairInvoice?
+  metalLedger           KarigerMetalLedger[]
+  moneyLedger           KarigerMoneyLedger[]
+
+  @@index([companyId])
+  @@index([branchId])
+  @@index([status])
+  @@index([assignedKarigerId])
+  @@index([customerAccountId])
+  @@map("repair_jobs")
+}
+
+enum RepairStatus {
+  RECEIVED
+  UNDER_INSPECTION
+  ESTIMATE_PENDING
+  WAITING_CUSTOMER_APPROVAL
+  ASSIGNED_TO_KARIGER
+  IN_PROGRESS
+  RETURNED_BY_KARIGER
+  QUALITY_CHECK
+  READY_FOR_DELIVERY
+  DELIVERED
+  REWORK_REQUIRED
+  CANCELLED
+}
+
+enum RepairPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model RepairItem {
+  id              Int       @id @default(autoincrement())
+  repairJobId     Int
+  repairJob       RepairJob @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  ornamentType    String    // "Ring", "Chain", "Bangle", etc.
+  metalTypeId     Int
+  metalType       MetalType @relation(fields: [metalTypeId], references: [id])
+  purity          String    // free text e.g. "22KT", "92.5 Silver"
+  grossWeight     Decimal   @default(0) // grams
+  netWeight       Decimal   @default(0) // grams (gross - stoneWeight)
+  stoneWeight     Decimal   @default(0)
+  quantity        Int       @default(1)
+  description     String?
+  conditionNotes  String?   // dents, scratches noted at intake
+  hallmarkDetails String?
+  issueDescription String?  // what's broken / what to fix
+  // Snapshot of weight after kariger returns the piece. Diff vs
+  // grossWeight is classified via RepairWeightAdjustment, NEVER
+  // auto-debited to the kariger.
+  returnedWeight  Decimal?
+  createdAt       DateTime  @default(now())
+
+  weightAdjustments RepairWeightAdjustment[]
+  photos            RepairPhoto[]
+
+  @@index([repairJobId])
+  @@map("repair_items")
+}
+
+model RepairPhoto {
+  id              Int             @id @default(autoincrement())
+  repairJobId     Int
+  repairJob       RepairJob       @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  repairItemId    Int?
+  repairItem      RepairItem?     @relation(fields: [repairItemId], references: [id], onDelete: SetNull)
+  type            RepairPhotoType
+  // We piggy-back on the existing fileStorage service: storagePath
+  // is the same key format used by Attachment, served via the
+  // /api/files signed-URL infrastructure.
+  storagePath     String
+  mimeType        String          @default("image/jpeg")
+  uploadedBy      Int
+  uploadedAt      DateTime        @default(now())
+
+  @@index([repairJobId])
+  @@index([repairItemId])
+  @@map("repair_photos")
+}
+
+enum RepairPhotoType {
+  BEFORE
+  AFTER
+  DAMAGE
+  OTHER
+}
+
+model RepairStateHistory {
+  id            Int          @id @default(autoincrement())
+  repairJobId   Int
+  repairJob     RepairJob    @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  fromState     RepairStatus?
+  toState       RepairStatus
+  remarks       String?
+  changedBy     Int
+  changedAt     DateTime     @default(now())
+
+  @@index([repairJobId])
+  @@index([changedAt])
+  @@map("repair_state_history")
+}
+
+model RepairKarigerAssignment {
+  id                  Int       @id @default(autoincrement())
+  repairJobId         Int
+  repairJob           RepairJob @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  karigerId           Int
+  kariger             Kariger   @relation(fields: [karigerId], references: [id])
+  assignedAt          DateTime  @default(now())
+  expectedReturnDate  DateTime?
+  returnedAt          DateTime?
+  // Weight handed out to kariger at assignment (sum of gross of all
+  // items in the job, snapshot at the time). Used by the metal
+  // ledger to compute "kariger holds X g" until the piece returns.
+  issuedWeight        Decimal   @default(0)
+  returnedWeight      Decimal?  // sum of returnedWeight across items
+  assignmentNotes     String?
+  assignedBy          Int
+
+  @@index([repairJobId])
+  @@index([karigerId])
+  @@map("repair_kariger_assignments")
+}
+
+// VERY IMPORTANT — every weight delta MUST be classified by a human;
+// the system does not auto-create kariger liability.
+model RepairWeightAdjustment {
+  id              Int                    @id @default(autoincrement())
+  repairJobId     Int
+  repairJob       RepairJob              @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  repairItemId    Int?
+  repairItem      RepairItem?            @relation(fields: [repairItemId], references: [id], onDelete: SetNull)
+  adjustmentType  WeightAdjustmentType
+  originalWeight  Decimal                // grams
+  finalWeight     Decimal                // grams
+  differenceWeight Decimal               // = finalWeight - originalWeight (signed)
+  // Snapshot the rate at the time of adjustment so historic ledger
+  // entries don't move when the daily metal rate updates.
+  ratePerGram     Decimal                @default(0)
+  amount          Decimal                @default(0)  // |diff| * rate
+  remarks         String?
+  approvedBy      Int?
+  createdBy       Int
+  createdAt       DateTime               @default(now())
+
+  @@index([repairJobId])
+  @@map("repair_weight_adjustments")
+}
+
+enum WeightAdjustmentType {
+  NORMAL_WASTAGE
+  RECOVERABLE_GOLD
+  EXTRA_GOLD_ADDED
+  STONE_REMOVAL
+  APPROVED_REDUCTION
+}
+
+model RepairCharge {
+  id              Int               @id @default(autoincrement())
+  repairJobId     Int
+  repairJob       RepairJob         @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  chargeType      RepairChargeType
+  description     String?
+  quantity        Decimal           @default(1)
+  rate            Decimal           @default(0)
+  amount          Decimal           @default(0)  // quantity * rate
+  gstApplicable   Boolean           @default(true)
+  gstPercent      Decimal           @default(3)  // jewellery default 3%
+  createdAt       DateTime          @default(now())
+
+  @@index([repairJobId])
+  @@map("repair_charges")
+}
+
+enum RepairChargeType {
+  LABOR
+  POLISH
+  STONE_REPLACEMENT
+  EXTRA_GOLD
+  URGENCY
+  COURIER
+  OTHER
+}
+
+model RepairInvoice {
+  id              Int                  @id @default(autoincrement())
+  repairJobId     Int                  @unique
+  repairJob       RepairJob            @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  invoiceNo       String               @unique  // "REPI/1"
+  invoicePrefix   String               @default("REPI")
+  invoiceNumber   Int
+  invoiceDate     DateTime             @default(now())
+  subtotal        Decimal              @default(0)  // sum of charge amounts
+  cgstAmount      Decimal              @default(0)
+  sgstAmount      Decimal              @default(0)
+  igstAmount      Decimal              @default(0)
+  gstAmount       Decimal              @default(0)  // total GST
+  totalAmount     Decimal              @default(0)
+  paidAmount      Decimal              @default(0)
+  dueAmount       Decimal              @default(0)
+  paymentStatus   RepairPaymentStatus  @default(PENDING)
+  // Cumulative payment-mode breakdown (incremented as payments arrive)
+  cashAmount      Decimal              @default(0)
+  bankAmount      Decimal              @default(0)
+  cardAmount      Decimal              @default(0)
+  upiAmount       Decimal              @default(0)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([repairJobId])
+  @@map("repair_invoices")
+}
+
+enum RepairPaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+}
+
+// ─── Kariger Metal Ledger ───────────────────────────────────
+// Tracks gold/silver flow between shop and kariger. Separate from
+// the money ledger so audit can prove "this kariger owes us X g of
+// 22KT" independent of any cash settlement.
+model KarigerMetalLedger {
+  id                      Int                   @id @default(autoincrement())
+  karigerId               Int
+  kariger                 Kariger               @relation(fields: [karigerId], references: [id])
+  repairJobId             Int?
+  repairJob               RepairJob?            @relation(fields: [repairJobId], references: [id])
+  metalTypeId             Int
+  metalType               MetalType             @relation(fields: [metalTypeId], references: [id])
+  transactionType         KarigerMetalTxnType
+  // Signed weight: +ve when shop GIVES metal to kariger,
+  // -ve when kariger RETURNS metal to shop.
+  weight                  Decimal               // grams
+  ratePerGram             Decimal               @default(0)
+  amount                  Decimal               @default(0)
+  // Running balance after this entry — denormalised for fast reads.
+  balanceAfterTransaction Decimal               @default(0)
+  remarks                 String?
+  createdBy               Int
+  createdAt               DateTime              @default(now())
+
+  @@index([karigerId])
+  @@index([repairJobId])
+  @@index([createdAt])
+  @@map("kariger_metal_ledger")
+}
+
+enum KarigerMetalTxnType {
+  GOLD_RECEIVABLE     // shop gave gold to kariger
+  GOLD_PAYABLE        // kariger returned gold to shop
+  WASTAGE             // approved wastage written off
+  ADJUSTMENT          // manual correction
+}
+
+model KarigerMoneyLedger {
+  id                      Int                   @id @default(autoincrement())
+  karigerId               Int
+  kariger                 Kariger               @relation(fields: [karigerId], references: [id])
+  repairJobId             Int?
+  repairJob               RepairJob?            @relation(fields: [repairJobId], references: [id])
+  entryType               KarigerMoneyEntryType
+  debit                   Decimal               @default(0)
+  credit                  Decimal               @default(0)
+  balanceAfterTransaction Decimal               @default(0)  // +ve = shop owes kariger
+  remarks                 String?
+  createdBy               Int
+  createdAt               DateTime              @default(now())
+
+  @@index([karigerId])
+  @@index([repairJobId])
+  @@index([createdAt])
+  @@map("kariger_money_ledger")
+}
+
+enum KarigerMoneyEntryType {
+  LABOR_PAYABLE   // job done → we owe kariger
+  PAYMENT_MADE    // we paid the kariger
+  ADJUSTMENT      // manual correction
+}
+
+// ============================================================
+// SUPPLIER ORDER MODULE
+// ============================================================
+// Full lifecycle: order → acknowledge → advance → receipt → QC →
+// invoice → purchase posting → payment → close.
+// Inventory increases ONLY after receipt + QC + purchase posting.
+// Every weight delta must be classified. Immutable state history.
+// ============================================================
+
+enum SupplierOrderStatus {
+  DRAFT
+  SENT_TO_SUPPLIER
+  SUPPLIER_ACKNOWLEDGED
+  ADVANCE_PAID
+  IN_PRODUCTION
+  DISPATCHED
+  PARTIALLY_RECEIVED
+  RECEIVED_PENDING_QC
+  QC_COMPLETED
+  INVOICE_RECEIVED
+  PURCHASE_POSTED
+  PAYMENT_PENDING
+  CLOSED
+  // Special
+  CANCELLED
+  REJECTED
+  SHORT_DELIVERED
+  EXCESS_DELIVERED
+  RETURNED_TO_SUPPLIER
+  DISPUTED
+}
+
+enum SupplierOrderPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum SupplierOrderItemStatus {
+  PENDING
+  PARTIALLY_RECEIVED
+  FULLY_RECEIVED
+  SHORT_CLOSED
+  CANCELLED
+}
+
+enum SupplierReceiptStatus {
+  PENDING_QC
+  QC_IN_PROGRESS
+  QC_PASSED
+  QC_FAILED
+  PARTIAL_PASS
+  RETURNED
+}
+
+enum SupplierReceiptItemQcStatus {
+  PENDING
+  PASSED
+  FAILED
+  CONDITIONAL
+}
+
+enum SupplierOrderAdjustmentType {
+  NORMAL_WASTAGE
+  SHORT_RECEIVED
+  EXCESS_RECEIVED
+  PURITY_DIFFERENCE
+  STONE_WEIGHT_DIFFERENCE
+  RATE_DIFFERENCE
+  MANUAL_ADJUSTMENT
+}
+
+enum SupplierOrderInvoiceStatus {
+  DRAFT
+  CONFIRMED
+  DISPUTED
+  CANCELLED
+}
+
+enum SupplierLedgerTransactionType {
+  // Metal
+  METAL_ISSUED
+  METAL_RECEIVED
+  WASTAGE_APPROVED
+  EXCESS_RECEIVED
+  SHORTAGE
+  METAL_RETURN
+  METAL_ADJUSTMENT
+  // Money
+  ORDER_PAYABLE
+  ADVANCE_PAID
+  DELIVERY_PAYMENT
+  INVOICE_ADJUSTMENT
+  SETTLEMENT
+  REFUND_RECEIVED
+  DEBIT_NOTE
+  CREDIT_NOTE
+  MONEY_ADJUSTMENT
+}
+
+// ─── SupplierOrder (Master Document) ────────────────────────────────
+model SupplierOrder {
+  id                     Int                    @id @default(autoincrement())
+  orderNo                String                 @unique  // "SO/1"
+  orderPrefix            String                 @default("SO")
+  orderNumber            Int                    // Sequential within FY
+  orderDate              DateTime               @default(now())
+
+  // Supplier (Account with type=SUPPLIER)
+  supplierId             Int
+  supplier               Account                @relation("SupplierOrders", fields: [supplierId], references: [id])
+
+  // Scope
+  companyId              Int
+  company                Company                @relation(fields: [companyId], references: [id])
+  branchId               Int
+  branch                 Branch                 @relation(fields: [branchId], references: [id])
+
+  // Status
+  status                 SupplierOrderStatus    @default(DRAFT)
+  priority               SupplierOrderPriority  @default(NORMAL)
+
+  // Dates
+  expectedDeliveryDate   DateTime?
+  acknowledgementDate    DateTime?
+  cancelledAt            DateTime?
+  closedAt               DateTime?
+
+  // Supplier reference
+  supplierReferenceNo    String?
+
+  // Rate lock
+  rateLockType           String?                // "FIXED", "FLOATING", "PARTIAL"
+  rateLockedAt           DateTime?
+  goldRate               Decimal                @default(0)
+  silverRate             Decimal                @default(0)
+
+  // Amounts
+  estimatedAmount        Decimal                @default(0)
+  advancePaid            Decimal                @default(0)
+
+  // Weight tracking (aggregates)
+  totalOrderedGrossWeight  Decimal              @default(0)
+  totalOrderedNetWeight    Decimal              @default(0)
+  totalReceivedGrossWeight Decimal              @default(0)
+  totalReceivedNetWeight   Decimal              @default(0)
+
+  // Approval gate
+  approvalRequired       Boolean                @default(false)
+  approvedById           Int?
+  approvedAt             DateTime?
+
+  // Notes
+  notes                  String?
+
+  // Audit
+  createdById            Int
+  updatedById            Int?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  // Relations
+  items                  SupplierOrderItem[]
+  receipts               SupplierOrderReceipt[]
+  invoices               SupplierOrderInvoice[]
+  payments               SupplierOrderPayment[]
+  stateHistory           SupplierOrderStateHistory[]
+  weightAdjustments      SupplierOrderWeightAdjustment[]
+  metalLedger            SupplierMetalLedger[]
+  moneyLedger            SupplierMoneyLedger[]
+
+  @@index([companyId, branchId, status])
+  @@index([supplierId])
+  @@index([orderDate])
+  @@index([status])
+  @@map("supplier_orders")
+}
+
+// ─── SupplierOrderItem ──────────────────────────────────────────────
+model SupplierOrderItem {
+  id                     Int                      @id @default(autoincrement())
+  supplierOrderId        Int
+  supplierOrder          SupplierOrder            @relation(fields: [supplierOrderId], references: [id], onDelete: Cascade)
+
+  // Item details
+  category               String                   // "JEWELRY", "BULLION", "COIN", "STONE", "CUSTOM", "RAW_MATERIAL"
+  ornamentType           String?                  // "Ring", "Chain", "Bangle" etc.
+  metalTypeId            Int
+  metalType              MetalType                @relation(fields: [metalTypeId], references: [id])
+  purity                 String?                  // "22KT", "18KT", "24KT", "92.5"
+
+  // Quantity & Weight
+  orderedQty             Int                      @default(1)
+  orderedGrossWeight     Decimal                  @default(0)
+  orderedNetWeight       Decimal                  @default(0)
+
+  // Rates & charges
+  expectedWastagePercent Decimal                  @default(0)
+  makingChargeType       String?                  // "per_gram", "per_piece", "percentage", "lump_sum"
+  makingChargeValue      Decimal                  @default(0)
+
+  // Design
+  stoneDetails           String?
+  designReference        String?
+  size                   String?
+
+  // Status
+  status                 SupplierOrderItemStatus  @default(PENDING)
+  remarks                String?
+
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  receiptItems           SupplierOrderReceiptItem[]
+  weightAdjustments      SupplierOrderWeightAdjustment[]
+
+  @@index([supplierOrderId])
+  @@map("supplier_order_items")
+}
+
+// ─── SupplierOrderStateHistory (Immutable Audit) ────────────────────
+model SupplierOrderStateHistory {
+  id                     Int                    @id @default(autoincrement())
+  supplierOrderId        Int
+  supplierOrder          SupplierOrder          @relation(fields: [supplierOrderId], references: [id], onDelete: Cascade)
+
+  fromStatus             SupplierOrderStatus?
+  toStatus               SupplierOrderStatus
+  reason                 String?
+  metadataJson           Json?
+
+  changedById            Int
+  changedAt              DateTime               @default(now())
+
+  @@index([supplierOrderId, changedAt])
+  @@map("supplier_order_state_history")
+}
+
+// ─── SupplierOrderReceipt (Goods Receipt) ───────────────────────────
+model SupplierOrderReceipt {
+  id                     Int                    @id @default(autoincrement())
+  receiptNo              String                 @unique  // "SR/1"
+  receiptPrefix          String                 @default("SR")
+  receiptNumber          Int
+  supplierOrderId        Int
+  supplierOrder          SupplierOrder          @relation(fields: [supplierOrderId], references: [id])
+
+  // Scope
+  companyId              Int
+  company                Company                @relation(fields: [companyId], references: [id])
+  branchId               Int
+  branch                 Branch                 @relation(fields: [branchId], references: [id])
+
+  // Receipt details
+  receivedDate           DateTime               @default(now())
+  receivedById           Int
+  status                 SupplierReceiptStatus  @default(PENDING_QC)
+  packageReference       String?                // Challan / courier / package ref
+  remarks                String?
+
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  items                  SupplierOrderReceiptItem[]
+  weightAdjustments      SupplierOrderWeightAdjustment[]
+
+  @@index([supplierOrderId])
+  @@index([companyId, branchId])
+  @@index([receiptNo])
+  @@map("supplier_order_receipts")
+}
+
+// ─── SupplierOrderReceiptItem ───────────────────────────────────────
+model SupplierOrderReceiptItem {
+  id                     Int                         @id @default(autoincrement())
+  receiptId              Int
+  receipt                SupplierOrderReceipt        @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  supplierOrderItemId    Int
+  supplierOrderItem      SupplierOrderItem           @relation(fields: [supplierOrderItemId], references: [id])
+
+  // Received
+  receivedQty            Int                         @default(1)
+  receivedGrossWeight    Decimal                     @default(0)
+  receivedNetWeight      Decimal                     @default(0)
+  receivedPurity         Decimal?                    // Tested purity (percentage)
+
+  // Accepted (post-QC)
+  acceptedQty            Int                         @default(0)
+  rejectedQty            Int                         @default(0)
+  acceptedGrossWeight    Decimal                     @default(0)
+  acceptedNetWeight      Decimal                     @default(0)
+
+  // QC
+  qcStatus               SupplierReceiptItemQcStatus @default(PENDING)
+  qcRemarks              String?
+
+  // Inventory posting
+  inventoryPosted        Boolean                     @default(false)
+  inventoryItemId        Int?                        // Label.id after purchase posting
+
+  createdAt              DateTime                    @default(now())
+
+  weightAdjustments      SupplierOrderWeightAdjustment[]
+
+  @@index([receiptId])
+  @@index([supplierOrderItemId])
+  @@map("supplier_order_receipt_items")
+}
+
+// ─── SupplierOrderWeightAdjustment ──────────────────────────────────
+model SupplierOrderWeightAdjustment {
+  id                     Int                           @id @default(autoincrement())
+  supplierOrderId        Int
+  supplierOrder          SupplierOrder                 @relation(fields: [supplierOrderId], references: [id])
+  receiptItemId          Int?
+  receiptItem            SupplierOrderReceiptItem?     @relation(fields: [receiptItemId], references: [id])
+  supplierOrderItemId    Int?
+  supplierOrderItem      SupplierOrderItem?            @relation(fields: [supplierOrderItemId], references: [id])
+  receiptId              Int?
+  receipt                SupplierOrderReceipt?         @relation(fields: [receiptId], references: [id])
+
+  adjustmentType         SupplierOrderAdjustmentType
+  metalTypeId            Int
+  metalType              MetalType                     @relation(fields: [metalTypeId], references: [id])
+  purity                 Decimal                       @default(0)  // Purity percentage
+
+  // Weight deltas (signed: +ve = excess, -ve = short)
+  grossDelta             Decimal                       @default(0)
+  netDelta               Decimal                       @default(0)
+  fineWeightDelta        Decimal                       @default(0)  // netDelta × (purity/100)
+  estimatedValue         Decimal                       @default(0)  // |delta| × rate
+
+  reason                 String?
+
+  // Approval
+  approvalRequired       Boolean                       @default(false)
+  approvedById           Int?
+  approvedAt             DateTime?
+
+  createdById            Int
+  createdAt              DateTime                      @default(now())
+
+  @@index([supplierOrderId])
+  @@index([receiptId])
+  @@map("supplier_order_weight_adjustments")
+}
+
+// ─── SupplierOrderInvoice ───────────────────────────────────────────
+model SupplierOrderInvoice {
+  id                     Int                          @id @default(autoincrement())
+  invoiceNo              String                       @unique  // "SPI/1"
+  invoicePrefix          String                       @default("SPI")
+  invoiceNumber          Int
+  supplierInvoiceNo      String?                      // Supplier's own invoice number
+  supplierOrderId        Int
+  supplierOrder          SupplierOrder                @relation(fields: [supplierOrderId], references: [id])
+  invoiceDate            DateTime                     @default(now())
+
+  // Amounts
+  taxableAmount          Decimal                      @default(0)
+  cgstAmount             Decimal                      @default(0)
+  sgstAmount             Decimal                      @default(0)
+  igstAmount             Decimal                      @default(0)
+  gstAmount              Decimal                      @default(0)
+  otherCharges           Decimal                      @default(0)
+  discountAmount         Decimal                      @default(0)
+  advanceAdjusted        Decimal                      @default(0)
+  totalAmount            Decimal                      @default(0)
+  paidAmount             Decimal                      @default(0)
+  dueAmount              Decimal                      @default(0)
+
+  status                 SupplierOrderInvoiceStatus   @default(DRAFT)
+
+  createdById            Int
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+
+  payments               SupplierOrderPayment[]
+
+  @@index([supplierOrderId])
+  @@map("supplier_order_invoices")
+}
+
+// ─── SupplierOrderPayment ───────────────────────────────────────────
+model SupplierOrderPayment {
+  id                     Int                    @id @default(autoincrement())
+  paymentNo              String                 @unique  // "SPP/1"
+  paymentPrefix          String                 @default("SPP")
+  paymentNumber          Int
+  supplierOrderId        Int
+  supplierOrder          SupplierOrder          @relation(fields: [supplierOrderId], references: [id])
+  invoiceId              Int?
+  invoice                SupplierOrderInvoice?  @relation(fields: [invoiceId], references: [id])
+  paymentDate            DateTime               @default(now())
+
+  amount                 Decimal                @default(0)
+  paymentMode            String                 // "CASH", "BANK_TRANSFER", "CHEQUE", "UPI", "GOLD_EXCHANGE", "ADJUSTMENT"
+  referenceNo            String?                // Cheque no / UTR / UPI ref
+  notes                  String?
+
+  createdById            Int
+  createdAt              DateTime               @default(now())
+
+  moneyLedger            SupplierMoneyLedger[]
+
+  @@index([supplierOrderId])
+  @@index([invoiceId])
+  @@map("supplier_order_payments")
+}
+
+// ─── SupplierMetalLedger ────────────────────────────────────────────
+model SupplierMetalLedger {
+  id                      Int                            @id @default(autoincrement())
+  supplierId              Int
+  supplier                Account                        @relation("SupplierMetalLedger", fields: [supplierId], references: [id])
+  companyId               Int
+  company                 Company                        @relation(fields: [companyId], references: [id])
+  branchId                Int
+  branch                  Branch                         @relation(fields: [branchId], references: [id])
+  supplierOrderId         Int?
+  supplierOrder           SupplierOrder?                 @relation(fields: [supplierOrderId], references: [id])
+  receiptId               Int?
+
+  metalTypeId             Int
+  metalType               MetalType                      @relation(fields: [metalTypeId], references: [id])
+  purity                  Decimal                        @default(0)
+  transactionType         SupplierLedgerTransactionType
+
+  // Weights (signed: +ve = shop issued to supplier, -ve = received from supplier)
+  grossWeight             Decimal                        @default(0)
+  netWeight               Decimal                        @default(0)
+  fineWeight              Decimal                        @default(0) // netWeight × (purity/100)
+  direction               String                         @default("ISSUED") // "ISSUED" or "RECEIVED"
+  balanceAfterTransaction Decimal                        @default(0) // Running balance (fine grams)
+
+  remarks                 String?
+  createdById             Int
+  createdAt               DateTime                       @default(now())
+
+  @@index([supplierId])
+  @@index([companyId, branchId])
+  @@index([supplierOrderId])
+  @@index([createdAt])
+  @@map("supplier_metal_ledger")
+}
+
+// ─── SupplierMoneyLedger ────────────────────────────────────────────
+model SupplierMoneyLedger {
+  id                      Int                            @id @default(autoincrement())
+  supplierId              Int
+  supplier                Account                        @relation("SupplierMoneyLedger", fields: [supplierId], references: [id])
+  companyId               Int
+  company                 Company                        @relation(fields: [companyId], references: [id])
+  branchId                Int
+  branch                  Branch                         @relation(fields: [branchId], references: [id])
+  supplierOrderId         Int?
+  supplierOrder           SupplierOrder?                 @relation(fields: [supplierOrderId], references: [id])
+  invoiceId               Int?
+  paymentId               Int?
+  payment                 SupplierOrderPayment?          @relation(fields: [paymentId], references: [id])
+
+  transactionType         SupplierLedgerTransactionType
+
+  // Amounts
+  debit                   Decimal                        @default(0)  // Increases payable
+  credit                  Decimal                        @default(0)  // Decreases payable
+  balanceAfterTransaction Decimal                        @default(0)  // +ve = shop owes supplier
+
+  remarks                 String?
+  reference               String?
+  createdById             Int
+  createdAt               DateTime                       @default(now())
+
+  @@index([supplierId])
+  @@index([companyId, branchId])
+  @@index([supplierOrderId])
+  @@index([createdAt])
+  @@map("supplier_money_ledger")
+}
+
+// ─── Courier Shipments ───────────────────────────────────────────────────────
+
+enum CourierShipmentType {
+  REPAIR_TO_KARIGAR
+  REPAIR_FROM_KARIGAR
+  BRANCH_TRANSFER
+  STOCK_REQUEST
+}
+
+enum CourierShipmentStatus {
+  CREATED
+  PICKUP_SCHEDULED
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  RTO
+  CANCELLED
+}
+
+model CourierShipment {
+  id                    Int                    @id @default(autoincrement())
+  shipmentType          CourierShipmentType
+  status                CourierShipmentStatus   @default(CREATED)
+
+  // Polymorphic link to the entity that triggered the shipment
+  entityType            String                 // 'RepairJob' | 'StockRequest' | 'BranchTransfer'
+  entityId              Int
+
+  companyId             Int
+  branchId              Int?
+
+  // Courier details
+  courierPartner        String?                // e.g. "Delhivery", "BlueDart"
+  awbNumber             String?                // Airway bill number
+  trackingUrl           String?
+  shiprocketOrderId     String?                // Shiprocket's internal order ID
+  shiprocketShipmentId  String?                // Shiprocket's shipment ID
+
+  // Addresses stored as JSON snapshots
+  pickupAddress         Json?                  // { name, phone, address, city, state, pincode }
+  deliveryAddress       Json?                  // { name, phone, address, city, state, pincode }
+
+  // Package details
+  weightGrams           Decimal?               // Package weight in grams
+  declaredValue         Decimal?               // Declared value in INR (for insurance)
+  courierCharges        Decimal?               // Actual shipping cost charged by courier
+
+  // Dates
+  estimatedDelivery     DateTime?
+  pickedUpAt            DateTime?
+  deliveredAt           DateTime?
+
+  // Webhook data
+  lastWebhookPayload    Json?                  // Latest raw webhook payload from Shiprocket
+  lastWebhookAt         DateTime?
+
+  createdById           Int?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  @@index([entityType, entityId])
+  @@index([companyId])
+  @@index([awbNumber])
+  @@index([shiprocketOrderId])
+  @@index([status])
+  @@map("courier_shipments")
 }

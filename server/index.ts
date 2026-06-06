@@ -3,6 +3,7 @@ import app from './app';
 import { config } from './config';
 import { logger } from './logger';
 import { disconnectDb } from './prisma';
+import { startMetalRateScheduler, stopMetalRateScheduler } from './services/metalRates';
 
 // Only start the server when run directly (not during tests)
 if (!config.isTest) {
@@ -10,9 +11,13 @@ if (!config.isTest) {
     logger.info(`JewelERP API running`, { port: config.port, env: config.nodeEnv });
   });
 
+  // Schedule daily metal-rate refresh (no-op when GOLD_API_KEY is unset)
+  startMetalRateScheduler();
+
   // ─── Graceful Shutdown ──────────────────────────────────────
   function shutdown(signal: string) {
     logger.info(`${signal} received, shutting down gracefully...`);
+    stopMetalRateScheduler();
 
     server.close(async () => {
       await disconnectDb();

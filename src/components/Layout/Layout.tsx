@@ -2,7 +2,7 @@ import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Home, ShoppingCart, Package, ArrowLeftRight,
-  BarChart3, Users, Clock, Settings, Tag, Wallet, Building2, LogOut, PiggyBank
+  BarChart3, Users, Clock, Settings, Tag, Wallet, Building2, LogOut, PiggyBank, Wrench, Truck
 } from 'lucide-react';
 import { getFinancialYear } from '../../lib/utils';
 import { useAuthStore } from '../../lib/auth';
@@ -20,6 +20,8 @@ const navItems = [
   { to: '/layaway/list', icon: Clock, label: 'LayAway' },
   { to: '/savings-scheme/list', icon: PiggyBank, label: 'Savings Scheme' },
   { to: '/payments', icon: Wallet, label: 'Payments' },
+  { to: '/repairs', icon: Wrench, label: 'Repairs' },
+  { to: '/supplier-orders', icon: Truck, label: 'Supplier Orders' },
   { to: '/crm/customers', icon: Users, label: 'Customers' },
   { to: '/reports/daily-sales', icon: BarChart3, label: 'Reports' },
   { to: '/masters', icon: Settings, label: 'Masters' },

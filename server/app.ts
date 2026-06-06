@@ -23,6 +23,10 @@ import customerPaymentRoutes from './routes/customerPayments';
 import savingsSchemeRoutes from './routes/savingsScheme';
 import filesRoutes from './routes/files';
 import stockRequestRoutes from './routes/stockRequest';
+import repairsRoutes from './routes/repairs';
+import karigersRoutes from './routes/karigers';
+import supplierOrdersRoutes from './routes/supplierOrders';
+import courierRoutes from './routes/courier';
 
 const app = express();
 
@@ -113,6 +117,10 @@ app.use('/api/customer-payments', customerPaymentRoutes);
 app.use('/api/savings-scheme', savingsSchemeRoutes);
 app.use('/api/files', filesRoutes);
 app.use('/api/stock-requests', stockRequestRoutes);
+app.use('/api/repairs', repairsRoutes);
+app.use('/api/karigers', karigersRoutes);
+app.use('/api/supplier-orders', supplierOrdersRoutes);
+app.use('/api/courier', courierRoutes);
 
 // ─── Static files + SPA fallback (production builds) ───────
 if (config.serveStatic) {
