@@ -48,6 +48,7 @@ jobs:
         run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/jewelerp_test
+          DIRECT_URL: postgresql://test:test@localhost:5432/jewelerp_test
 
       - name: Run tests
         run: npm test
