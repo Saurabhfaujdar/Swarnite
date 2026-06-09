@@ -37,7 +37,7 @@ export interface Notifier {
 /** Default implementation: structured log only. */
 class LoggerNotifier implements Notifier {
   async send(payload: RepairNotificationPayload): Promise<void> {
-    logger.info('repair.notification', payload);
+    logger.info('repair.notification', { ...payload });
   }
 }
 
